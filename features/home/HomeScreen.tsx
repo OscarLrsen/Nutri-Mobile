@@ -210,7 +210,10 @@ export function HomeScreen() {
         <View style={styles.secondaryRow}>
           <Pressable
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryPressed]}
-            onPress={() => router.navigate("/(tabs)/konto")}
+            // Web parity: logged-out users are sent to login first;
+            // NutriAnpassarScreen enforces that guard itself, so a plain
+            // push is enough here.
+            onPress={() => router.push("/nutri-anpassar")}
             accessibilityRole="button"
             accessibilityLabel={heroCopy.nutriCustomize}
           >

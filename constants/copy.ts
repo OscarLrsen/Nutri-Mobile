@@ -283,6 +283,132 @@ export const orderStatusCopy = {
   sizeNames: { small: "Liten", medium: "Mellan", large: "Stor" } as Record<string, string>,
 } as const;
 
+export const nutriAnpassarCopy = {
+  /** nutriAnpassar.* — sv variants, key-for-key from translations.ts */
+  step2: "Steg 2",
+  protein: "Protein",
+  targetLabel: "Mål:",
+  /** nutriAnpassar.slot.{Frukost|Lunch|Middag|Mellanmål} — sv labels equal the slot ids */
+  slotNames: {
+    Frukost: "Frukost",
+    Lunch: "Lunch",
+    Middag: "Middag",
+    Mellanmål: "Mellanmål",
+  } as Record<string, string>,
+  chooseSlotAria: (slot: string) => `Välj ${slot}`,
+  slotAdapted: "Anpassad efter ditt dagsmål",
+  slotChooseMealType: "Välj måltidstyp",
+  slotOpensAt: (hour: number) => `Öppnar kl ${hour}`,
+  slotServed: (window: string) => `Serveras ${window}`,
+  slotHeroTitle: "Vi räknar åt dig.",
+  slotHeroSubtitle: "Välj måltid — Nutri anpassar portionen efter ditt mål.",
+  slotClosedTitle: "Foodtrucken är stängd just nu",
+  slotClosedBody:
+    "Du kan fortfarande titta på måltider och planera din beställning. Beställning och betalning öppnar när vi har öppet.",
+  slotBasedOnGoal: "Baserat på ditt mål:",
+  slotProteinPerDay: (protein: number) => `${protein}g protein/dag`,
+  remainingGoalReachedTitle: "Du har nått ditt mål för idag",
+  remainingGoalReachedSub:
+    "Vi kan fortfarande rekommendera något lätt om du vill finjustera balansen",
+  remainingLowEnergyTitle: "Du har lite energi kvar men saknar fortfarande protein",
+  remainingLowEnergySub: "Nutri prioriterar en lättare måltid med högt protein",
+  remainingLeftToday: (calories: number, protein: number) =>
+    `Du har ${calories} kcal och ${protein}g protein kvar idag`,
+  remainingLightMeal: "En lätt måltid rekommenderas",
+  mealsChangeMeal: "Byt måltid",
+  mealsHeroTitle: "Ditt bästa val idag",
+  mealsNearGoal: "Du är nära ditt mål — en lätt måltid rekommenderas",
+  /** nutriAnpassar.optionWord.* */
+  optionWords: {
+    Frukost: "frukostalternativ",
+    Lunch: "lunchalternativ",
+    Middag: "middagsalternativ",
+    Mellanmål: "mellanmålsalternativ",
+  } as Record<string, string>,
+  mealsWhy: (optionWord: string) =>
+    `Bäst matchning av dina ${optionWord} — fyller ditt proteinmål utan att spränga kcal.`,
+  mealsLoading: "Anpassar måltider…",
+  mealsEmptyTitle: (slot: string) => `Inga måltider tillgängliga för ${slot} just nu`,
+  mealsEmptyBody: "Det finns inga rätter med ingrediensdata för det här slottet. Prova ett annat mål.",
+  mealsEmptyCta: "Välj ett annat mål",
+  matchClose: "Nära ditt proteinmål",
+  matchGood: "Bra matchning",
+  matchBest: "Bästa tillgängliga match",
+  mealsBestForGoal: "Bäst för ditt mål",
+  mealsHideMacrosAria: "Dölj makros",
+  mealsMacros: "Makros",
+  carbsShort: "kolh",
+  fatShort: "fett",
+  mealsMore: "fler",
+  mealsInGoal: "Inom ditt mål",
+  mealsBestPossible: "Bästa möjliga matchning",
+  mealsAdjust: "Justera",
+  mealsOrderingClosed: "Beställning stängd just nu",
+  mealsAddToCart: "Lägg till i varukorgen",
+  mealsReadyIn: "Redo på ~5 min",
+  adjustChooseAnotherMeal: "Välj annan måltid",
+  adjustLabel: "Anpassa",
+  adjustMealTarget: "Mål för denna måltid:",
+  adjustCalculating: "Beräknar…",
+  adjustCalcError: "Kunde inte uppdatera. Försök igen.",
+  adjustProteinProgress: "Protein mot målet",
+  /** nutriAnpassar.slotWord.* — keyed off mealTimeTags */
+  slotWordLunch: "lunchmål",
+  slotWordDinner: "middagsmål",
+  slotWordBreakfast: "frukostmål",
+  slotWordDay: "dagsmål",
+  adjustWhy: (slotWord: string) =>
+    `Din justering ligger inom ditt ${slotWord} — extra protein utan att spränga kcal.`,
+  adjustIngredients: "Ingredienser",
+  adjustMacrosKcal: "Makros & kcal",
+  adjustAdded: "Tillagt",
+  adjustProteinShort: "prot",
+  adjustDecrease: "Minska",
+  adjustIncrease: "Öka",
+  adjustMinIngredientRequired: "Minst en ingrediens krävs",
+  adjustRemoveIngredient: (name: string) => `Ta bort ${name}`,
+  adjustAddIngredient: "Lägg till ingrediens",
+  adjustOptional: "Valfritt",
+  adjustAddIngredientAria: (name: string) => `Lägg till ${name}`,
+  /** nutriAnpassar.group.* */
+  groupNames: {
+    Protein: "Protein",
+    Bas: "Bas",
+    "Sås & smak": "Sås & smak",
+    "Toppings & fett": "Toppings & fett",
+    Grönsaker: "Grönsaker",
+    Övrigt: "Övrigt",
+  } as Record<string, string>,
+  /** nutriAnpassar.category.* keyed by backend category value */
+  categoryNames: {
+    Protein: "Protein",
+    Baser: "Bas",
+    Kolhydrater: "Bas",
+    Frukt: "Frukt",
+    Såser: "Sås",
+    Mejeri: "Mejeri",
+    Toppings: "Topping",
+    Fetter: "Fett",
+    Grönsaker: "Grönsak",
+  } as Record<string, string>,
+  errorProfileTitle: "Din nutritionsprofil är inte klar",
+  errorProfileBody:
+    "Nutri anpassar behöver din profil för att beräkna rätt kalori- och proteinmål per måltid. Fyll i profilen så är du igång.",
+  errorProfileCta: "Gå till din profil →",
+  errorNetworkTitle: "Något gick fel",
+  errorNetworkBody:
+    "Kunde inte hämta din data just nu. Kontrollera din uppkoppling och försök igen.",
+  errorRetry: "Försök igen",
+} as const;
+
+export const onboardingGateCopy = {
+  /** onboarding.gate.* */
+  title: "Skapa din Nutri-profil",
+  body: "För att gå vidare behöver du skapa din Nutri-profil först. Vill du börja nu?",
+  primary: "Börja onboarding",
+  secondary: "Inte nu",
+} as const;
+
 export const mealDetailCopy = {
   /** common.loading */
   loading: "Laddar",
