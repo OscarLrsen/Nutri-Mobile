@@ -24,12 +24,14 @@ export function Button({ label, variant = "primary", loading = false, disabled, 
   return (
     <Pressable
       disabled={isDisabled}
-      style={({ pressed }) => [
+      style={(state) => [
         styles.base,
         variant === "primary" ? styles.primary : styles.secondary,
-        pressed && !isDisabled && (variant === "primary" ? styles.primaryPressed : styles.secondaryPressed),
+        state.pressed &&
+          !isDisabled &&
+          (variant === "primary" ? styles.primaryPressed : styles.secondaryPressed),
         isDisabled && styles.disabled,
-        typeof style === "function" ? undefined : style,
+        typeof style === "function" ? style(state) : style,
       ]}
       {...rest}
     >

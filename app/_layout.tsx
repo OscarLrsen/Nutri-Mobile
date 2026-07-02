@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect } from "react";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -35,15 +35,16 @@ export default function RootLayout() {
     DMMono_500Medium,
   });
 
-  const onLayoutRootView = useCallback(async () => {
+  // Runs after React commits the real tree below (effects fire post-paint),
+  // so the native splash screen only comes down once real content is
+  // already rendered underneath it — no flash of blank/unstyled UI.
+  useEffect(() => {
     if (fontsLoaded || fontError) {
-      await SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => {
+        // Already hidden — safe to ignore.
+      });
     }
   }, [fontsLoaded, fontError]);
-
-  useEffect(() => {
-    onLayoutRootView();
-  }, [onLayoutRootView]);
 
   if (!fontsLoaded && !fontError) {
     // Native splash screen is still visible at this point — render nothing

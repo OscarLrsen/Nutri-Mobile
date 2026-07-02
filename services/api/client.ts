@@ -1,4 +1,4 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
+import axios, { AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
 
 import { env } from "@/lib/env";
 import { getAccessToken } from "@/services/auth/getAccessToken";
@@ -22,9 +22,19 @@ export const apiClient = axios.create({
 
 /** Marks a request as requiring auth — set `authRequired: true` in the
  * request config to attach a Bearer token (see requireAuth() below). Plain
- * requests (e.g. public menu endpoints) skip this by default. */
+ * requests (e.g. public menu endpoints) skip this by default.
+ *
+ * Augmenting the base `AxiosRequestConfig` (not `InternalAxiosRequestConfig`,
+ * which extends it) is deliberate: call sites like `apiClient.get(url, cfg)`
+ * are typed against the public `AxiosRequestConfig`, and `requireAuth()`
+ * below must return something assignable there. `InternalAxiosRequestConfig`
+ * is only the type axios itself passes into interceptors below — it's a
+ * subtype with more required fields (a fully-normalized `headers`), and
+ * constructing a fake one just to satisfy a public-facing helper's default
+ * parameter would need an unsafe cast. Augmenting the base type covers both,
+ * since InternalAxiosRequestConfig inherits it. */
 declare module "axios" {
-  interface InternalAxiosRequestConfig {
+  interface AxiosRequestConfig {
     authRequired?: boolean;
   }
 }
@@ -44,7 +54,7 @@ apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) =>
 });
 
 /** Convenience helper for call sites: `apiClient.get(url, requireAuth())`. */
-export function requireAuth(config: InternalAxiosRequestConfig = {} as InternalAxiosRequestConfig) {
+export function requireAuth(config: AxiosRequestConfig = {}): AxiosRequestConfig {
   return { ...config, authRequired: true };
 }
 
