@@ -1,11 +1,12 @@
-import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
-import { CupSoda } from "lucide-react-native";
+import { Check, CupSoda, Plus } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import type { ApiDrink } from "@/services/api/drinks";
-import { menuCopy } from "@/constants/copy";
+import { useCart } from "@/context/CartContext";
+import { mealDetailCopy, menuCopy } from "@/constants/copy";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -15,15 +16,45 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  * gates the whole group; calories shows even when 0 (e.g. NOCCO); the
  * gram/mg fields additionally require a value > 0.
  *
+ * "Lägg till" goes through addDrinkItem (never addItem) — the web card's own
+ * comment explains why: the drink path stamps kind:"drink" + the ApiDrink on
+ * the cart line, which the drinks-only payment gate and the order payload
+ * mapping both depend on. Same 1.8s "Tillagd" confirmation as the web.
+ *
+ * Mobile addition: the CTA is locked when the drink is unavailable or the
+ * public endpoint reports 0 stock (the menu list already hides those, so
+ * this is belt-and-braces for a list that refreshes while the card is
+ * visible; the web has no such lock). stockQuantity is publicly obfuscated
+ * to 0/1 — only compared to 0, never displayed.
+ *
  * The web card's expandable detail grid is intentionally not ported —
  * mobile cards stay single-state until the (missing) Fable design source
  * says otherwise. Preliminary design decision.
  */
 export function DrinkCard({ drink }: { drink: ApiDrink }) {
+  const { addDrinkItem } = useCart();
   const [imageFailed, setImageFailed] = useState(false);
+  const [added, setAdded] = useState(false);
+  const addedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
+    },
+    []
+  );
+
   const priceKr = Math.round(drink.priceOre / 100);
   const showImage = !imageFailed && drink.image.trim().length > 0;
   const showNutrition = drink.showNutrition ?? true;
+  const outOfStock = !drink.isAvailable || drink.stockQuantity === 0;
+
+  const handleAdd = () => {
+    if (outOfStock || added) return;
+    addDrinkItem(drink);
+    setAdded(true);
+    if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
+    addedTimerRef.current = setTimeout(() => setAdded(false), 1800);
+  };
 
   const metadata: string[] = [`${drink.volumeML} ml`];
   if (showNutrition) {
@@ -77,6 +108,41 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
           {metadata.join("  ·  ")}
         </ThemedText>
       </View>
+
+      {/* Footer: add-to-cart (web card's bottom-right button) */}
+      <View style={styles.footer}>
+        <Pressable
+          onPress={handleAdd}
+          disabled={outOfStock || added}
+          style={({ pressed }) => [
+            styles.addButton,
+            added && styles.addButtonAdded,
+            outOfStock && styles.addButtonLocked,
+            pressed && !added && !outOfStock && { backgroundColor: colors.accentHover },
+          ]}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: outOfStock || added }}
+          accessibilityLabel={
+            outOfStock ? menuCopy.soldOutToday : added ? menuCopy.added : mealDetailCopy.add
+          }
+        >
+          {outOfStock ? (
+            <ThemedText style={styles.addLabelLocked}>{menuCopy.soldOutToday}</ThemedText>
+          ) : added ? (
+            <>
+              <Check size={12} color={colors.accent} strokeWidth={2.5} />
+              <ThemedText style={[styles.addLabel, { color: colors.accent }]}>
+                {menuCopy.added}
+              </ThemedText>
+            </>
+          ) : (
+            <>
+              <Plus size={12} color={colors.textPrimary} strokeWidth={2.5} />
+              <ThemedText style={styles.addLabel}>{mealDetailCopy.add}</ThemedText>
+            </>
+          )}
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -124,5 +190,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "rgba(255,255,255,0.4)",
     marginTop: 2,
+  },
+  footer: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[3],
+    paddingTop: spacing[1],
+  },
+  addButton: {
+    height: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 18,
+    borderRadius: radius.btn,
+    backgroundColor: colors.accent,
+  },
+  addButtonAdded: {
+    backgroundColor: "rgba(232,101,10,0.14)",
+    borderWidth: 1.5,
+    borderColor: "rgba(232,101,10,0.3)",
+  },
+  addButtonLocked: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  addLabel: {
+    fontSize: 13,
+    fontFamily: fontFamily.bodyBold,
+    letterSpacing: 0.3,
+    color: colors.textPrimary,
+  },
+  addLabelLocked: {
+    fontSize: 12.5,
+    fontFamily: fontFamily.bodyBold,
+    letterSpacing: 0.3,
+    color: "rgba(255,255,255,0.45)",
   },
 });
