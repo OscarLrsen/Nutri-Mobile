@@ -151,3 +151,13 @@ export async function getOrderById(id: string): Promise<ApiOrder> {
   const { data } = await apiClient.get<ApiOrder>(`/api/orders/${id}`, requireAuth());
   return data;
 }
+
+/** GET /api/orders/by-email/{email} — authenticated order history
+ * (web ordersApi.getByEmail; used by the profile's Orderhistorik). */
+export async function getOrdersByEmail(email: string): Promise<ApiOrder[]> {
+  const { data } = await apiClient.get<ApiOrder[]>(
+    `/api/orders/by-email/${encodeURIComponent(email)}`,
+    requireAuth()
+  );
+  return data;
+}
