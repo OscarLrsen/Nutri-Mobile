@@ -215,8 +215,8 @@ export const authCopy = {
 } as const;
 
 export const orderStatusCopy = {
-  /** orderStatus.* — minimal subset for the Feature 5 confirmation screen;
-   * the full order-status experience is Feature 8. */
+  /** orderStatus.* — full set for the Feature 8 order-status screen. Every
+   * string traces to a web translation key (sv variant). */
   notFoundTitle: "Order hittades inte",
   notFoundCta: "Gå till menyn",
   orderNumber: "Ordernummer",
@@ -229,15 +229,54 @@ export const orderStatusCopy = {
   expiredTitle: "Order förfallen",
   expiredBody: "Reservationen gick ut innan betalning genomfördes.",
   expiredNewOrder: "Lägg ny order",
+  /** orderStatus.expired.home */
+  expiredHome: "Tillbaka till start",
   cancelledTitle: "Order avbruten",
   cancelledBody: "Den här beställningen är inte aktiv längre.",
   activeTitle: "Beställning mottagen",
   completedTitle: "Beställning hämtad",
   completedBody: (number: number) => `Order #${number} är avslutad.`,
+  /** orderStatus.step.* */
   stepReceived: "Mottagen",
   stepPreparing: "Tillagas",
+  stepPickup: "Hämtas",
   stepReadyPickup: "Klar för hämtning",
+  stepPickedUp: "Hämtad",
+  /** orderStatus.payStep.* — vertical stepper on the pay-at-counter state */
+  payStepAwaiting: "Väntar på betalning",
+  payStepPreparing: "Förbereder",
+  payStepReady: "Redo",
+  /** orderStatus.status.unknown */
+  statusUnknown: "Okänd status",
+  /** orderStatus.fetchError.short / .long */
+  fetchErrorShort: "Kan inte uppdatera status.",
+  fetchErrorLong: "Kan inte uppdatera status – visar senast kända status.",
+  /** orderStatus.active.* */
+  activeWaitLabel: "Beräknad väntetid:",
+  activeReadyToPickup: "Klar att hämtas",
+  activeWaitMinutes: (minutes: number) => `ca ${minutes} min`,
+  activeRemaining: "kvar",
+  activeReadyNow: "Klar!",
+  /** orderStatus.section.* */
+  sectionStatus: "Status",
   sectionOrderSummary: "Din beställning",
+  sectionPickup: "Upphämtning",
+  sectionOrder: "Beställning",
+  sectionLogged: "Loggat",
+  /** orderStatus.pickup.* */
+  pickupTitle: "Visa ordernummer vid hämtning",
+  pickupBody: "Presentera detta nummer när din beställning är klar.",
+  /** orderStatus.proteinLoggedToday / .loggedBadge */
+  proteinLoggedToday: "protein loggat idag",
+  loggedBadge: "Loggat",
+  /** orderStatus.orderDetails */
+  orderDetails: "Orderdetaljer",
+  /** orderStatus.confirmationSent — "Bekräftelse skickad till {email}" */
+  confirmationSent: (email: string) => `Bekräftelse skickad till ${email}`,
+  /** orderStatus.date.today — "idag {time}" */
+  dateToday: (time: string) => `idag ${time}`,
+  /** orderStatus.orderAgain */
+  orderAgain: "Beställ igen",
   total: "Totalt",
   toMenu: "Till menyn",
   /** orderStatus.size.* */

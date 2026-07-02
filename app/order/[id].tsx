@@ -1,5 +1,5 @@
-import { OrderConfirmationScreen } from "@/features/order/OrderConfirmationScreen";
+import { OrderStatusScreen } from "@/features/order/OrderStatusScreen";
 
-/** /order/[id] — same path shape as the web's (customer)/order/[id]. Minimal
- * confirmation view for Feature 5; the full order-status port is Feature 8. */
-export default OrderConfirmationScreen;
+/** /order/[id] — same path shape as the web's (customer)/order/[id]. Full
+ * order-status port (Feature 8): state variants, 5s polling, countdown. */
+export default OrderStatusScreen;
