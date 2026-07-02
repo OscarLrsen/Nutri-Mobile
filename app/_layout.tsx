@@ -8,6 +8,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { useFonts, Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold } from "@expo-google-fonts/sora";
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
 import { DMMono_400Regular, DMMono_500Medium } from "@expo-google-fonts/dm-mono";
+import { DMSerifDisplay_400Regular } from "@expo-google-fonts/dm-serif-display";
 
 import { queryClient } from "@/lib/queryClient";
 import { AuthProvider } from "@/services/auth/AuthProvider";
@@ -33,6 +34,7 @@ export default function RootLayout() {
     Inter_700Bold,
     DMMono_400Regular,
     DMMono_500Medium,
+    DMSerifDisplay_400Regular,
   });
 
   // Runs after React commits the real tree below (effects fire post-paint),

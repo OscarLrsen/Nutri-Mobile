@@ -1,14 +1,15 @@
 import { Tabs } from "expo-router";
-import { UtensilsCrossed, ShoppingCart, User } from "lucide-react-native";
+import { House, UtensilsCrossed, ShoppingCart, User } from "lucide-react-native";
 
 import { colors } from "@/theme";
 
 /**
- * Bottom-tab skeleton: Meny / Varukorg / Mina sidor — mirrors the three
- * primary areas of Nutri-Frontend's customer-facing app (menu, cart,
- * account — spec §9), but with placeholder screens only. No menu data,
- * cart logic, or account/profile business logic is implemented in this
- * infrastructure phase — see each screen file for what's stubbed and why.
+ * Bottom tabs: Hem / Meny / Varukorg / Mina sidor.
+ *
+ * Hem mirrors the web app's landing (HeroMobile.tsx); the web's hamburger
+ * menu has no tab equivalent — its destinations (hitta oss, hur funkar det,
+ * inställningar, …) will live under Mina sidor or the Hem screen in later
+ * features. Meny/Varukorg/Mina sidor are still placeholders (features 2–5).
  */
 export default function TabsLayout() {
   return (
@@ -26,6 +27,13 @@ export default function TabsLayout() {
     >
       <Tabs.Screen
         name="index"
+        options={{
+          title: "Hem",
+          tabBarIcon: ({ color, size }) => <House color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="meny"
         options={{
           title: "Meny",
           tabBarIcon: ({ color, size }) => <UtensilsCrossed color={color} size={size} />,

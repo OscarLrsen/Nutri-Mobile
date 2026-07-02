@@ -25,6 +25,14 @@ export const fontFamily = {
   bodyBold: "Inter_700Bold",
   mono: "DMMono_400Regular",
   monoMedium: "DMMono_500Medium",
+  /**
+   * Landing-hero display serif — HeroMobile.tsx uses
+   * '"DM Serif Display", Georgia, …' for the hero headline (verified in web
+   * source; distinct from Sora which the web root layout uses elsewhere).
+   * DM Serif Display only ships weight 400 on Google Fonts — the web's
+   * font-weight: 500 there silently renders as 400 too.
+   */
+  serif: "DMSerifDisplay_400Regular",
 } as const;
 
 /**
