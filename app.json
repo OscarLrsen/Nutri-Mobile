@@ -20,7 +20,8 @@
       ],
       "expo-secure-store",
       "expo-font",
-      "expo-image"
+      "expo-image",
+      "expo-status-bar"
     ],
     "ios": {
       "supportsTablet": true,
