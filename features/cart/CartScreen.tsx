@@ -1,13 +1,26 @@
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
+import * as WebBrowser from "expo-web-browser";
 import {
   AlertTriangle,
+  CreditCard,
+  Info,
   Menu,
   Minus,
   Plus,
   ShoppingBag,
   UtensilsCrossed,
+  Wallet,
   X,
 } from "lucide-react-native";
 
@@ -15,28 +28,43 @@ import { Screen } from "@/components/ui/Screen";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/services/auth/AuthProvider";
+import { getStoreStatus } from "@/services/api/store";
+import { createOrder, createCheckoutSession } from "@/services/api/orders";
 import type { CartItem } from "@/types/cart";
 import { CUSTOMER_SIZE_OPTIONS, MEAL_SIZES, previewMealPriceOre } from "@/utils/pricing";
 import { formatPriceKr, krToOre } from "@/utils/money";
 import { normalizeMacroSnapshot } from "@/utils/macroMath";
-import { cartCopy as copy } from "@/constants/copy";
+import { formatOrderError, isActiveReservationErr, isStockOutError } from "@/utils/orderErrors";
+import { setActiveOrderId, getActiveOrderId, setPendingStripeClear } from "@/utils/activeOrder";
+import { env } from "@/lib/env";
+import { authCopy, cartCopy as copy, checkoutCopy } from "@/constants/copy";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
- * Cart screen — port of the web src/app/varukorg/page.tsx item list, empty
- * state and order summary. Per-line pricing/macros/grams are copied
- * formula-for-formula from the web page (fixed-meal öre rounding vs custom
- * float path, round-then-multiply macro scaling, S/M/L short labels,
- * volumeML for drinks, out-of-stock warning on `meal.available === false`).
+ * Cart + checkout — port of the web src/app/varukorg/page.tsx. On the web the
+ * cart page IS the checkout (item list, customer note, payment methods, and
+ * the reserve/pay CTA all live on one page); the mobile screen keeps that
+ * exact structure rather than inventing a separate checkout step.
  *
- * DELIBERATELY NOT PORTED YET (Feature 7 — checkout): payment methods,
- * customer note, auth gate, reserve/pay CTA, Stripe cancel-resume banner,
- * closed-store banner, log-to-profile section, drink upsell. This screen
- * ends at the summary card.
+ * Ported behavior: fixed-vs-custom line pricing, closed/paused gating (with
+ * the web's fetch-failure-counts-as-closed derivation), drinks-only carts
+ * blocked from online payment, unavailable-item block, 409 handling (active
+ * reservation / out of stock / just closed), login gate with return-to-cart,
+ * ACTIVE_ORDER_KEY persistence before navigation, and the exact CTA label
+ * state machine.
  *
- * Mobile addition per the Feature 4 contract: an in-cart M/L size switcher
- * on regular meal lines (web has no in-cart size change) — hidden for
- * drinks, custom lines and fixed-portion meals.
+ * Stripe adaptation (documented): the web does window.location.assign(url);
+ * mobile opens the Checkout URL in the system browser (expo-web-browser).
+ * The session's success/cancel URLs point at the WEB app, so after paying,
+ * the browser shows the web order page; closing it returns here, where we
+ * navigate to the in-app order screen. The cart is NOT cleared before or
+ * during Stripe checkout (web parity) — the order screen clears it once the
+ * webhook has marked the order Paid (mobile equivalent of ?stripe=success).
+ *
+ * NOT ported (web-only or later features): Stripe cancel-return banner
+ * (?stripe=cancel can't reach the app), log-to-profile section (profile
+ * feature), drink upsell section.
  */
 
 const SIZE_LABEL_SHORT: Record<string, string> = {
@@ -45,14 +73,166 @@ const SIZE_LABEL_SHORT: Record<string, string> = {
   large: "L",
 };
 
+type PaymentMethod = "pay_on_site" | "stripe";
+
 export function CartScreen() {
-  const { items, hydrated } = useCart();
+  const router = useRouter();
+  const { items, hydrated, clearCart, totalOre } = useCart();
+  const { user, loading: authLoading } = useAuth();
+
+  const authEmail = user?.email ?? null;
+  const authName = (user?.user_metadata?.full_name as string | undefined) || authCopy.guest;
+  const userLoaded = !authLoading;
+
+  // Same 30s store-status poll as the web's StoreStatusProvider; same
+  // derivation — a settled fetch with no data counts as closed.
+  const storeStatusQuery = useQuery({
+    queryKey: ["store", "status"],
+    queryFn: getStoreStatus,
+    refetchInterval: 30_000,
+  });
+  const storeStatus = storeStatusQuery.data ?? null;
+  const statusSettled = !storeStatusQuery.isLoading;
+  const isClosed = storeStatus?.status === "Closed" || (statusSettled && storeStatus === null);
+  const isPaused = storeStatus?.status === "Paused";
+
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pay_on_site");
+  const [customerNote, setCustomerNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // 409 stock error → CTA disabled until the cart contents change (web parity).
+  const [stockBlocked, setStockBlocked] = useState(false);
+  const [activeReservationError, setActiveReservationError] = useState(false);
+  const [activeOrderIdFromError, setActiveOrderIdFromError] = useState<string | null>(null);
+
+  const hasUnavailableItems = items.some((item) => item.meal.available === false);
+  // Drinks-only carts cannot pay online (web product gate).
+  const isDrinksOnly = items.length > 0 && items.every((i) => i.kind === "drink");
+
+  // Clear the stock-block when cart contents change (web parity).
+  useEffect(() => {
+    setStockBlocked(false);
+  }, [items]);
+
+  // If the cart becomes drinks-only while Stripe is selected, fall back (web parity).
+  useEffect(() => {
+    if (isDrinksOnly && paymentMethod === "stripe") setPaymentMethod("pay_on_site");
+  }, [isDrinksOnly, paymentMethod]);
+
+  /* ── Order placement (port of the web handleSubmit) ── */
+
+  const goToLogin = () =>
+    router.push({ pathname: "/logga-in", params: { next: "/(tabs)/varukorg" } });
+
+  const handleSubmit = async () => {
+    if (submitting || isClosed || isPaused || !userLoaded || hasUnavailableItems || stockBlocked)
+      return;
+    if (!authEmail) {
+      goToLogin();
+      return;
+    }
+    setError(null);
+    setStockBlocked(false);
+    setActiveReservationError(false);
+    setActiveOrderIdFromError(null);
+    setSubmitting(true);
+    // Defense-in-depth: never start Stripe for a drinks-only cart (web parity).
+    const effectivePaymentMethod: PaymentMethod = isDrinksOnly ? "pay_on_site" : paymentMethod;
+    try {
+      const order = await createOrder({
+        customerName: authName,
+        customerEmail: authEmail,
+        paymentMethod: effectivePaymentMethod,
+        customerNote: customerNote.trim() || undefined,
+        items: items.map((item) => {
+          if (item.kind === "drink" && item.drink) {
+            return { mealId: item.drink.id, size: "medium", quantity: item.quantity };
+          }
+          return {
+            mealId: item.isCustom ? null : item.meal.id,
+            size: item.sizeId,
+            quantity: item.quantity,
+            isTailored: item.isCustom,
+            customMacros: item.customMacros,
+            customIngredients: item.customIngredients,
+            containerTypeId: item.containerTypeId,
+            originalMealName: item.originalMealName,
+          };
+        }),
+      });
+
+      if (effectivePaymentMethod === "stripe") {
+        // Persist the active order BEFORE the session call so a failure never
+        // loses the order (web parity).
+        await setActiveOrderId(order.id);
+        let checkoutUrl: string;
+        try {
+          const session = await createCheckoutSession(order.id);
+          if (!session?.url) throw new Error("Checkout session saknar url.");
+          checkoutUrl = session.url;
+        } catch {
+          // Order exists and is saved; cart is preserved — surface a clear
+          // error and STAY in the cart (web parity).
+          setError(checkoutCopy.errorStripeStartFailed);
+          return;
+        }
+        // Mark this order for the one-time cart clear once it reports Paid
+        // (mobile equivalent of the web's ?stripe=success clear).
+        await setPendingStripeClear(order.id);
+        // Open Stripe Checkout in the system browser. Cart is NOT cleared —
+        // if the customer cancels or backs out it must survive (web parity).
+        await WebBrowser.openBrowserAsync(checkoutUrl);
+        // Browser dismissed (paid, cancelled, or closed) — show the in-app
+        // order screen, which reflects whatever the webhook decided.
+        router.push(`/order/${order.id}`);
+        return;
+      }
+
+      // pay_on_site — unchanged behavior (web parity).
+      clearCart();
+      await setActiveOrderId(order.id);
+      router.push(`/order/${order.id}`);
+    } catch (err) {
+      if (isActiveReservationErr(err)) {
+        setActiveReservationError(true);
+        setActiveOrderIdFromError(await getActiveOrderId());
+      } else {
+        const { message, unauthorized } = formatOrderError(err);
+        if (unauthorized) {
+          goToLogin();
+        } else if (message) {
+          setError(message);
+        }
+        if (isStockOutError(err)) setStockBlocked(true);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /* ── CTA label state machine (web parity) ── */
+
+  const amountStr = formatPriceKr(totalOre).replace(" kr", "");
+  const ctaLabel = isClosed
+    ? (formatNextOpen(storeStatus?.nextOpenAtUtc) ?? checkoutCopy.closedNow)
+    : isPaused
+      ? checkoutCopy.pausedNow
+      : !userLoaded
+        ? checkoutCopy.loading
+        : hasUnavailableItems || stockBlocked
+          ? checkoutCopy.ctaCannotReserve
+          : !authEmail
+            ? checkoutCopy.ctaLoginToReserve
+            : paymentMethod === "stripe"
+              ? checkoutCopy.ctaPayOnline(amountStr)
+              : checkoutCopy.ctaReserve(amountStr);
+  const ctaMuted = isClosed || isPaused || hasUnavailableItems || stockBlocked;
+  const ctaDisabled =
+    submitting || isClosed || isPaused || !userLoaded || hasUnavailableItems || stockBlocked;
 
   return (
     <Screen>
-      {/* Header — web's sticky cart header, sans back button (this is a tab
-          root, not a pushed route). Visual decision: preliminary (Fable
-          design source still missing). */}
+      {/* Header — web's sticky cart header, sans back button (tab root). */}
       <View style={styles.header}>
         <ThemedText style={styles.headerTitle}>{copy.title}</ThemedText>
       </View>
@@ -64,31 +244,301 @@ export function CartScreen() {
       ) : items.length === 0 ? (
         <EmptyCart />
       ) : (
-        <ScrollView contentContainerStyle={styles.listContent}>
-          <SectionHead>
-            {(() => {
-              const mealCount = items.filter((i) => i.kind !== "drink").length;
-              const drinkCount = items.filter((i) => i.kind === "drink").length;
-              const parts: string[] = [];
-              if (mealCount > 0) parts.push(copy.countMeal(mealCount));
-              if (drinkCount > 0) parts.push(copy.countDrink(drinkCount));
-              return parts.join(" · ");
-            })()}
-          </SectionHead>
+        <>
+          <ScrollView contentContainerStyle={styles.listContent}>
+            {/* Closed banner (web parity) */}
+            {isClosed && (
+              <View style={styles.closedBanner}>
+                <Info size={16} color={colors.accent} style={{ marginTop: 2 }} />
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.closedBannerHeading}>
+                    {checkoutCopy.closedHeading}
+                  </ThemedText>
+                  {formatOpeningCopy(storeStatus?.nextOpenAtUtc) ? (
+                    <ThemedText style={styles.closedBannerText}>
+                      {formatOpeningCopy(storeStatus?.nextOpenAtUtc)}
+                    </ThemedText>
+                  ) : null}
+                  <ThemedText style={[styles.closedBannerText, { opacity: 0.8 }]}>
+                    {checkoutCopy.closedText}
+                  </ThemedText>
+                </View>
+              </View>
+            )}
 
-          {items.map((item) => (
-            <CartItemCard key={item.id} item={item} />
-          ))}
+            <SectionHead>
+              {(() => {
+                const mealCount = items.filter((i) => i.kind !== "drink").length;
+                const drinkCount = items.filter((i) => i.kind === "drink").length;
+                const parts: string[] = [];
+                if (mealCount > 0) parts.push(copy.countMeal(mealCount));
+                if (drinkCount > 0) parts.push(copy.countDrink(drinkCount));
+                return parts.join(" · ");
+              })()}
+            </SectionHead>
 
-          <SectionHead style={{ marginTop: spacing[5] }}>{copy.summaryHead}</SectionHead>
-          <SummaryCard />
-        </ScrollView>
+            {items.map((item) => (
+              <CartItemCard key={item.id} item={item} />
+            ))}
+
+            {/* Customer note to kitchen (web parity; input capped at 100) */}
+            <SectionHead style={{ marginTop: spacing[5] }}>{checkoutCopy.noteHead}</SectionHead>
+            <View style={styles.noteCard}>
+              <TextInput
+                value={customerNote}
+                onChangeText={(v) => setCustomerNote(v.slice(0, 100))}
+                maxLength={100}
+                multiline
+                numberOfLines={2}
+                placeholder={checkoutCopy.notePlaceholder}
+                placeholderTextColor="rgba(255,255,255,0.28)"
+                style={styles.noteInput}
+              />
+              <ThemedText style={styles.noteCounter}>{customerNote.length}/100</ThemedText>
+            </View>
+
+            <SectionHead style={{ marginTop: spacing[5] }}>{copy.summaryHead}</SectionHead>
+            <SummaryCard />
+
+            {/* Payment methods (web parity: pay_on_site / stripe / swish-disabled) */}
+            <SectionHead style={{ marginTop: spacing[5] }}>
+              {checkoutCopy.paymentHeading}
+            </SectionHead>
+            <View style={[styles.paymentCard, isClosed && { opacity: 0.55 }]} pointerEvents={isClosed ? "none" : "auto"}>
+              <PaymentRow
+                label={checkoutCopy.payAtPickup}
+                sublabel={checkoutCopy.payAtPickupSub}
+                icon={<Wallet size={18} color="rgba(255,255,255,0.75)" strokeWidth={1.5} />}
+                iconBg="rgba(255,255,255,0.07)"
+                selected={paymentMethod === "pay_on_site"}
+                onSelect={() => setPaymentMethod("pay_on_site")}
+              />
+              <PaymentRow
+                label={checkoutCopy.payOnline}
+                sublabel={checkoutCopy.payOnlineSub}
+                icon={<CreditCard size={18} color={colors.textPrimary} strokeWidth={1.6} />}
+                iconBg={colors.accent}
+                selected={paymentMethod === "stripe"}
+                onSelect={() => setPaymentMethod("stripe")}
+                disabled={isDrinksOnly}
+              />
+              <PaymentRow
+                label={checkoutCopy.swish}
+                sublabel={checkoutCopy.comingSoon}
+                icon={<ThemedText style={styles.swishIcon}>S</ThemedText>}
+                iconBg="#0F4EFF"
+                selected={false}
+                onSelect={() => {}}
+                disabled
+                last
+              />
+            </View>
+
+            {/* Drinks-only: explain why online payment is unavailable */}
+            {isDrinksOnly && (
+              <View style={styles.mutedBox}>
+                <ThemedText style={styles.mutedBoxText}>
+                  {checkoutCopy.onlineDrinksOnly}
+                </ThemedText>
+              </View>
+            )}
+
+            {/* Pay-at-counter info box (web parity) */}
+            {paymentMethod === "pay_on_site" && (
+              <View style={styles.infoBox}>
+                <ThemedText style={styles.infoBoxHeading}>{checkoutCopy.infoHeading}</ThemedText>
+                <ThemedText style={styles.infoBoxText}>{checkoutCopy.infoText}</ThemedText>
+              </View>
+            )}
+
+            {/* Errors */}
+            {error && !stockBlocked ? (
+              <ThemedText style={styles.errorText}>{error}</ThemedText>
+            ) : null}
+            {stockBlocked && error ? (
+              <View style={styles.warnBox}>
+                <AlertTriangle size={14} color={colors.accent} style={{ marginTop: 1 }} />
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.warnBoxHeading}>{error}</ThemedText>
+                  <Pressable
+                    onPress={() => router.navigate("/(tabs)/meny")}
+                    style={styles.inlineAction}
+                    accessibilityRole="button"
+                  >
+                    <ThemedText style={styles.inlineActionText}>{copy.emptyCta}</ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+          </ScrollView>
+
+          {/* ── Sticky bottom CTA (web parity) ── */}
+          <View style={styles.bottomBar}>
+            {activeReservationError && (
+              <View style={styles.warnBox}>
+                <AlertTriangle size={15} color={colors.accent} style={{ marginTop: 1 }} />
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.warnBoxHeading}>
+                    {checkoutCopy.activeReservationTitle}
+                  </ThemedText>
+                  <ThemedText style={styles.warnBoxText}>
+                    {checkoutCopy.activeReservationBody}
+                  </ThemedText>
+                  {activeOrderIdFromError ? (
+                    <Pressable
+                      onPress={() => router.push(`/order/${activeOrderIdFromError}`)}
+                      style={styles.inlineAction}
+                      accessibilityRole="button"
+                    >
+                      <ThemedText style={styles.inlineActionText}>
+                        {checkoutCopy.activeReservationViewOrder}
+                      </ThemedText>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            )}
+
+            {hasUnavailableItems && (
+              <View style={styles.warnBox}>
+                <AlertTriangle size={14} color={colors.accent} style={{ marginTop: 1 }} />
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.warnBoxHeading}>
+                    {checkoutCopy.unavailableHeading}
+                  </ThemedText>
+                  <ThemedText style={styles.warnBoxText}>
+                    {checkoutCopy.unavailableText}
+                  </ThemedText>
+                </View>
+              </View>
+            )}
+
+            {!authEmail && userLoaded && (
+              <View style={styles.mutedBox}>
+                <ThemedText style={styles.accountRequiredTitle}>
+                  {checkoutCopy.accountRequiredTitle}
+                </ThemedText>
+                <ThemedText style={styles.accountRequiredBody}>
+                  {checkoutCopy.accountRequiredBody}
+                </ThemedText>
+                <Pressable onPress={goToLogin} style={styles.inlineAction} accessibilityRole="button">
+                  <ThemedText style={styles.inlineActionText}>
+                    {checkoutCopy.accountRequiredCta}
+                  </ThemedText>
+                </Pressable>
+              </View>
+            )}
+
+            <Pressable
+              onPress={handleSubmit}
+              disabled={ctaDisabled}
+              style={({ pressed }) => [
+                styles.cta,
+                ctaMuted && styles.ctaMuted,
+                (submitting || !userLoaded) && { opacity: 0.7 },
+                pressed && !ctaDisabled && { backgroundColor: colors.accentHover },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={ctaLabel}
+            >
+              <ThemedText style={[styles.ctaText, ctaMuted && styles.ctaTextMuted]}>
+                {submitting
+                  ? paymentMethod === "stripe"
+                    ? checkoutCopy.redirecting
+                    : checkoutCopy.submitting
+                  : ctaLabel}
+              </ThemedText>
+            </Pressable>
+            <ThemedText style={styles.terms}>
+              {checkoutCopy.termsPrefix}
+              <ThemedText
+                style={styles.termsLink}
+                onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/kopvillkor`)}
+              >
+                {checkoutCopy.termsLink}
+              </ThemedText>
+              .
+            </ThemedText>
+          </View>
+        </>
       )}
     </Screen>
   );
 }
 
-/* ── Item card ─────────────────────────────────────────────── */
+/* ── Date helpers (verbatim web ports, sv-SE only — mobile is sv-only) ── */
+
+function formatNextOpen(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const time = d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+  return checkoutCopy.openAt(time);
+}
+
+function formatOpeningCopy(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const time = d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+  if (sameDay) return checkoutCopy.openToday(time);
+  return checkoutCopy.openOn(
+    d.toLocaleString("sv-SE", { weekday: "short", hour: "2-digit", minute: "2-digit" })
+  );
+}
+
+/* ── Payment method row (port of the web PaymentRow) ── */
+
+function PaymentRow({
+  label,
+  sublabel,
+  icon,
+  iconBg,
+  selected,
+  onSelect,
+  disabled,
+  last,
+}: {
+  label: string;
+  sublabel?: string;
+  icon: ReactNode;
+  iconBg: string;
+  selected: boolean;
+  onSelect: () => void;
+  disabled?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onSelect}
+      disabled={disabled}
+      style={[
+        styles.paymentRow,
+        selected && { backgroundColor: "rgba(232,101,10,0.05)" },
+        !last && { borderBottomWidth: 1, borderBottomColor: colors.borderSoft },
+        disabled && { opacity: 0.45 },
+      ]}
+      accessibilityRole="radio"
+      accessibilityState={{ selected, disabled }}
+    >
+      <View style={[styles.paymentIcon, { backgroundColor: iconBg }]}>{icon}</View>
+      <View style={{ flex: 1 }}>
+        <ThemedText style={styles.paymentLabel}>{label}</ThemedText>
+        {sublabel ? <ThemedText style={styles.paymentSublabel}>{sublabel}</ThemedText> : null}
+      </View>
+      <View style={[styles.radioOuter, selected && { borderColor: colors.accent }]}>
+        {selected ? <View style={styles.radioInner} /> : null}
+      </View>
+    </Pressable>
+  );
+}
+
+/* ── Item card (unchanged from Feature 4) ─────────────────── */
 
 function CartItemCard({ item }: { item: CartItem }) {
   const { updateQuantity, updateSize, removeItem } = useCart();
@@ -201,6 +651,11 @@ function CartItemCard({ item }: { item: CartItem }) {
                 </ThemedText>
               )}
             </View>
+            {surcharge > 0 && (
+              <ThemedText style={styles.surchargeText}>
+                {checkoutCopy.surcharge(surcharge)}
+              </ThemedText>
+            )}
           </View>
         </View>
 
@@ -376,7 +831,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  listContent: { paddingHorizontal: spacing[4], paddingBottom: spacing[10] },
+  listContent: { paddingHorizontal: spacing[4], paddingBottom: spacing[6] },
   sectionHead: {
     marginHorizontal: spacing[1],
     marginTop: spacing[5],
@@ -387,6 +842,21 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textTransform: "uppercase",
   },
+
+  /* Closed banner */
+  closedBanner: {
+    flexDirection: "row",
+    gap: spacing[3],
+    marginTop: spacing[4],
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: "rgba(232,101,10,0.25)",
+    backgroundColor: "rgba(232,101,10,0.08)",
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  closedBannerHeading: { fontSize: 12.5, fontFamily: fontFamily.bodySemibold, color: colors.textPrimary },
+  closedBannerText: { marginTop: 2, fontSize: 12.5, lineHeight: 18, color: "rgba(255,255,255,0.55)" },
 
   /* Item card */
   itemWrap: { marginBottom: spacing[3] },
@@ -460,6 +930,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
   unitPrice: { fontSize: 11, fontFamily: fontFamily.mono, color: "rgba(255,255,255,0.25)" },
+  surchargeText: { fontSize: 11, color: colors.accent },
   itemFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -515,6 +986,31 @@ const styles = StyleSheet.create({
   unavailableName: { marginTop: 2, fontSize: 11.5, color: "rgba(255,255,255,0.5)" },
   unavailableText: { marginTop: 2, fontSize: 11, color: "rgba(255,255,255,0.35)" },
 
+  /* Customer note */
+  noteCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  noteInput: {
+    minHeight: 48,
+    fontSize: 13.5,
+    fontFamily: fontFamily.body,
+    color: "rgba(255,255,255,0.92)",
+    textAlignVertical: "top",
+    padding: 0,
+  },
+  noteCounter: {
+    marginTop: 4,
+    textAlign: "right",
+    fontSize: 11,
+    fontFamily: fontFamily.mono,
+    color: "rgba(255,255,255,0.45)",
+  },
+
   /* Summary */
   summaryCard: {
     backgroundColor: colors.card,
@@ -543,6 +1039,128 @@ const styles = StyleSheet.create({
   },
   summaryValueTotal: { fontSize: 16, fontFamily: fontFamily.monoMedium },
   summaryValueMuted: { fontSize: 11, color: "rgba(255,255,255,0.28)" },
+
+  /* Payment methods */
+  paymentCard: {
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+  },
+  paymentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  paymentIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paymentLabel: { fontSize: 14, fontFamily: fontFamily.bodyMedium, color: colors.textPrimary },
+  paymentSublabel: { marginTop: 2, fontSize: 11, color: "rgba(255,255,255,0.3)" },
+  swishIcon: { fontSize: 13, fontFamily: fontFamily.bodyBold, color: colors.textPrimary },
+  radioOuter: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioInner: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.accent },
+
+  /* Info / muted / warning boxes */
+  infoBox: {
+    marginTop: spacing[3],
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: "rgba(232,101,10,0.18)",
+    backgroundColor: "rgba(232,101,10,0.08)",
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  infoBoxHeading: { fontSize: 13, fontFamily: fontFamily.bodySemibold, color: colors.accent },
+  infoBoxText: { marginTop: 2, fontSize: 11.5, lineHeight: 16, color: "rgba(255,255,255,0.6)" },
+  mutedBox: {
+    marginTop: spacing[3],
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  mutedBoxText: { fontSize: 11.5, lineHeight: 16, color: "rgba(255,255,255,0.6)" },
+  accountRequiredTitle: { fontSize: 12.5, fontFamily: fontFamily.bodySemibold, color: colors.textPrimary },
+  accountRequiredBody: {
+    marginTop: 2,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: "rgba(255,255,255,0.5)",
+  },
+  warnBox: {
+    flexDirection: "row",
+    gap: spacing[2],
+    marginTop: spacing[3],
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: "rgba(232,101,10,0.28)",
+    backgroundColor: "rgba(18,6,0,0.9)",
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  warnBoxHeading: { fontSize: 12.5, fontFamily: fontFamily.bodySemibold, color: colors.textPrimary },
+  warnBoxText: { marginTop: 2, fontSize: 11.5, lineHeight: 16, color: "rgba(255,255,255,0.55)" },
+  inlineAction: {
+    alignSelf: "flex-start",
+    marginTop: spacing[2],
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(232,101,10,0.35)",
+    backgroundColor: "rgba(232,101,10,0.12)",
+    paddingHorizontal: spacing[3],
+    paddingVertical: 5,
+  },
+  inlineActionText: { fontSize: 12, fontFamily: fontFamily.bodySemibold, color: colors.accent },
+  errorText: { marginTop: spacing[3], fontSize: 13, color: "#F87171" },
+
+  /* Bottom CTA bar */
+  bottomBar: {
+    paddingHorizontal: spacing[5],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[3],
+    backgroundColor: "rgba(17,17,17,0.96)",
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 0,
+  },
+  cta: {
+    height: 50,
+    marginTop: spacing[3],
+    borderRadius: radius.card,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing[5],
+  },
+  ctaMuted: { backgroundColor: "rgba(255,255,255,0.08)" },
+  ctaText: { fontSize: 15, fontFamily: fontFamily.bodyBold, color: colors.textPrimary, letterSpacing: 0.1 },
+  ctaTextMuted: { color: "rgba(255,255,255,0.65)" },
+  terms: {
+    marginTop: spacing[2],
+    textAlign: "center",
+    fontSize: 10.5,
+    lineHeight: 15,
+    color: "rgba(255,255,255,0.35)",
+  },
+  termsLink: { fontSize: 10.5, textDecorationLine: "underline", color: "rgba(255,255,255,0.55)" },
 
   /* Empty state */
   emptyContent: { flexGrow: 1, paddingHorizontal: spacing[4], paddingTop: spacing[10] },

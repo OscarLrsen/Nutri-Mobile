@@ -28,6 +28,12 @@ const envSchema = z.object({
   EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z
     .string()
     .min(1, "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY is required"),
+  /** The Nutri web app's public origin. Used for flows that intentionally
+   * hand off to the web (Supabase signup emailRedirectTo → the web's
+   * /auth/callback route, password reset at /glomt-losenord, /kopvillkor) —
+   * the mobile app has no deep-link config yet, so email links and Stripe
+   * redirects must land on the web app. Defaults to production. */
+  EXPO_PUBLIC_WEB_URL: z.url().default("https://www.nutrifoodtruck.com"),
 });
 
 function loadEnv() {
@@ -35,6 +41,7 @@ function loadEnv() {
     EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL,
     EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
     EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    EXPO_PUBLIC_WEB_URL: process.env.EXPO_PUBLIC_WEB_URL,
   });
 
   if (!parsed.success) {
