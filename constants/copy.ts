@@ -50,6 +50,39 @@ export const menuCopy = {
   carbsShort: "kolh",
   fatShort: "fett",
   caffeineShort: "koffein",
+  /** menu.added */
+  added: "Tillagd",
+} as const;
+
+export const cartCopy = {
+  /** cart.title */
+  title: "Varukorg",
+  /** cart.count.meal.one / .other — "{count} rätt(er)" */
+  countMeal: (count: number) => (count === 1 ? `${count} rätt` : `${count} rätter`),
+  /** cart.count.drink.one / .other — "{count} dryck(er)" */
+  countDrink: (count: number) => (count === 1 ? `${count} dryck` : `${count} drycker`),
+  /** cart.item.custom */
+  itemCustom: "Anpassad",
+  /** cart.item.remove */
+  itemRemove: "Ta bort",
+  /** cart.qty.decrease / cart.qty.increase */
+  qtyDecrease: "Minska antal",
+  qtyIncrease: "Öka antal",
+  /** cart.summaryHead */
+  summaryHead: "Sammanfattning",
+  /** cart.summary.subtotal / .pickup / .free / .total */
+  summarySubtotal: "Delsumma",
+  summaryPickup: "Upphämtning",
+  summaryFree: "Gratis",
+  summaryTotal: "Totalt",
+  /** cart.empty.heading / .text / .cta / .subline */
+  emptyHeading: "Din varukorg är tom",
+  emptyText: "Lägg till en måltid från menyn för att komma igång.",
+  emptyCta: "Se menyn",
+  emptySubline: "Bygg din order och betala när du är redo.",
+  /** cart.stock.outHeading / .outText */
+  stockOutHeading: "Slut i lager",
+  stockOutText: "0 kvar i lager",
 } as const;
 
 export const mealDetailCopy = {

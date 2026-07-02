@@ -12,6 +12,9 @@
  * the backend or the web frontend ever changes these values, this file must
  * change in the same commit-set — three copies of one contract.
  */
+import type { ApiMeal } from "@/services/api/meals";
+import type { Meal } from "@/types/cart";
+
 export const MEAL_SIZES = [
   { id: "small", label: "Small", priceMultiplier: 0.8, macroMultiplier: 0.8 },
   { id: "medium", label: "Medium", priceMultiplier: 1.0, macroMultiplier: 1.0 },
@@ -38,4 +41,29 @@ export function previewMealPriceKr(basePrice: number, priceMultiplier: number): 
 
 export function previewMealPriceOre(basePrice: number, priceMultiplier: number): number {
   return previewMealPriceKr(basePrice, priceMultiplier) * 100;
+}
+
+/**
+ * Convert an API meal (no sizes) into a full Meal with MEAL_SIZES attached —
+ * verbatim port of Nutri-Frontend's lib/meals.ts apiMealToMeal. Cart items
+ * store this Meal shape (web parity), which is why the cart JSON matches the
+ * web's localStorage["nutri-cart"] field-for-field.
+ */
+export function apiMealToMeal(m: ApiMeal): Meal {
+  return {
+    id: m.id,
+    name: m.name,
+    description: m.description,
+    descriptionEn: m.descriptionEn,
+    image: m.image,
+    basePrice: m.basePrice,
+    category: m.category,
+    available: m.available,
+    macros: m.macros,
+    ingredients: m.ingredients,
+    sizes: [...MEAL_SIZES],
+    mealTimeTags: m.mealTimeTags,
+    badgeText: m.badgeText,
+    portionMode: m.portionMode,
+  };
 }

@@ -12,6 +12,7 @@ import { DMSerifDisplay_400Regular } from "@expo-google-fonts/dm-serif-display";
 
 import { queryClient } from "@/lib/queryClient";
 import { AuthProvider } from "@/services/auth/AuthProvider";
+import { CartProvider } from "@/context/CartContext";
 import { ErrorBoundary } from "@/components/feedback/ErrorBoundary";
 import { colors } from "@/theme";
 
@@ -60,12 +61,14 @@ export default function RootLayout() {
         <ErrorBoundary>
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
-              <View style={{ flex: 1, backgroundColor: colors.bg }}>
-                <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
-                  <Stack.Screen name="(tabs)" />
-                  <Stack.Screen name="+not-found" options={{ headerShown: true, title: "Hittades inte" }} />
-                </Stack>
-              </View>
+              <CartProvider>
+                <View style={{ flex: 1, backgroundColor: colors.bg }}>
+                  <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+                    <Stack.Screen name="(tabs)" />
+                    <Stack.Screen name="+not-found" options={{ headerShown: true, title: "Hittades inte" }} />
+                  </Stack>
+                </View>
+              </CartProvider>
             </AuthProvider>
           </QueryClientProvider>
         </ErrorBoundary>

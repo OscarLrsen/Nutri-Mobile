@@ -1,19 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowLeft, Minus, Plus, ShoppingCart, UtensilsCrossed } from "lucide-react-native";
+import { ArrowLeft, Check, Minus, Plus, ShoppingCart, UtensilsCrossed } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { useCart } from "@/context/CartContext";
 import { getMealById, getMealAvailability } from "@/services/api/meals";
 import { getIngredients } from "@/services/api/ingredients";
 import { getStoreStatus } from "@/services/api/store";
-import { CUSTOMER_SIZE_OPTIONS, previewMealPriceOre } from "@/utils/pricing";
+import { apiMealToMeal, CUSTOMER_SIZE_OPTIONS, previewMealPriceOre } from "@/utils/pricing";
 import { formatPriceKr } from "@/utils/money";
 import { mealDetailCopy as copy, menuCopy } from "@/constants/copy";
 import { colors, fontFamily, radius, spacing } from "@/theme";
@@ -33,9 +34,10 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  * public GET /api/ingredients — surfacing it here too since mobile cards
  * link to this screen for the full story).
  *
- * Feature-scope limits: the CTA does NOT add to a cart yet (feature 4) —
- * it shows an honest "kommer snart" notice. The web's breakfast time-window
- * lock (isBreakfastTime) is not ported yet (serviceWindows.ts pending).
+ * The CTA adds to the cart with the exact web call —
+ * addItem(apiMealToMeal(meal), selectedSize, quantity) — and shows the
+ * web's 1.8s "Tillagd" confirmation. The web's breakfast time-window lock
+ * (isBreakfastTime) is not ported yet (serviceWindows.ts pending).
  */
 
 const LOW_STOCK_THRESHOLD = 3;
@@ -69,9 +71,18 @@ export function MealDetailScreen() {
   const isFixed = meal?.portionMode === "fixed";
   const isClosed = storeStatusQuery.data?.status === "Closed";
 
+  const { addItem, totalItems } = useCart();
   const [selectedSize, setSelectedSize] = useState<string>("medium");
   const [quantity, setQuantity] = useState(1);
   const [imageFailed, setImageFailed] = useState(false);
+  const [added, setAdded] = useState(false);
+  const addedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
+    },
+    []
+  );
 
   const stockBySize = useMemo(() => {
     if (!availability) {
@@ -140,9 +151,13 @@ export function MealDetailScreen() {
     selected.count <= LOW_STOCK_THRESHOLD;
   const stockLocked = allSoldOut || selected.soldOut;
 
+  // Same guard + call + 1.8s confirmation as the web page's handleAdd.
   const handleAdd = () => {
-    // Feature 4 (varukorg) is not built yet — honest placeholder, no cart mutation.
-    Alert.alert("Kommer snart", "Varukorgen byggs i nästa steg av appen.");
+    if (!meal || stockLocked) return;
+    addItem(apiMealToMeal(meal), effectiveSize, quantity);
+    setAdded(true);
+    if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
+    addedTimerRef.current = setTimeout(() => setAdded(false), 1800);
   };
 
   if (mealQuery.isLoading) {
@@ -188,6 +203,11 @@ export function MealDetailScreen() {
           accessibilityLabel="Öppna varukorgen"
         >
           <ShoppingCart size={16} color={colors.textPrimary} strokeWidth={1.75} />
+          {totalItems > 0 && (
+            <View style={styles.cartBadge}>
+              <ThemedText style={styles.cartBadgeText}>{totalItems}</ThemedText>
+            </View>
+          )}
         </Pressable>
       </View>
 
@@ -435,6 +455,11 @@ export function MealDetailScreen() {
             <ThemedText style={styles.ctaLockedText}>
               {copy.sizeSoldOutChoose(copy.sizeNames[effectiveSize] ?? effectiveSize)}
             </ThemedText>
+          ) : added ? (
+            <View style={styles.ctaAddedRow}>
+              <Check size={14} color={colors.textPrimary} strokeWidth={2.5} />
+              <ThemedText style={styles.ctaText}>{menuCopy.added}</ThemedText>
+            </View>
           ) : (
             <>
               <ThemedText style={styles.ctaText}>
@@ -488,6 +513,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  cartBadge: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cartBadgeText: { fontSize: 9.5, fontFamily: fontFamily.bodyBold, color: colors.textPrimary },
   wordmark: {
     fontSize: 15,
     fontFamily: fontFamily.bodyBold,
@@ -634,6 +672,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ctaLockedText: { fontSize: 13.5, fontFamily: fontFamily.bodyBold, color: "rgba(255,255,255,0.55)" },
+  ctaAddedRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
   ctaText: { fontSize: 14, fontFamily: fontFamily.bodyBold, color: colors.textPrimary },
   ctaPrice: { fontSize: 14, fontFamily: fontFamily.monoMedium, color: "rgba(255,255,255,0.85)" },
 });

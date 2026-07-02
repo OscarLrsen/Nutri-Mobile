@@ -1,7 +1,8 @@
 import { Tabs } from "expo-router";
 import { House, UtensilsCrossed, ShoppingCart, User } from "lucide-react-native";
 
-import { colors } from "@/theme";
+import { useCart } from "@/context/CartContext";
+import { colors, fontFamily } from "@/theme";
 
 /**
  * Bottom tabs: Hem / Meny / Varukorg / Mina sidor.
@@ -9,9 +10,15 @@ import { colors } from "@/theme";
  * Hem mirrors the web app's landing (HeroMobile.tsx); the web's hamburger
  * menu has no tab equivalent — its destinations (hitta oss, hur funkar det,
  * inställningar, …) will live under Mina sidor or the Hem screen in later
- * features. Meny/Varukorg/Mina sidor are still placeholders (features 2–5).
+ * features. Mina sidor is still a placeholder (feature 5+).
+ *
+ * The Varukorg tab shows a live item-count badge (the mobile equivalent of
+ * the web's cart-count bubble in the navbar/BottomNav), driven by the same
+ * totalItems the web CartContext exposes — updates instantly on add/remove.
  */
 export default function TabsLayout() {
+  const { totalItems } = useCart();
+
   return (
     <Tabs
       screenOptions={{
@@ -44,6 +51,13 @@ export default function TabsLayout() {
         options={{
           title: "Varukorg",
           tabBarIcon: ({ color, size }) => <ShoppingCart color={color} size={size} />,
+          tabBarBadge: totalItems > 0 ? totalItems : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: colors.accent,
+            color: colors.textPrimary,
+            fontFamily: fontFamily.bodySemibold,
+            fontSize: 11,
+          },
         }}
       />
       <Tabs.Screen
