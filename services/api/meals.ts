@@ -48,6 +48,19 @@ export async function getMeals(): Promise<ApiMeal[]> {
   return data;
 }
 
+/** GET /api/meals/{id} — public single-meal detail (404 if not found). */
+export async function getMealById(id: string): Promise<ApiMeal> {
+  const { data } = await apiClient.get<ApiMeal>(`/api/meals/${id}`);
+  return data;
+}
+
+/** GET /api/meals/{id}/availability — public per-meal, per-size stock.
+ * Used by the detail screen only; lists must use getAllAvailability(). */
+export async function getMealAvailability(id: string): Promise<ApiMealAvailability> {
+  const { data } = await apiClient.get<ApiMealAvailability>(`/api/meals/${id}/availability`);
+  return data;
+}
+
 /**
  * GET /api/meals/availability — public bulk per-size stock. One round-trip
  * for the whole menu (same pattern as the web /meny page) — never call the

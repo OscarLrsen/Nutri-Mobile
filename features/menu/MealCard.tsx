@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useRouter } from "expo-router";
 import { Image } from "expo-image";
 import { UtensilsCrossed } from "lucide-react-native";
 
@@ -28,6 +29,7 @@ interface MealCardProps {
 }
 
 export function MealCard({ meal, availability }: MealCardProps) {
+  const router = useRouter();
   const isFixed = meal.portionMode === "fixed";
   const [selectedSize, setSelectedSize] = useState<string>("medium");
   const [imageFailed, setImageFailed] = useState(false);
@@ -72,7 +74,12 @@ export function MealCard({ meal, availability }: MealCardProps) {
   const showImage = !imageFailed && meal.image.trim().length > 0;
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      style={styles.card}
+      onPress={() => router.push(`/meal/${meal.id}`)}
+      accessibilityRole="button"
+      accessibilityLabel={meal.name}
+    >
       {/* Image */}
       <View style={styles.imageWrap}>
         {showImage ? (
@@ -170,7 +177,7 @@ export function MealCard({ meal, availability }: MealCardProps) {
           </View>
         </View>
       )}
-    </View>
+    </Pressable>
   );
 }
 

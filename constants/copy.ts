@@ -51,3 +51,39 @@ export const menuCopy = {
   fatShort: "fett",
   caffeineShort: "koffein",
 } as const;
+
+export const mealDetailCopy = {
+  /** common.loading */
+  loading: "Laddar",
+  /** meal.notFound */
+  notFound: "Måltid hittades inte",
+  /** meal.backToMenu */
+  backToMenu: "Tillbaka till menyn",
+  /** meal.closedNote */
+  closedNote:
+    "Vi håller stängt just nu. Du kan lägga varan i kundvagnen och beställa när vi öppnar.",
+  /** meal.nutrition */
+  nutrition: "Näringsvärde",
+  /** meal.chooseSize */
+  chooseSize: "Välj storlek",
+  /** meal.ingredients */
+  ingredients: "Ingredienser",
+  /** meal.allergyNote */
+  allergyNote: "Har du en allergi? Prata med personalen.",
+  /** meal.stock.soldOut */
+  soldOut: "Slut",
+  /** meal.size.medium / meal.size.large (small is customer-hidden) */
+  sizeNames: { medium: "Mellan", large: "Stor" } as Record<string, string>,
+  /** meal.sizeSoldOutChoose — "{size} slut — välj annan storlek" */
+  sizeSoldOutChoose: (size: string) => `${size} slut — välj annan storlek`,
+  /** meal.addWithStock — "Lägg till · {count} kvar" */
+  addWithStock: (count: number) => `Lägg till · ${count} kvar`,
+  /** menu.add / meal.macro.* */
+  add: "Lägg till",
+  macroProtein: "Protein",
+  macroCarbs: "Kolhydrater",
+  macroFat: "Fett",
+  /** Hardcoded Swedish on the web /meny card (not translation keys there) */
+  allergensLabel: "Allergener",
+  noAllergens: "Inga registrerade allergener",
+} as const;
