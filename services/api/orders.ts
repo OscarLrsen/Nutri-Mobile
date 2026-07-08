@@ -71,6 +71,11 @@ export interface CreateOrderInput {
   paymentMethod?: "pay_on_site" | "stripe";
   /** Optional free-text comment to the kitchen. Server trims and caps at 500 chars. */
   customerNote?: string;
+  /** Optional coupon to apply (CreateOrderDto.CouponId). The server validates
+   * ownership/status/expiry and computes the discount itself — the client
+   * only ever points at a coupon, never sends amounts. Requires a JWT with a
+   * sub claim; the backend 401s a couponId from an email-only session. */
+  couponId?: string;
   items: {
     mealId: string | null;
     size: string;
@@ -113,6 +118,7 @@ export async function createOrder(order: CreateOrderInput): Promise<ApiOrder> {
       ...rest,
       supabaseUserId: supabaseUserId ?? null,
       paymentMethod: rest.paymentMethod ?? "pay_on_site",
+      couponId: rest.couponId ?? null,
       lines: items.map(
         ({ isTailored, customMacros: _unused, customIngredients, containerTypeId, ...line }) => ({
           ...line,

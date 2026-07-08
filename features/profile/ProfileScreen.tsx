@@ -25,7 +25,7 @@ import {
   type WeeklyScheduleDto,
 } from "@/services/api/weeklySchedule";
 import { ACTIVE_ORDER_KEY } from "@/utils/activeOrder";
-import { authCopy, profileCopy as copy } from "@/constants/copy";
+import { authCopy, couponCopy, profileCopy as copy } from "@/constants/copy";
 import { colors, fontFamily, spacing } from "@/theme";
 import {
   deriveTrainingSessionsFromWeeklySchedule,
@@ -562,6 +562,14 @@ export function ProfileScreen() {
           accessibilityRole="button"
         >
           <ThemedText style={styles.navRowText}>{copy.orderFromMenu}</ThemedText>
+          <ChevronRight size={14} color="rgba(255,255,255,0.32)" />
+        </Pressable>
+        <Pressable
+          onPress={() => router.push("/kuponger")}
+          style={styles.navRow}
+          accessibilityRole="button"
+        >
+          <ThemedText style={styles.navRowText}>{couponCopy.listTitle}</ThemedText>
           <ChevronRight size={14} color="rgba(255,255,255,0.32)" />
         </Pressable>
         <Pressable

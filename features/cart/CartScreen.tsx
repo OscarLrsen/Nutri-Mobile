@@ -8,11 +8,13 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import * as WebBrowser from "expo-web-browser";
 import {
   AlertTriangle,
+  BadgePercent,
+  ChevronRight,
   CreditCard,
   Info,
   Menu,
@@ -28,17 +30,25 @@ import { Screen } from "@/components/ui/Screen";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
 import { useCart } from "@/context/CartContext";
+import { useCoupon } from "@/context/CouponContext";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { getStoreStatus } from "@/services/api/store";
 import { createOrder, createCheckoutSession } from "@/services/api/orders";
+import { getMyCoupons, isCouponUsable, type ApiCoupon } from "@/services/api/coupons";
 import type { CartItem } from "@/types/cart";
 import { CUSTOMER_SIZE_OPTIONS, MEAL_SIZES, previewMealPriceOre } from "@/utils/pricing";
 import { formatPriceKr, krToOre } from "@/utils/money";
+import { applyDiscountPreview } from "@/utils/discountMath";
 import { normalizeMacroSnapshot } from "@/utils/macroMath";
-import { formatOrderError, isActiveReservationErr, isStockOutError } from "@/utils/orderErrors";
+import {
+  formatOrderError,
+  isActiveReservationErr,
+  isCouponRejectedError,
+  isStockOutError,
+} from "@/utils/orderErrors";
 import { setActiveOrderId, getActiveOrderId, setPendingStripeClear } from "@/utils/activeOrder";
 import { env } from "@/lib/env";
-import { authCopy, cartCopy as copy, checkoutCopy } from "@/constants/copy";
+import { authCopy, cartCopy as copy, checkoutCopy, couponCopy } from "@/constants/copy";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -77,12 +87,42 @@ type PaymentMethod = "pay_on_site" | "stripe";
 
 export function CartScreen() {
   const router = useRouter();
-  const { items, hydrated, clearCart, totalOre } = useCart();
+  const queryClient = useQueryClient();
+  const { items, hydrated, clearCart, subtotalOre, totalOre } = useCart();
+  const { selectedCoupon, clearSelectedCoupon } = useCoupon();
   const { user, loading: authLoading } = useAuth();
 
   const authEmail = user?.email ?? null;
   const authName = (user?.user_metadata?.full_name as string | undefined) || authCopy.guest;
   const userLoaded = !authLoading;
+
+  /* ── Coupon (preview only — the backend recomputes authoritatively) ── */
+
+  // The user's coupons: powers the "Använd en kupong" affordance and keeps a
+  // stale selection honest (used from another device, expired overnight).
+  const couponsQuery = useQuery({
+    queryKey: ["coupons", user?.id ?? null],
+    queryFn: getMyCoupons,
+    enabled: !!user,
+  });
+  const usableCoupons = (couponsQuery.data ?? []).filter(isCouponUsable);
+
+  // Reconcile the persisted selection against fresh backend data: deselect
+  // anything the backend no longer reports as usable.
+  useEffect(() => {
+    if (!selectedCoupon || !couponsQuery.isSuccess) return;
+    const fresh = couponsQuery.data.find((c) => c.id === selectedCoupon.id);
+    if (!fresh || !isCouponUsable(fresh)) clearSelectedCoupon();
+  }, [selectedCoupon, couponsQuery.isSuccess, couponsQuery.data, clearSelectedCoupon]);
+
+  // A coupon only rides along when the order will carry a JWT sub claim —
+  // the backend 401s couponId without one, and ordering is login-gated anyway.
+  const appliedCoupon = selectedCoupon && user && isCouponUsable(selectedCoupon) ? selectedCoupon : null;
+  const discountPreview = appliedCoupon
+    ? applyDiscountPreview(subtotalOre, appliedCoupon.percentage)
+    : null;
+  // Without a coupon the cart total stays exactly the pre-coupon behavior.
+  const effectiveTotalOre = discountPreview ? discountPreview.totalOre : totalOre;
 
   // Same 30s store-status poll as the web's StoreStatusProvider; same
   // derivation — a settled fetch with no data counts as closed.
@@ -144,6 +184,7 @@ export function CartScreen() {
         customerEmail: authEmail,
         paymentMethod: effectivePaymentMethod,
         customerNote: customerNote.trim() || undefined,
+        couponId: appliedCoupon?.id,
         items: items.map((item) => {
           if (item.kind === "drink" && item.drink) {
             return { mealId: item.drink.id, size: "medium", quantity: item.quantity };
@@ -160,6 +201,14 @@ export function CartScreen() {
           };
         }),
       });
+
+      // The coupon was consumed server-side in the same transaction that
+      // created the order (even for Stripe, where payment comes later) —
+      // clear the selection and refresh the list so it renders as Använd.
+      if (appliedCoupon) {
+        clearSelectedCoupon();
+        queryClient.invalidateQueries({ queryKey: ["coupons"] }).catch(() => {});
+      }
 
       if (effectivePaymentMethod === "stripe") {
         // Persist the active order BEFORE the session call so a failure never
@@ -196,6 +245,14 @@ export function CartScreen() {
       if (isActiveReservationErr(err)) {
         setActiveReservationError(true);
         setActiveOrderIdFromError(await getActiveOrderId());
+      } else if (isCouponRejectedError(err)) {
+        // Backend refused the coupon (used/expired/invalid) — no order was
+        // created. Deselect it, refresh the list and surface the backend's
+        // own message plus what just happened to the selection.
+        clearSelectedCoupon();
+        queryClient.invalidateQueries({ queryKey: ["coupons"] }).catch(() => {});
+        const { message } = formatOrderError(err);
+        setError(`${message ?? checkoutCopy.errorGeneric} ${couponCopy.rejectedSuffix}`);
       } else {
         const { message, unauthorized } = formatOrderError(err);
         if (unauthorized) {
@@ -212,7 +269,7 @@ export function CartScreen() {
 
   /* ── CTA label state machine (web parity) ── */
 
-  const amountStr = formatPriceKr(totalOre).replace(" kr", "");
+  const amountStr = formatPriceKr(effectiveTotalOre).replace(" kr", "");
   const ctaLabel = isClosed
     ? (formatNextOpen(storeStatus?.nextOpenAtUtc) ?? checkoutCopy.closedNow)
     : isPaused
@@ -297,8 +354,67 @@ export function CartScreen() {
               <ThemedText style={styles.noteCounter}>{customerNote.length}/100</ThemedText>
             </View>
 
+            {/* Coupon (only for logged-in users with something to apply) */}
+            {appliedCoupon || (user && usableCoupons.length > 0) ? (
+              <>
+                <SectionHead style={{ marginTop: spacing[5] }}>
+                  {couponCopy.cartSectionHead}
+                </SectionHead>
+                {appliedCoupon && discountPreview ? (
+                  <View style={styles.couponCard}>
+                    <View style={styles.couponIcon}>
+                      <BadgePercent size={18} color={colors.accent} strokeWidth={1.75} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <ThemedText style={styles.couponCode}>{appliedCoupon.code}</ThemedText>
+                      <ThemedText style={styles.couponMeta}>
+                        {couponCopy.percentOff(appliedCoupon.percentage)} · −
+                        {formatPriceKr(discountPreview.discountAmountOre)}
+                      </ThemedText>
+                    </View>
+                    <Pressable
+                      onPress={clearSelectedCoupon}
+                      style={styles.couponRemove}
+                      accessibilityRole="button"
+                      accessibilityLabel={couponCopy.cartRemove}
+                    >
+                      <X size={13} color="rgba(255,255,255,0.35)" strokeWidth={1.6} />
+                      <ThemedText style={styles.couponRemoveText}>
+                        {couponCopy.cartRemove}
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => router.push("/kuponger")}
+                    style={({ pressed }) => [
+                      styles.couponCard,
+                      pressed && { backgroundColor: colors.cardAlt },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={couponCopy.cartChoose}
+                  >
+                    <View style={styles.couponIcon}>
+                      <BadgePercent size={18} color={colors.accent} strokeWidth={1.75} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <ThemedText style={styles.couponCode}>{couponCopy.cartChoose}</ThemedText>
+                      <ThemedText style={styles.couponMeta}>
+                        {couponCopy.cartChooseSub(usableCoupons.length)}
+                      </ThemedText>
+                    </View>
+                    <ChevronRight size={15} color="rgba(255,255,255,0.3)" />
+                  </Pressable>
+                )}
+              </>
+            ) : null}
+
             <SectionHead style={{ marginTop: spacing[5] }}>{copy.summaryHead}</SectionHead>
-            <SummaryCard />
+            <SummaryCard
+              coupon={appliedCoupon}
+              discountAmountOre={discountPreview?.discountAmountOre ?? 0}
+              effectiveTotalOre={effectiveTotalOre}
+            />
 
             {/* Payment methods (web parity: pay_on_site / stripe / swish-disabled) */}
             <SectionHead style={{ marginTop: spacing[5] }}>
@@ -732,15 +848,31 @@ function CartItemCard({ item }: { item: CartItem }) {
   );
 }
 
-/* ── Summary (web: Delsumma / Upphämtning Gratis / Totalt) ── */
+/* ── Summary (web: Delsumma / Upphämtning Gratis / Totalt, plus the
+ *    mobile coupon-preview row — backend recomputes at order time) ── */
 
-function SummaryCard() {
-  const { subtotalOre, totalOre } = useCart();
+function SummaryCard({
+  coupon,
+  discountAmountOre,
+  effectiveTotalOre,
+}: {
+  coupon: ApiCoupon | null;
+  discountAmountOre: number;
+  effectiveTotalOre: number;
+}) {
+  const { subtotalOre } = useCart();
   return (
     <View style={styles.summaryCard}>
       <SummaryRow label={copy.summarySubtotal} value={formatPriceKr(subtotalOre)} />
+      {coupon ? (
+        <SummaryRow
+          label={couponCopy.cartDiscountRow(coupon.code, coupon.percentage)}
+          value={`−${formatPriceKr(discountAmountOre)}`}
+          valueAccent
+        />
+      ) : null}
       <SummaryRow label={copy.summaryPickup} value={copy.summaryFree} valueMuted />
-      <SummaryRow label={copy.summaryTotal} value={formatPriceKr(totalOre)} isTotal />
+      <SummaryRow label={copy.summaryTotal} value={formatPriceKr(effectiveTotalOre)} isTotal />
     </View>
   );
 }
@@ -749,11 +881,13 @@ function SummaryRow({
   label,
   value,
   valueMuted,
+  valueAccent,
   isTotal,
 }: {
   label: string;
   value: string;
   valueMuted?: boolean;
+  valueAccent?: boolean;
   isTotal?: boolean;
 }) {
   return (
@@ -766,6 +900,7 @@ function SummaryRow({
           styles.summaryValue,
           isTotal && styles.summaryValueTotal,
           valueMuted && styles.summaryValueMuted,
+          valueAccent && styles.summaryValueAccent,
         ]}
       >
         {value}
@@ -1039,6 +1174,39 @@ const styles = StyleSheet.create({
   },
   summaryValueTotal: { fontSize: 16, fontFamily: fontFamily.monoMedium },
   summaryValueMuted: { fontSize: 11, color: "rgba(255,255,255,0.28)" },
+  summaryValueAccent: { color: "#4ade80" },
+
+  /* Coupon section */
+  couponCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  couponIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(232,101,10,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(232,101,10,0.22)",
+  },
+  couponCode: {
+    fontSize: 13.5,
+    fontFamily: fontFamily.bodySemibold,
+    letterSpacing: 0.2,
+    color: colors.textPrimary,
+  },
+  couponMeta: { marginTop: 2, fontSize: 11.5, color: colors.textTertiary },
+  couponRemove: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 4 },
+  couponRemoveText: { fontSize: 11.5, fontFamily: fontFamily.bodyMedium, color: "rgba(255,255,255,0.35)" },
 
   /* Payment methods */
   paymentCard: {

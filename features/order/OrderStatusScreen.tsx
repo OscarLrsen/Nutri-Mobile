@@ -28,7 +28,7 @@ import { useCart } from "@/context/CartContext";
 import { getOrderById, type ApiOrder } from "@/services/api/orders";
 import type { ApiError } from "@/types/api";
 import { consumePendingStripeClear } from "@/utils/activeOrder";
-import { checkoutCopy, orderStatusCopy as copy } from "@/constants/copy";
+import { checkoutCopy, couponCopy, orderStatusCopy as copy } from "@/constants/copy";
 import { colors, fontFamily, spacing } from "@/theme";
 
 /**
@@ -388,6 +388,25 @@ function OrderLinesCard({ order }: { order: ApiOrder }) {
           <ThemedText style={styles.paymentMethodLabel}>{checkoutCopy.paymentHeading}</ThemedText>
           <ThemedText style={styles.paymentMethodValue}>{paymentMethodLabel}</ThemedText>
         </View>
+      ) : null}
+      {/* Coupon/POS discount — subtotal + discount rows explain why Totalt
+       * differs from the line sum. ApiOrder.discountAmountOre/discountPercent
+       * are the backend's authoritative values. */}
+      {(order.discountAmountOre ?? 0) > 0 ? (
+        <>
+          <View style={[styles.lineRow, { borderTopWidth: 1, borderTopColor: colors.borderSoft }]}>
+            <ThemedText style={styles.paymentMethodLabel}>{couponCopy.orderSubtotal}</ThemedText>
+            <ThemedText style={styles.paymentMethodValue}>{lineKr(order.subtotalOre)}</ThemedText>
+          </View>
+          <View style={styles.lineRow}>
+            <ThemedText style={styles.paymentMethodLabel}>
+              {couponCopy.orderDiscountRow(order.discountPercent)}
+            </ThemedText>
+            <ThemedText style={styles.discountValue}>
+              −{lineKr(order.discountAmountOre ?? 0)}
+            </ThemedText>
+          </View>
+        </>
       ) : null}
       <View style={styles.totalRow}>
         <ThemedText style={styles.totalLabel}>{copy.total}</ThemedText>
@@ -1028,6 +1047,7 @@ const styles = StyleSheet.create({
   noteText: { flex: 1, fontSize: 12, fontStyle: "italic", color: "rgba(255,255,255,0.45)" },
   paymentMethodLabel: { flex: 1, fontSize: 12, color: "rgba(255,255,255,0.4)" },
   paymentMethodValue: { fontSize: 12.5, fontFamily: fontFamily.bodyMedium, color: "rgba(255,255,255,0.7)" },
+  discountValue: { fontSize: 12.5, fontFamily: fontFamily.bodyMedium, color: "#4ade80" },
   totalRow: {
     flexDirection: "row",
     alignItems: "center",

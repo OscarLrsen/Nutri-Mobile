@@ -599,3 +599,57 @@ export const mealDetailCopy = {
   allergensLabel: "Allergener",
   noAllergens: "Inga registrerade allergener",
 } as const;
+
+export const couponCopy = {
+  /** Mobile-first feature — no web translation keys to mirror yet. */
+  /** Welcome modal (shown once after login when no welcome coupon exists) */
+  welcomeTitle: "En välkomstgåva från Nutri",
+  welcomeBody:
+    "Som ny medlem får du 20 % rabatt på din första order. Kupongen gäller i 30 dagar och dras av när du beställer.",
+  welcomeUseNow: "Använd nu",
+  welcomeSaveForLater: "Lägg till i mina kuponger",
+  welcomeClaimError: "Kunde inte hämta din kupong. Du kan hämta den senare under Mina kuponger.",
+  welcomeDismiss: "Stäng",
+  /** List screen */
+  listTitle: "Mina kuponger",
+  listEmpty: "Du har inga kuponger ännu.",
+  listFetchError: "Kunde inte hämta dina kuponger.",
+  retry: "Försök igen",
+  claimCardTitle: "Din välkomstkupong väntar",
+  claimCardBody: "20 % rabatt på din första order — gäller i 30 dagar från att du hämtar den.",
+  claimCardCta: "Hämta kupong",
+  claimCardError: "Kunde inte hämta kupongen. Försök igen.",
+  loginRequired: "Logga in för att se dina kuponger.",
+  loginCta: "Logga in",
+  /** Status badges (backend CouponStatus values) */
+  statusNames: {
+    Active: "Aktiv",
+    Used: "Använd",
+    Expired: "Utgången",
+  } as Record<string, string>,
+  /** Card/detail fields */
+  percentOff: (pct: number) => `${pct} % rabatt`,
+  validUntil: (date: string) => `Giltig t.o.m. ${date}`,
+  usedAt: (date: string) => `Använd ${date}`,
+  expiredAt: (date: string) => `Gick ut ${date}`,
+  detailTitle: "Kupong",
+  detailNotFound: "Kupongen hittades inte.",
+  detailHowItWorks:
+    "Rabatten dras av på hela ordern när du beställer. Priset räknas alltid om av kassan — det du ser i varukorgen är en förhandsvisning.",
+  use: "Använd",
+  selected: "Vald — visas i varukorgen",
+  removeSelection: "Ta bort val",
+  /** Cart section */
+  cartSectionHead: "Kupong",
+  cartChoose: "Använd en kupong",
+  cartChooseSub: (count: number) =>
+    count === 1 ? "1 kupong tillgänglig" : `${count} kuponger tillgängliga`,
+  cartRemove: "Ta bort",
+  cartDiscountRow: (code: string, pct: number) => `Rabatt ${code} (−${pct} %)`,
+  /** Shown when the backend rejects the coupon at order time — appended
+   * after the backend's own message (e.g. "Kupongen är redan använd."). */
+  rejectedSuffix: "Kupongen har tagits bort från din order. Försök igen.",
+  /** Order views */
+  orderDiscountRow: (pct: number | undefined) => (pct ? `Rabatt (−${pct} %)` : "Rabatt"),
+  orderSubtotal: "Delsumma",
+} as const;

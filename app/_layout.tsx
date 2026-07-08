@@ -13,6 +13,8 @@ import { DMSerifDisplay_400Regular } from "@expo-google-fonts/dm-serif-display";
 import { queryClient } from "@/lib/queryClient";
 import { AuthProvider } from "@/services/auth/AuthProvider";
 import { CartProvider } from "@/context/CartContext";
+import { CouponProvider } from "@/context/CouponContext";
+import { WelcomeCouponModal } from "@/features/coupons/WelcomeCouponModal";
 import { ErrorBoundary } from "@/components/feedback/ErrorBoundary";
 import { colors } from "@/theme";
 
@@ -62,12 +64,16 @@ export default function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <AuthProvider>
               <CartProvider>
-                <View style={{ flex: 1, backgroundColor: colors.bg }}>
-                  <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen name="+not-found" options={{ headerShown: true, title: "Hittades inte" }} />
-                  </Stack>
-                </View>
+                <CouponProvider>
+                  <View style={{ flex: 1, backgroundColor: colors.bg }}>
+                    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+                      <Stack.Screen name="(tabs)" />
+                      <Stack.Screen name="+not-found" options={{ headerShown: true, title: "Hittades inte" }} />
+                    </Stack>
+                    {/* App-wide overlay: welcome-coupon prompt after login. */}
+                    <WelcomeCouponModal />
+                  </View>
+                </CouponProvider>
               </CartProvider>
             </AuthProvider>
           </QueryClientProvider>

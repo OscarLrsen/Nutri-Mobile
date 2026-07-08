@@ -20,7 +20,7 @@ import type { Meal } from "@/types/cart";
 import { getOrdersByEmail, type ApiOrder } from "@/services/api/orders";
 import { getMealById } from "@/services/api/meals";
 import { apiMealToMeal } from "@/utils/pricing";
-import { orderHistoryCopy as copy, orderStatusCopy } from "@/constants/copy";
+import { couponCopy, orderHistoryCopy as copy, orderStatusCopy } from "@/constants/copy";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { formatCategorySnapshot } from "./profileOptions";
 
@@ -193,6 +193,18 @@ function OrderCard({ order }: { order: ApiOrder }) {
             ))}
           </View>
 
+          {/* Coupon/POS discount — the backend's authoritative order fields. */}
+          {(order.discountAmountOre ?? 0) > 0 ? (
+            <View style={styles.discountRow}>
+              <ThemedText style={styles.discountLabel}>
+                {couponCopy.orderDiscountRow(order.discountPercent)}
+              </ThemedText>
+              <ThemedText style={styles.discountValue}>
+                −{formatKr(order.discountAmountOre ?? 0)}
+              </ThemedText>
+            </View>
+          ) : null}
+
           <View style={styles.orderFooter}>
             <ThemedText style={styles.footerTotal}>
               {copy.total}:{" "}
@@ -321,6 +333,14 @@ const styles = StyleSheet.create({
   lineTitle: { fontSize: 13.5, fontFamily: fontFamily.bodySemibold, color: colors.textPrimary },
   lineMeta: { marginTop: 2, fontSize: 11.5, color: colors.textTertiary },
   linePrice: { fontSize: 13.5, fontFamily: fontFamily.bodyBold, color: colors.textPrimary },
+  discountRow: {
+    marginTop: spacing[3],
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  discountLabel: { fontSize: 11.5, color: colors.textTertiary },
+  discountValue: { fontSize: 12.5, fontFamily: fontFamily.bodySemibold, color: "#4ade80" },
   orderFooter: {
     marginTop: spacing[4],
     paddingTop: spacing[4],

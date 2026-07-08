@@ -70,6 +70,16 @@ export function formatOrderError(err: unknown): OrderErrorResult {
   return { message: err.message || checkoutCopy.errorGeneric, unauthorized: false };
 }
 
+/** Backend coupon rejection at order time — 400 "Ogiltig kupong." or 409
+ * "Kupongen är redan använd." / "Kupongen har gått ut." (OrdersController
+ * .Create's coupon validation + the concurrency-race 409). No other order
+ * error message mentions "kupong", so the word is a safe discriminator. */
+export function isCouponRejectedError(err: unknown): boolean {
+  if (!isApiError(err)) return false;
+  if (err.status !== 400 && err.status !== 409) return false;
+  return /kupong/i.test(errorText(err));
+}
+
 /** Backend 409 "du har redan en aktiv reservation" guard (web parity). */
 export function isActiveReservationErr(err: unknown): boolean {
   if (!isApiError(err)) return false;
