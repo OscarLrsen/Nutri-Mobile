@@ -107,12 +107,19 @@ export function CartScreen() {
   });
   const usableCoupons = (couponsQuery.data ?? []).filter(isCouponUsable);
 
-  // Reconcile the persisted selection against fresh backend data: deselect
-  // anything the backend no longer reports as usable.
+  // Reconcile the persisted selection against fresh backend data. Deselect
+  // ONLY when the backend explicitly reports the coupon as no longer usable
+  // (status Used/Expired, or its expiresAt has passed) — that is real
+  // server-side truth, e.g. the coupon was consumed by an order whose
+  // response we lost. A coupon MISSING from the list is deliberately left
+  // selected: an empty/partial list is not an explicit used/expired signal,
+  // and if the coupon truly is invalid the order attempt will come back
+  // with the exact rejection message, which is handled below. Failed
+  // fetches (network down) never reach this — isSuccess gates it.
   useEffect(() => {
     if (!selectedCoupon || !couponsQuery.isSuccess) return;
     const fresh = couponsQuery.data.find((c) => c.id === selectedCoupon.id);
-    if (!fresh || !isCouponUsable(fresh)) clearSelectedCoupon();
+    if (fresh && !isCouponUsable(fresh)) clearSelectedCoupon();
   }, [selectedCoupon, couponsQuery.isSuccess, couponsQuery.data, clearSelectedCoupon]);
 
   // A coupon only rides along when the order will carry a JWT sub claim —

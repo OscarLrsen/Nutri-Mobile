@@ -70,14 +70,27 @@ export function formatOrderError(err: unknown): OrderErrorResult {
   return { message: err.message || checkoutCopy.errorGeneric, unauthorized: false };
 }
 
+/** The ONLY messages OrdersController.Create sends when it explicitly
+ * refuses the coupon itself (validation + the concurrency-race 409). The
+ * coupon may be deselected on exactly these — never on network failures
+ * (status 0 can't match the status gate), "Service is not live", stock-outs
+ * or any other order error, where the coupon was left untouched server-side
+ * and must stay selected. */
+const COUPON_REJECTION_MESSAGES = [
+  /ogiltig kupong/i,
+  /kupongen är redan använd/i,
+  /kupongen har gått ut/i,
+];
+
 /** Backend coupon rejection at order time — 400 "Ogiltig kupong." or 409
- * "Kupongen är redan använd." / "Kupongen har gått ut." (OrdersController
- * .Create's coupon validation + the concurrency-race 409). No other order
- * error message mentions "kupong", so the word is a safe discriminator. */
+ * "Kupongen är redan använd." / "Kupongen har gått ut.". Matches the exact
+ * backend messages (not a loose keyword) so no other current or future
+ * 400/409 can be misread as a coupon rejection. */
 export function isCouponRejectedError(err: unknown): boolean {
   if (!isApiError(err)) return false;
   if (err.status !== 400 && err.status !== 409) return false;
-  return /kupong/i.test(errorText(err));
+  const text = errorText(err);
+  return COUPON_REJECTION_MESSAGES.some((re) => re.test(text));
 }
 
 /** Backend 409 "du har redan en aktiv reservation" guard (web parity). */
