@@ -354,7 +354,9 @@ function Header({ onBack, insetsTop }: { onBack: () => void; insetsTop: number }
 
 /* ── Onboarding gate (web: OnboardingGateModal, bottom sheet) ── */
 
-function OnboardingGate({
+// Exported for reuse by HeldagScreen — the web's heldag page renders the
+// same OnboardingGateModal component its anpassar flow uses.
+export function OnboardingGate({
   onPrimary,
   onSecondary,
 }: {

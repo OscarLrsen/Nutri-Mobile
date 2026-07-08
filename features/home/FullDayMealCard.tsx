@@ -1,9 +1,8 @@
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { useAuth } from "@/services/auth/AuthProvider";
-import { env } from "@/lib/env";
 import { landingCopy as copy } from "@/constants/copy";
 import { colors, fontFamily, spacing } from "@/theme";
 
@@ -17,10 +16,10 @@ import { colors, fontFamily, spacing } from "@/theme";
  * Deviations (documented):
  * - The web's radial orange glow is approximated with a static translucent
  *   circle (RN has no radial-gradient without extra deps).
- * - Logged-out CTA goes to /logga-in per the task spec (the web links to
- *   /registrera); logged-in CTA opens the WEB app's /heldag in the browser —
- *   the same web-handoff pattern as kopvillkor — since mobile has no Heldag
- *   flow yet (explicitly out of scope).
+ * - Logged-out CTA goes to /logga-in with a return path to /heldag (the web
+ *   links to /registrera); logged-in CTA opens the IN-APP /heldag flow —
+ *   the web's href={isLoggedIn ? "/heldag" : …} mapped onto the native
+ *   route.
  */
 export function FullDayMealCard() {
   const router = useRouter();
@@ -29,9 +28,9 @@ export function FullDayMealCard() {
 
   const handleCta = () => {
     if (isLoggedIn) {
-      Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/heldag`).catch(() => {});
+      router.push("/heldag");
     } else {
-      router.push({ pathname: "/logga-in", params: { next: "/(tabs)" } });
+      router.push({ pathname: "/logga-in", params: { next: "/heldag" } });
     }
   };
 
