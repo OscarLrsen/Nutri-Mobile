@@ -653,3 +653,39 @@ export const couponCopy = {
   orderDiscountRow: (pct: number | undefined) => (pct ? `Rabatt (−${pct} %)` : "Rabatt"),
   orderSubtotal: "Delsumma",
 } as const;
+
+export const landingCopy = {
+  /** landing.fullday.* — sv strings from Nutri-Frontend's translations.ts;
+   * the web renders heading/badge uppercase via CSS, mobile via style. */
+  fulldayAdvanced: "Advanced",
+  fulldayLoginRequired: "Kräver inloggning",
+  fulldayHeading: "Heldagsmåltid",
+  fulldaySubheading: "För dig som vill ta det seriöst.",
+  fulldayBenefits: [
+    "Frukost, lunch & middag i ett",
+    "Beräknat efter dina dagliga mål",
+    "Egna matlådor ger bonuspoäng",
+  ],
+  fulldayCtaOrder: "Beställ heldagsmåltid",
+  fulldayCtaLogin: "Logga in och beställ",
+  /** landing.about.* */
+  aboutHeading1: "Hela råvaror.",
+  aboutHeading2: "Beräknat för dig.",
+  aboutBody:
+    "Nutri serverar premium-måltider med tydliga kalorier, protein och portioner — lagade för dig som vill äta bra utan att gissa.",
+  /** landing.findus.* + landing.status.* */
+  findusLabel: "Hitta oss",
+  findusMap: "Karta →",
+  findusTempClosed: "Tillfälligt stängt",
+  statusNames: {
+    open: "Öppet",
+    paused: "Pausad",
+    closed: "Stängt",
+    loading: "Laddar",
+  } as Record<string, string>,
+  /** footer.* + NutriFooter's hardcoded © line */
+  footerTerms: "Köpvillkor",
+  footerPrivacy: "Integritet",
+  footerContact: "Kontakt",
+  footerCopyright: "© 2026 NUTRI Foodtruck AB",
+} as const;

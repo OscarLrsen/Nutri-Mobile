@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -15,13 +15,17 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { getLocation, getStoreStatus } from "@/services/api/store";
 import { deriveLocationStatusKind, getLocationStatusLabel, type LocationStatusKind } from "@/utils/locationStatus";
 import { heroCopy } from "@/constants/copy";
 import { colors, fontFamily, radius, spacing } from "@/theme";
+import { FullDayMealCard } from "./FullDayMealCard";
+import { FindUsCard } from "./FindUsCard";
+import { AboutNutriCard } from "./AboutNutriCard";
+import { HomeFooter } from "./HomeFooter";
 
 /**
  * Landing/Home — mobile port of Nutri-Frontend's HeroMobile.tsx (the web
@@ -42,6 +46,11 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  *   until login (feature 5) and Nutri Anpassar (feature 9) exist.
  * - Hero image contentPosition approximates the web's
  *   `object-position: center 74%`.
+ *
+ * Below-the-fold sections (port of the web landing's FullDayMeal, FindUs,
+ * AboutNutri and NutriFooter): the screen scrolls, with the original hero
+ * kept as a full-viewport first section (height measured off the ScrollView
+ * so the fold matches the pre-scroll layout exactly).
  */
 
 // Ported 1:1 from HeroMobile.tsx STATUS_COLOR.
@@ -110,6 +119,13 @@ export function HomeScreen() {
 
   const heroImageHeight = Math.min(280, windowHeight * 0.34);
 
+  // Viewport height below the fixed header (and above the tab bar) — the
+  // hero section is pinned to exactly this so the fold looks identical to
+  // the previous non-scrolling layout. Fallback approximates one viewport
+  // until the first onLayout lands.
+  const [scrollViewportHeight, setScrollViewportHeight] = useState<number | null>(null);
+  const heroSectionHeight = scrollViewportHeight ?? windowHeight - insets.top - 58;
+
   return (
     <View style={styles.root}>
       {/* ── Fixed header: logo centered, cart right (hamburger omitted — tabs) ── */}
@@ -131,6 +147,13 @@ export function HomeScreen() {
         </Pressable>
       </View>
 
+      <ScrollView
+        style={{ flex: 1 }}
+        onLayout={(e) => setScrollViewportHeight(e.nativeEvent.layout.height)}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ══ Section 1: the original full-viewport hero ══ */}
+        <View style={{ height: heroSectionHeight }}>
       {/* ── Status row: PLATS · IDAG · STATUS ── */}
       <View style={styles.statusRow}>
         {!storeLoading && (
@@ -235,6 +258,16 @@ export function HomeScreen() {
           </Pressable>
         </View>
       </View>
+        </View>
+
+        {/* ══ Section 2+: web landing sections below the fold ══ */}
+        <View style={styles.sections}>
+          <FullDayMealCard />
+          <FindUsCard location={locationData} storeStatus={storeStatus} isLoading={storeLoading} />
+          <AboutNutriCard />
+        </View>
+        <HomeFooter />
+      </ScrollView>
     </View>
   );
 }
@@ -369,5 +402,12 @@ const styles = StyleSheet.create({
   secondaryText: {
     fontSize: 14,
     color: colors.textPrimary,
+  },
+  sections: {
+    paddingHorizontal: spacing[3],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[3],
+    gap: spacing[3],
+    backgroundColor: BG_DEEP,
   },
 });
