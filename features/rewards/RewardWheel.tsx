@@ -37,6 +37,17 @@ const RADIUS = CENTER - 8;
 
 const SLICE_FILLS = ["rgba(255,255,255,0.05)", "rgba(232,101,10,0.10)"];
 
+/** Decorative equal-width stand-ins while segments load (or if the wheel
+ * endpoint fails) — the wheel should never render as a blank disc. No
+ * labels: placeholders must not imply prizes that may not exist. */
+const FALLBACK_SEGMENTS: ApiWheelSegment[] = Array.from({ length: 8 }, (_, i) => ({
+  id: `fallback-${i}`,
+  title: "",
+  icon: "",
+  probabilityWeight: 1,
+  displayOrder: i,
+}));
+
 interface Slice {
   segment: ApiWheelSegment;
   /** Degrees from 12 o'clock, clockwise. */
@@ -92,7 +103,10 @@ export function RewardWheel({
   const rotation = useSharedValue(0);
   const everSpun = useRef(false);
 
-  const slices = useMemo(() => buildSlices(segments), [segments]);
+  const slices = useMemo(
+    () => buildSlices(segments.length > 0 ? segments : FALLBACK_SEGMENTS),
+    [segments]
+  );
 
   useEffect(() => {
     if (spinning) {
@@ -178,9 +192,21 @@ export function RewardWheel({
             ))}
 
             {/* Icon + label along each slice bisector */}
-            {slices.map((slice) => {
+            {slices.map((slice, i) => {
               const mid = slice.startDeg + slice.sweepDeg / 2;
               const iconPos = polar(mid, RADIUS * 0.56);
+              if (!slice.segment.icon && !slice.segment.title) {
+                // Fallback slice — a muted dot instead of icon/label.
+                return (
+                  <Circle
+                    key={`label-${slice.segment.id}`}
+                    cx={iconPos.x}
+                    cy={iconPos.y}
+                    r={3}
+                    fill={i % 2 === 0 ? "rgba(255,255,255,0.22)" : "rgba(232,101,10,0.55)"}
+                  />
+                );
+              }
               const labelPos = polar(mid, RADIUS * 0.8);
               // Keep labels upright-ish: flip text on the lower half.
               const flip = mid > 90 && mid < 270;

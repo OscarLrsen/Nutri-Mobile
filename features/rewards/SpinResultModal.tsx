@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import Animated, { FadeIn, ZoomIn } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ui/ThemedText";
@@ -21,9 +23,17 @@ export function SpinResultModal({
   onClose: () => void;
   onShowRewards: () => void;
 }) {
-  if (!result) return null;
+  const isWin = !!result && result.resultType !== "NoReward";
 
-  const isWin = result.resultType !== "NoReward";
+  // Two-beat feel: the wheel's settle tick (light impact) → a success pulse
+  // as the win reveals. No celebration haptic for no-win, deliberately.
+  useEffect(() => {
+    if (result && isWin) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }
+  }, [result, isWin]);
+
+  if (!result) return null;
   const headline =
     result.resultType === "Points"
       ? copy.modalWinPoints(result.rewardValue ?? "")
@@ -53,6 +63,10 @@ export function SpinResultModal({
               <ThemedText style={styles.balanceText}>
                 {result.pointsBalance} {copy.pointsUnit}
               </ThemedText>
+            </View>
+          ) : result.resultType === "Coupon" && result.coupon ? (
+            <View style={styles.codeChip}>
+              <ThemedText style={styles.codeText}>{result.coupon.code}</ThemedText>
             </View>
           ) : null}
 
@@ -135,6 +149,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(74,222,128,0.1)",
   },
   balanceText: { fontSize: 12, fontFamily: fontFamily.bodySemibold, color: "#4ade80" },
+  codeChip: {
+    marginTop: spacing[3],
+    borderRadius: 999,
+    paddingHorizontal: spacing[3],
+    paddingVertical: 4,
+    backgroundColor: "rgba(232,101,10,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(232,101,10,0.22)",
+  },
+  codeText: {
+    fontSize: 12,
+    fontFamily: fontFamily.monoMedium,
+    letterSpacing: 0.5,
+    color: colors.accent,
+  },
   buttons: { alignSelf: "stretch", marginTop: spacing[5], gap: spacing[2] },
   primaryButton: {
     height: 46,
