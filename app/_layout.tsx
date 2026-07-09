@@ -15,6 +15,7 @@ import { AuthProvider } from "@/services/auth/AuthProvider";
 import { CartProvider } from "@/context/CartContext";
 import { CouponProvider } from "@/context/CouponContext";
 import { WelcomeCouponModal } from "@/features/coupons/WelcomeCouponModal";
+import { SpinNudgeSheet } from "@/features/rewards/SpinNudgeSheet";
 import { ErrorBoundary } from "@/components/feedback/ErrorBoundary";
 import { colors } from "@/theme";
 
@@ -72,6 +73,9 @@ export default function RootLayout() {
                     </Stack>
                     {/* App-wide overlay: welcome-coupon prompt after login. */}
                     <WelcomeCouponModal />
+                    {/* App-wide overlay: weekly-spin nudge, once per launch
+                        (defers to the welcome prompt on first login). */}
+                    <SpinNudgeSheet />
                   </View>
                 </CouponProvider>
               </CartProvider>

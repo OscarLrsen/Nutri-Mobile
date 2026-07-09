@@ -6,7 +6,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 // WandSparkles = the same glyph the web imports as "Wand2" (renamed upstream
 // in newer lucide releases).
-import { ShoppingCart, WandSparkles } from "lucide-react-native";
+import { Gift, ShoppingCart, WandSparkles } from "lucide-react-native";
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -18,6 +18,8 @@ import Animated, {
 import { useEffect, useState } from "react";
 
 import { ThemedText } from "@/components/ui/ThemedText";
+import { useAuth } from "@/services/auth/AuthProvider";
+import { getRewardStatus } from "@/services/api/rewards";
 import { getLocation, getStoreStatus } from "@/services/api/store";
 import { deriveLocationStatusKind, getLocationStatusLabel, type LocationStatusKind } from "@/utils/locationStatus";
 import { heroCopy } from "@/constants/copy";
@@ -81,6 +83,16 @@ export function HomeScreen() {
   });
   const locationQuery = useQuery({ queryKey: ["store", "location"], queryFn: getLocation });
 
+  // Weekly reward header entry: green dot = a spin is available. Logged-out
+  // users still see the button (the rewards screen owns the login gate).
+  const { user } = useAuth();
+  const rewardStatusQuery = useQuery({
+    queryKey: ["rewards", "status", user?.id ?? null],
+    queryFn: getRewardStatus,
+    enabled: !!user,
+  });
+  const canSpin = rewardStatusQuery.data?.canSpin === true;
+
   const storeStatus = statusQuery.data ?? null;
   const locationData = locationQuery.data ?? null;
   const storeLoading = statusQuery.isLoading || locationQuery.isLoading;
@@ -117,6 +129,27 @@ export function HomeScreen() {
   }, [breathe, reducedMotion]);
   const breatheStyle = useAnimatedStyle(() => ({ transform: [{ scale: breathe.value }] }));
 
+  // Gift icon gentle float — alive only while a spin is available; stops
+  // (and resets) as soon as the week's reward is claimed. Reduced motion
+  // keeps it static (the green dot alone carries the signal).
+  const giftFloat = useSharedValue(0);
+  useEffect(() => {
+    if (!canSpin || reducedMotion) {
+      giftFloat.value = withTiming(0, { duration: 200 });
+      return;
+    }
+    giftFloat.value = withRepeat(
+      withSequence(
+        withTiming(-2.5, { duration: 1100 }),
+        withTiming(0, { duration: 1100 })
+      ),
+      -1
+    );
+  }, [giftFloat, canSpin, reducedMotion]);
+  const giftFloatStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: giftFloat.value }],
+  }));
+
   const heroImageHeight = Math.min(280, windowHeight * 0.34);
 
   // Viewport height below the fixed header (and above the tab bar) — the
@@ -130,7 +163,17 @@ export function HomeScreen() {
     <View style={styles.root}>
       {/* ── Fixed header: logo centered, cart right (hamburger omitted — tabs) ── */}
       <View style={[styles.header, { paddingTop: insets.top }]}>
-        <View style={styles.headerSide} />
+        <Pressable
+          style={styles.cartButton}
+          onPress={() => router.push("/beloningar")}
+          accessibilityRole="button"
+          accessibilityLabel={canSpin ? "Veckans belöning — en spin väntar" : "Veckans belöning"}
+        >
+          <Animated.View style={giftFloatStyle}>
+            <Gift size={20} color={canSpin ? colors.accent : colors.textPrimary} />
+          </Animated.View>
+          {canSpin ? <View style={styles.rewardDot} /> : null}
+        </Pressable>
         <Image
           source={require("@/assets/nutri-logo.png")}
           style={styles.logo}
@@ -285,8 +328,16 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[2],
     backgroundColor: "rgba(11,11,11,0.72)",
   },
-  headerSide: {
-    width: 36,
+  rewardDot: {
+    position: "absolute",
+    top: 7,
+    right: 7,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#4ade80",
+    borderWidth: 1.5,
+    borderColor: "#0B0B0B",
   },
   logo: {
     width: 42,

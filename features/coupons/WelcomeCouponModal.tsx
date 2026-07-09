@@ -34,7 +34,12 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  * claims.
  */
 
-const PROMPTED_KEY_PREFIX = "nutri-welcome-coupon-prompted:";
+/** Exported so the weekly-reward launch nudge (SpinNudgeSheet) can defer to
+ * this modal: the nudge skips any launch where the welcome prompt hasn't
+ * been answered yet, so two sheets never compete on first login. */
+export const WELCOME_PROMPTED_KEY_PREFIX = "nutri-welcome-coupon-prompted:";
+
+const PROMPTED_KEY_PREFIX = WELCOME_PROMPTED_KEY_PREFIX;
 
 export function WelcomeCouponModal() {
   const router = useRouter();

@@ -738,3 +738,90 @@ export const heldagCopy = {
   errorNoContainer: "Ingen lämplig matlåda hittades.",
   errorCalculateMeal: "Kunde inte beräkna måltiden.",
 } as const;
+
+export const rewardsCopy = {
+  /** Mobile-first feature — no web translation keys to mirror yet. */
+  /** Screen + header entry */
+  screenTitle: "Veckans Belöning",
+  headerAvailable: "🎁 Veckans Belöning",
+  headerComeBack: "Kom tillbaka nästa vecka",
+  /** Points summary card */
+  pointsLabel: "Nutri-poäng",
+  pointsUnit: "poäng",
+  activeRewardsLabel: (count: number) =>
+    count === 1 ? "1 aktiv belöning" : `${count} aktiva belöningar`,
+  /** Weekly reward section */
+  weeklySectionHead: "VECKANS BELÖNING",
+  spinCta: "Snurra",
+  spinning: "Snurrar …",
+  spinSubtitle: "En snurr i veckan — belöningen läggs direkt på ditt konto.",
+  comeBackTitle: "Kom tillbaka nästa vecka för en ny spin.",
+  nextSpinLabel: "Nästa spin",
+  daysLeft: (days: number) => (days === 1 ? "1 dag kvar" : `${days} dagar kvar`),
+  countdown: (d: number, h: number, m: number) =>
+    d > 0 ? `${d} d ${h} tim` : h > 0 ? `${h} tim ${m} min` : `${m} min`,
+  wheelUnavailable: "Belöningshjulet är inte tillgängligt just nu. Försök igen senare.",
+  alreadySpun: "Du har redan snurrat denna vecka.",
+  spinError: "Kunde inte snurra hjulet. Kontrollera din anslutning och försök igen.",
+  /** Win modal */
+  modalWinPoints: (amount: string) => `Du vann ${amount} Nutri-poäng`,
+  modalWinCoupon: (pct: string) => `Du vann ${pct} % rabatt`,
+  modalNoWin: "Ingen vinst denna vecka",
+  modalNoWinBody: "Bättre lycka nästa vecka — hjulet väntar på dig igen om 7 dagar.",
+  modalCouponBody: "Kupongen ligger under Mina kuponger och dras av när du beställer.",
+  modalPointsBody: "Poängen är redan tillagda på ditt konto.",
+  modalClose: "Stäng",
+  modalShowRewards: "Visa mina belöningar",
+  /** Launch nudge bottom sheet */
+  nudgeTitle: "🎁 Din veckobelöning väntar!",
+  nudgeBody: "En snurr i veckan — den här veckans har du kvar.",
+  nudgeSpin: "Snurra nu",
+  nudgeLater: "Kanske senare",
+  /** My rewards section */
+  mineSectionHead: "MINA BELÖNINGAR",
+  mineEmpty: "Inga belöningar ännu — snurra hjulet för att vinna din första.",
+  mineFetchError: "Kunde inte hämta dina belöningar.",
+  statusNames: {
+    Unused: "Oanvänd",
+    Redeemed: "Använd",
+    Expired: "Utgången",
+  } as Record<string, string>,
+  validUntil: (date: string) => `Giltig t.o.m. ${date}`,
+  redeemedAt: (date: string) => `Använd ${date}`,
+  expiredAt: (date: string) => `Gick ut ${date}`,
+  wonAt: (date: string) => `Vunnen ${date}`,
+  openCoupon: "Öppna kupong",
+  /** History section */
+  historySectionHead: "HISTORIK",
+  historyEmpty: "Ingen historik ännu.",
+  historyFetchError: "Kunde inte hämta historiken.",
+  historyNoWin: "Ingen vinst",
+  /** Auth gate */
+  loginRequired: "Logga in för att se veckans belöning.",
+  loginCta: "Logga in",
+  retry: "Försök igen",
+  fetchError: "Kunde inte ladda belöningar. Kontrollera din anslutning.",
+} as const;
+
+export const pointsCopy = {
+  /** Mobile-first feature — no web translation keys to mirror yet. */
+  screenTitle: "Nutri-poäng",
+  balanceLabel: "Ditt saldo",
+  balanceUnit: "poäng",
+  historyHead: "TRANSAKTIONER",
+  historyEmpty: "Inga poängtransaktioner ännu — poäng tjänas på ordrar och i Veckans Belöning.",
+  fetchError: "Kunde inte hämta dina poäng.",
+  retry: "Försök igen",
+  loginRequired: "Logga in för att se dina Nutri-poäng.",
+  loginCta: "Logga in",
+  /** Reason → display label. Unknown (future) reasons fall back to the raw
+   * enum name so new earn methods appear without an app update. */
+  reasonNames: {
+    OrderEarned: "Order",
+    WeeklyRewardEarned: "Veckans belöning",
+  } as Record<string, string>,
+  reasonIcons: {
+    OrderEarned: "🛍️",
+    WeeklyRewardEarned: "🎁",
+  } as Record<string, string>,
+} as const;
