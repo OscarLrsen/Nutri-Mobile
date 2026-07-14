@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
@@ -9,10 +9,18 @@ import { ErrorState } from "@/components/feedback/ErrorState";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { getMeals, getAllAvailability, type ApiMeal, type ApiMealAvailability } from "@/services/api/meals";
 import { getDrinks, type ApiDrink } from "@/services/api/drinks";
-import { menuCopy } from "@/constants/copy";
+import { getLocation, getStoreStatus } from "@/services/api/store";
+import {
+  deriveLocationStatusKind,
+  getLocationStatusLabel,
+  STATUS_COLORS,
+} from "@/utils/locationStatus";
+import { heroCopy, menuCopy } from "@/constants/copy";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { MealCard } from "./MealCard";
 import { DrinkCard } from "./DrinkCard";
+import { FullDayMealCard } from "./FullDayMealCard";
+import { AnpassarEntryCard } from "./AnpassarEntryCard";
 
 /**
  * Meny — mobile port of the web /meny page's category/grouping logic
@@ -40,6 +48,18 @@ type MenuItem =
   | { kind: "drink"; drink: ApiDrink };
 
 export function MenuScreen() {
+  // Store status — MOVED HERE FROM HEM (Patch 1 IA): Meny now owns the 30s
+  // poll. Same ["store","status"] key as before, so CartScreen's closed
+  // banner and MealDetail keep sharing this cache row. Tab screens stay
+  // mounted, so the poll runs for the whole session exactly like it did on
+  // the old Hem.
+  const statusQuery = useQuery({
+    queryKey: ["store", "status"],
+    queryFn: getStoreStatus,
+    refetchInterval: 30_000,
+  });
+  const locationQuery = useQuery({ queryKey: ["store", "location"], queryFn: getLocation });
+
   const mealsQuery = useQuery({ queryKey: ["meals"], queryFn: getMeals });
   const drinksQuery = useQuery({ queryKey: ["drinks"], queryFn: getDrinks });
   // Availability failing must never block the menu — treat as unknown and
@@ -90,13 +110,78 @@ export function MenuScreen() {
     "huvudmaltider";
   const activeItems = groups[activeId];
 
+  // The Anpassar/Heldag entry points are alternative MAIN-MEAL flows — they
+  // only render under Huvudmåltider so Shakes/Dryck browsing isn't pushed
+  // below the fold by planning cards. (If huvudmaltider is empty it is
+  // hidden from the chips and the cards simply don't appear — acceptable,
+  // the flows remain reachable from Hem's quick actions.)
+  const showOrderingEntries = activeId === "huvudmaltider";
+
+  // Header height differs per category now — reset scroll on chip switch so
+  // the list never lands mid-content under a differently-sized header.
+  const listRef = useRef<FlatList<MenuItem>>(null);
+  const switchCategory = (id: CategoryId) => {
+    setActiveCategory(id);
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
+
   const loading = mealsQuery.isLoading || drinksQuery.isLoading;
   const error = mealsQuery.isError || drinksQuery.isError;
+
+  // Status derivation ported verbatim from the old Hem hero (web
+  // StoreStatusContext parity: unreachable/unknown status counts as closed).
+  const storeStatus = statusQuery.data ?? null;
+  const locationData = locationQuery.data ?? null;
+  const storeLoading = statusQuery.isLoading || locationQuery.isLoading;
+  const isClosed = storeStatus ? storeStatus.status === "Closed" : !storeLoading;
+  const isPaused = storeStatus?.status === "Paused";
+  const statusKind = deriveLocationStatusKind({
+    isLoading: storeLoading,
+    isClosed,
+    isPaused,
+    location: locationData,
+  });
+  const locationName =
+    (locationData?.isVisible && locationData.locationName) ||
+    storeStatus?.location ||
+    heroCopy.fallbackLocation;
+  const statusLabelText = getLocationStatusLabel(statusKind, locationData?.openTime).toUpperCase();
 
   return (
     <Screen>
       <View style={styles.header}>
         <ThemedText variant="headline">Meny</ThemedText>
+        {/* PLATS · IDAG · STATUS — moved from Hem together with the poll */}
+        {!storeLoading && (
+          <ThemedText variant="caption" style={styles.statusText}>
+            <ThemedText variant="caption" style={styles.statusText}>
+              {locationName.toUpperCase()}
+            </ThemedText>
+            <ThemedText variant="caption" style={styles.statusDot}>
+              {"  ·  "}
+            </ThemedText>
+            <ThemedText variant="caption" style={styles.statusText}>
+              {heroCopy.today}
+            </ThemedText>
+            <ThemedText variant="caption" style={styles.statusDot}>
+              {"  ·  "}
+            </ThemedText>
+            <ThemedText
+              variant="caption"
+              style={[styles.statusText, { color: STATUS_COLORS[statusKind] }]}
+            >
+              {statusLabelText}
+            </ThemedText>
+          </ThemedText>
+        )}
+        {/* Admin broadcast (publicMessage) — shown with the status it belongs to */}
+        {!storeLoading && storeStatus?.publicMessage ? (
+          <View style={styles.publicMessageRow}>
+            <ThemedText variant="caption" style={styles.publicMessageText}>
+              📢 {storeStatus.publicMessage}
+            </ThemedText>
+          </View>
+        ) : null}
       </View>
 
       {loading ? (
@@ -130,7 +215,7 @@ export function MenuScreen() {
                 return (
                   <Pressable
                     key={id}
-                    onPress={() => setActiveCategory(id)}
+                    onPress={() => switchCategory(id)}
                     style={[styles.chip, active && styles.chipActive]}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
@@ -145,11 +230,23 @@ export function MenuScreen() {
           </View>
 
           <FlatList
+            ref={listRef}
             data={activeItems}
             keyExtractor={(item) => (item.kind === "meal" ? item.meal.id : `drink-${item.drink.id}`)}
             contentContainerStyle={styles.list}
             ListHeaderComponent={
               <View style={styles.listHeader}>
+                {/* Ordering entry points moved from Hem (Patch 1 IA):
+                    FlatList-correct header content — never a ScrollView
+                    around the list. Auth gate + /heldag login-return live
+                    inside FullDayMealCard, unchanged by the move. Rendered
+                    only under Huvudmåltider (see showOrderingEntries). */}
+                {showOrderingEntries ? (
+                  <>
+                    <AnpassarEntryCard />
+                    <FullDayMealCard />
+                  </>
+                ) : null}
                 <ThemedText style={styles.sectionLabel}>
                   {menuCopy.categories[activeId].toUpperCase()} ·{" "}
                   {menuCopy.itemCount(activeItems.length).toUpperCase()}
@@ -183,6 +280,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[5],
     paddingTop: spacing[3],
     paddingBottom: spacing[2],
+    gap: spacing[1],
+  },
+  statusText: {
+    fontSize: 11,
+    fontFamily: fontFamily.bodySemibold,
+    letterSpacing: 1.2,
+    color: colors.textSecondary,
+  },
+  statusDot: {
+    color: colors.textMuted,
+  },
+  publicMessageRow: {
+    marginTop: spacing[1],
+    borderRadius: radius.btn,
+    borderWidth: 1,
+    borderColor: "rgba(232,101,10,0.18)",
+    backgroundColor: "rgba(232,101,10,0.08)",
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  publicMessageText: {
+    color: "rgba(255,255,255,0.78)",
   },
   chipRow: {
     gap: spacing[2],

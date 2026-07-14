@@ -23,6 +23,62 @@ export const heroCopy = {
   fallbackLocation: "PREMIÄR",
 } as const;
 
+/**
+ * Hem-dashboard (Patch 1 IA). New mobile-first surface without a web
+ * counterpart — copy composed from the web's existing vocabulary (hero.*,
+ * profile.*, points.*) rather than traced 1:1 to translation keys.
+ *
+ * IMPORTANT SEMANTICS: consumedToday from /remaining-today means "macros
+ * from today's accepted orders", NOT meals the user registered as eaten —
+ * every string about it must say "beställt", never ätit/konsumerat/loggat.
+ */
+export const homeCopy = {
+  // ── Logged out ──
+  pitchBody: "Nutri planerar din mat utifrån dina träningsmål — hela råvaror, beräknat för dig.",
+  seeMenuSecondary: "Eller titta på menyn",
+
+  // ── Greeting ──
+  greeting: (name: string) => `Hej ${name}`,
+  greetingSub: "Här är din dag i korthet.",
+
+  // ── Dagens plan ──
+  planHead: "Dagens plan",
+  kcalUnit: "kcal",
+  kcalPerDay: "kcal idag",
+  macroProtein: "Protein",
+  macroCarbs: "Kolhydrater",
+  macroFat: "Fett",
+  gramUnit: "g",
+  dayTypeLabel: "Dagstyp",
+  noSchedule: "Inget träningsschema för idag — basmål visas.",
+  planError: "Kunde inte ladda dagens plan.",
+
+  // ── Saknad/ofullständig profil ──
+  missingProfileTitle: "Skapa din nutritionsplan",
+  missingProfileBody:
+    "Berätta om dina mål och din träning så räknar Nutri fram dagliga kalorier och makron åt dig.",
+  missingProfileCta: "Kom igång",
+
+  // ── Dagens status (beställt — INTE ätet/registrerat) ──
+  statusHead: "Dagens status",
+  orderedToday: "Beställt idag",
+  remainingToday: "Kvar av dagens mål",
+  orderedNote: "Baserat på dagens beställningar hos Nutri — inte på registrerade måltider.",
+
+  // ── Poäng/belöningar ──
+  pointsHead: "Nutri-poäng",
+  spinReady: "Veckans snurr är redo",
+  toRewards: "Belöningar",
+  toPoints: "Poänghistorik",
+
+  // ── Snabbval ──
+  actionsHead: "Snabbval",
+  actionAccount: "Mina sidor",
+  actionAccountSub: "Mål, historik och inställningar",
+  actionMenuSub: "Beställ dagens måltider",
+  actionAnpassarSub: "Låt Nutri sätta ihop din beställning",
+} as const;
+
 export const menuCopy = {
   /** menu.category.* */
   categories: {

@@ -25,6 +25,7 @@ import {
   type WeeklyScheduleDto,
 } from "@/services/api/weeklySchedule";
 import { ACTIVE_ORDER_KEY } from "@/utils/activeOrder";
+import { deriveDisplayName, deriveInitials } from "@/utils/displayName";
 import { authCopy, couponCopy, pointsCopy, profileCopy as copy } from "@/constants/copy";
 import { colors, fontFamily, spacing } from "@/theme";
 import {
@@ -369,14 +370,10 @@ export function ProfileScreen() {
   const np = nutritionProfile;
   const displayResult = nutritionResult;
   const accountEmail = user?.email ?? "";
-  const displayName =
-    (user?.user_metadata?.full_name as string | undefined) || accountEmail || copy.fallbackName;
-  const initials = (() => {
-    const source = ((user?.user_metadata?.full_name as string | undefined) || accountEmail || "NU").trim();
-    const parts = source.split(/[\s@.]+/).filter(Boolean);
-    const letters = parts.length >= 2 ? parts[0][0] + parts[1][0] : parts[0].slice(0, 2);
-    return letters.toUpperCase();
-  })();
+  // Name/initials derivation lives in utils/displayName so Hem's greeting
+  // uses the exact same fallback chain (full_name → email → fallback copy).
+  const displayName = deriveDisplayName(user, copy.fallbackName);
+  const initials = deriveInitials(user);
   const identitySub = (() => {
     const goal = np?.primaryGoal ? copy.goalChips[np.primaryGoal] ?? np.primaryGoal : null;
     const activity = np?.activityType ? copy.activityChips[np.activityType] ?? np.activityType : null;

@@ -70,6 +70,20 @@ export function deriveLocationStatusKind({
   return "open";
 }
 
+/** Status-dot/label colors per kind — ported 1:1 from the web's
+ * HeroMobile.tsx STATUS_COLOR (previously a HomeScreen-local map; lives
+ * here since the menu's status row became the consumer). */
+export const STATUS_COLORS: Record<LocationStatusKind, string> = {
+  loading: "#888888",
+  noLocation: "#888888",
+  closed: "#E8650A",
+  paused: "#F4B860",
+  tempClosed: "#E8650A",
+  notYetOpen: "#F4B860",
+  closedForDay: "#E8650A",
+  open: "#6FD68A",
+};
+
 export function getLocationStatusLabel(
   kind: LocationStatusKind,
   openTime?: string | null,
