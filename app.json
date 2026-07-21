@@ -24,7 +24,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.nutrifoodtruck.app"
+      "bundleIdentifier": "com.nutrifoodtruck.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.nutrifoodtruck.app",
@@ -39,6 +42,12 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3208b54f-4d3b-44c2-8686-e4db275cf29e"
+      }
     }
   }
 }

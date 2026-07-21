@@ -724,6 +724,15 @@ export const landingCopy = {
   ],
   fulldayCtaOrder: "Beställ heldagsmåltid",
   fulldayCtaLogin: "Logga in och beställ",
+  /** Short CTA labels for the compact side-by-side menu plan cards (the full
+   * labels don't fit a two-column layout on small phones). */
+  fulldayCtaShort: "Beställ",
+  fulldayCtaLoginShort: "Logga in",
+  /** Nutri anpassar plan card — same MenuPlanCard structure as Heldagsmåltid
+   * so the two menu entries read as equally primary. */
+  anpassarBadge: "Smart",
+  anpassarSubheading: "Skräddarsytt efter dina mål.",
+  anpassarCta: "Kom igång",
   /** landing.about.* */
   aboutHeading1: "Hela råvaror.",
   aboutHeading2: "Beräknat för dig.",

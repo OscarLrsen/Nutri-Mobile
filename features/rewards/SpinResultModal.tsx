@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import * as Haptics from "expo-haptics";
-import Animated, { FadeIn, ZoomIn } from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
+import { Sparkles } from "lucide-react-native";
+import Animated, { FadeIn, useReducedMotion, ZoomIn } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import type { ApiSpinResult } from "@/services/api/rewards";
@@ -24,6 +26,7 @@ export function SpinResultModal({
   onShowRewards: () => void;
 }) {
   const isWin = !!result && result.resultType !== "NoReward";
+  const reducedMotion = useReducedMotion();
 
   // Two-beat feel: the wheel's settle tick (light impact) → a success pulse
   // as the win reveals. No celebration haptic for no-win, deliberately.
@@ -48,9 +51,30 @@ export function SpinResultModal({
         : copy.modalNoWinBody;
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Animated.View entering={FadeIn.duration(180)} style={styles.backdrop}>
-        <Animated.View entering={ZoomIn.springify().damping(18).stiffness(180)} style={styles.card}>
+    <Modal
+      visible
+      transparent
+      animationType={reducedMotion ? "none" : "fade"}
+      onRequestClose={onClose}
+    >
+      <Animated.View entering={reducedMotion ? undefined : FadeIn.duration(180)} style={styles.backdrop}>
+        <Animated.View
+          entering={reducedMotion ? undefined : ZoomIn.springify().damping(18).stiffness(180)}
+          style={styles.card}
+        >
+          <LinearGradient
+            colors={["rgba(232,101,10,0.22)", "rgba(28,28,30,0.96)", colors.card]}
+            start={{ x: 0.1, y: 0 }}
+            end={{ x: 0.9, y: 1 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          {isWin ? (
+            <>
+              <Sparkles style={styles.sparkleLeft} size={20} color="#FFC178" strokeWidth={1.8} />
+              <Sparkles style={styles.sparkleRight} size={15} color="#FF9740" strokeWidth={1.8} />
+            </>
+          ) : null}
           <View style={styles.iconWrap}>
             <ThemedText style={styles.icon}>{result.icon || (isWin ? "🎁" : "😔")}</ThemedText>
           </View>
@@ -106,31 +130,54 @@ const styles = StyleSheet.create({
     padding: spacing[6],
   },
   card: {
+    overflow: "hidden",
     width: "100%",
     maxWidth: 340,
     backgroundColor: colors.card,
-    borderRadius: radius.card,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: "rgba(232,101,10,0.22)",
-    padding: spacing[6],
+    borderColor: "rgba(255,164,81,0.35)",
+    paddingHorizontal: spacing[6],
+    paddingVertical: spacing[8],
     alignItems: "center",
+    shadowColor: colors.accent,
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
+  },
+  sparkleLeft: {
+    position: "absolute",
+    top: 28,
+    left: 36,
+  },
+  sparkleRight: {
+    position: "absolute",
+    top: 70,
+    right: 42,
   },
   iconWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 94,
+    height: 94,
+    borderRadius: 47,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(232,101,10,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(232,101,10,0.22)",
+    backgroundColor: "rgba(232,101,10,0.15)",
+    borderWidth: 2,
+    borderColor: "rgba(255,186,121,0.38)",
     marginBottom: spacing[4],
+    shadowColor: colors.accent,
+    shadowOpacity: 0.38,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
   },
-  icon: { fontSize: 42, lineHeight: 52 },
+  icon: { fontSize: 44, lineHeight: 54 },
   headline: {
-    fontSize: 18,
-    fontFamily: fontFamily.bodyBold,
-    letterSpacing: -0.3,
+    fontSize: 21,
+    lineHeight: 27,
+    fontFamily: fontFamily.headline,
+    letterSpacing: -0.55,
     color: colors.textPrimary,
     textAlign: "center",
   },
@@ -166,8 +213,8 @@ const styles = StyleSheet.create({
   },
   buttons: { alignSelf: "stretch", marginTop: spacing[5], gap: spacing[2] },
   primaryButton: {
-    height: 46,
-    borderRadius: radius.card,
+    height: 50,
+    borderRadius: 13,
     backgroundColor: colors.accent,
     alignItems: "center",
     justifyContent: "center",

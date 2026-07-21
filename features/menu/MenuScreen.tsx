@@ -34,8 +34,9 @@ import { AnpassarEntryCard } from "./AnpassarEntryCard";
  * no items are hidden; default tab is Huvudmåltider with fallback to the
  * first non-empty category.
  *
- * Feature scope: browsing only — no cart, no detail navigation yet
- * (features 3–4).
+ * Meal cards open the existing detail route and can add the currently
+ * selected size through the shared CartContext. Drink cards retain their
+ * dedicated addDrinkItem path.
  */
 
 const BREAKFAST_TAG = "Breakfast";
@@ -242,10 +243,10 @@ export function MenuScreen() {
                     inside FullDayMealCard, unchanged by the move. Rendered
                     only under Huvudmåltider (see showOrderingEntries). */}
                 {showOrderingEntries ? (
-                  <>
+                  <View style={styles.planRow}>
                     <AnpassarEntryCard />
                     <FullDayMealCard />
-                  </>
+                  </View>
                 ) : null}
                 <ThemedText style={styles.sectionLabel}>
                   {menuCopy.categories[activeId].toUpperCase()} ·{" "}
@@ -337,6 +338,16 @@ const styles = StyleSheet.create({
     gap: spacing[2],
     paddingBottom: spacing[2],
     paddingHorizontal: spacing[1],
+  },
+  // Two equal-width main-meal entry cards side by side. `flex: 1` on each
+  // card (MenuPlanCard) splits the row evenly; row stretch keeps them the
+  // same height, and the gap holds on the narrowest phones without overflow.
+  planRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: spacing[3],
+    width: "100%",
+    minWidth: 0,
   },
   sectionLabel: {
     fontSize: 11,

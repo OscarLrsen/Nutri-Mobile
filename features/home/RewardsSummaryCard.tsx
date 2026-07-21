@@ -1,22 +1,21 @@
 import { Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Gift } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { ChevronRight, Gift, Star } from "lucide-react-native";
 
-import { Card } from "@/components/ui/Card";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { Skeleton } from "@/components/feedback/Skeleton";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { getRewardStatus } from "@/services/api/rewards";
 import { homeCopy, pointsCopy } from "@/constants/copy";
-import { colors, fontFamily, radius, spacing } from "@/theme";
+import { colors, fontFamily, spacing } from "@/theme";
 
 /**
- * Nutri-poäng — balance + spin availability from GET /api/rewards/status.
- * Deliberately the SAME query key family as RewardsScreen
- * (["rewards","status", userId]) so Hem, /beloningar and the spin flow share
- * one cache row per user; the user id in the key prevents cross-account
- * cache bleed on shared devices. Auth-gated: never fired signed-out.
+ * Nutri-poäng summary. The entire card is one route to /poang; the separate
+ * weekly-reward entry remains the gift button in Home's header. Keeping one
+ * press target avoids competing nested links while retaining the shared
+ * rewards/status cache as the balance source.
  */
 export function RewardsSummaryCard() {
   const router = useRouter();
@@ -30,71 +29,131 @@ export function RewardsSummaryCard() {
 
   const status = statusQuery.data ?? null;
   const canSpin = status?.canSpin === true;
+  const balanceLabel = status ? `${status.pointsBalance} ${pointsCopy.balanceUnit}` : homeCopy.pointsHead;
 
-  return (
-    <Card style={styles.card} accessibilityLabel={homeCopy.pointsHead}>
-      <ThemedText style={styles.sectionLabel}>{homeCopy.pointsHead.toUpperCase()}</ThemedText>
-
-      {statusQuery.isLoading ? (
-        <Skeleton height={30} width={120} />
-      ) : (
-        <View style={styles.balanceRow}>
-          <ThemedText variant="monoLarge" style={styles.balanceValue}>
-            {status ? status.pointsBalance : "–"}
-          </ThemedText>
-          <ThemedText variant="caption" style={styles.balanceUnit}>
-            {pointsCopy.balanceUnit}
-          </ThemedText>
-        </View>
-      )}
-
-      {canSpin ? (
-        <Pressable
-          onPress={() => router.push("/beloningar")}
-          style={({ pressed }) => [styles.spinPill, pressed && { opacity: 0.85 }]}
-          accessibilityRole="button"
-          accessibilityLabel={homeCopy.spinReady}
-        >
-          <Gift size={14} color={colors.accent} />
-          <ThemedText variant="caption" style={styles.spinPillText}>
-            {homeCopy.spinReady}
-          </ThemedText>
-        </Pressable>
-      ) : null}
-
-      <View style={styles.linkRow}>
-        <NavLink label={homeCopy.toRewards} onPress={() => router.push("/beloningar")} />
-        <NavLink label={homeCopy.toPoints} onPress={() => router.push("/poang")} />
-      </View>
-    </Card>
-  );
-}
-
-function NavLink({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.navLink, pressed && { opacity: 0.7 }]}
+      onPress={() => router.push("/poang")}
+      style={({ pressed }) => [styles.pressTarget, pressed && styles.pressTargetPressed]}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={`Öppna dina Nutri-poäng${status ? `, saldo ${balanceLabel}` : ""}`}
+      accessibilityHint="Visar poängsaldo och transaktioner"
     >
-      <ThemedText variant="caption" style={styles.navLinkText}>
-        {label}
-      </ThemedText>
-      <ChevronRight size={13} color={colors.textTertiary} />
+      <LinearGradient
+        colors={["rgba(232,101,10,0.17)", "rgba(34,27,23,0.96)", colors.card]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.card}
+      >
+        <View pointerEvents="none" style={styles.glow} />
+
+        <View style={styles.headRow}>
+          <View style={styles.iconWrap}>
+            <Star size={19} color="#FFAA5B" strokeWidth={2} />
+          </View>
+          <View style={styles.headingBlock}>
+            <ThemedText style={styles.sectionLabel}>{homeCopy.pointsHead.toUpperCase()}</ThemedText>
+            <ThemedText style={styles.openHint}>Saldo och transaktioner</ThemedText>
+          </View>
+          <View style={styles.chevronWrap}>
+            <ChevronRight size={17} color="rgba(255,255,255,0.48)" strokeWidth={2.2} />
+          </View>
+        </View>
+
+        {statusQuery.isLoading ? (
+          <Skeleton height={34} width={132} />
+        ) : (
+          <View style={styles.balanceRow}>
+            <ThemedText variant="monoLarge" style={styles.balanceValue}>
+              {status ? status.pointsBalance : "–"}
+            </ThemedText>
+            <ThemedText variant="caption" style={styles.balanceUnit}>
+              {pointsCopy.balanceUnit}
+            </ThemedText>
+          </View>
+        )}
+
+        {canSpin ? (
+          <View style={styles.spinStatus}>
+            <Gift size={14} color={colors.accent} strokeWidth={2} />
+            <ThemedText variant="caption" style={styles.spinStatusText}>
+              {homeCopy.spinReady}
+            </ThemedText>
+          </View>
+        ) : null}
+      </LinearGradient>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  pressTarget: {
+    borderRadius: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.24,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 4,
+  },
+  pressTargetPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.988 }],
+  },
   card: {
+    overflow: "hidden",
+    minHeight: 150,
     gap: spacing[3],
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,151,63,0.24)",
+    padding: spacing[4],
+  },
+  glow: {
+    position: "absolute",
+    width: 142,
+    height: 142,
+    borderRadius: 71,
+    top: -82,
+    right: -34,
+    backgroundColor: "rgba(232,101,10,0.13)",
+  },
+  headRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+  },
+  iconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(232,101,10,0.13)",
+    borderWidth: 1,
+    borderColor: "rgba(255,164,81,0.24)",
+  },
+  headingBlock: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   sectionLabel: {
     fontSize: 11,
-    fontFamily: fontFamily.bodySemibold,
-    letterSpacing: 1.5,
-    color: colors.textMuted,
+    fontFamily: fontFamily.bodyBold,
+    letterSpacing: 1.4,
+    color: "rgba(255,220,186,0.8)",
+  },
+  openHint: {
+    fontSize: 11.5,
+    color: colors.textTertiary,
+  },
+  chevronWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.05)",
   },
   balanceRow: {
     flexDirection: "row",
@@ -102,39 +161,27 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   balanceValue: {
-    fontSize: 28,
+    fontSize: 32,
+    lineHeight: 38,
     color: colors.textPrimary,
   },
   balanceUnit: {
     color: colors.textSecondary,
   },
-  spinPill: {
+  spinStatus: {
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[2],
-    alignSelf: "flex-start",
-    borderRadius: radius.btn,
-    borderWidth: 1,
-    borderColor: colors.accentBorder,
-    backgroundColor: colors.accentSoft,
+    borderRadius: 999,
     paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
+    paddingVertical: 6,
+    backgroundColor: "rgba(232,101,10,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(232,101,10,0.2)",
   },
-  spinPillText: {
+  spinStatusText: {
     color: colors.accent,
     fontFamily: fontFamily.bodySemibold,
-  },
-  linkRow: {
-    flexDirection: "row",
-    gap: spacing[4],
-  },
-  navLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingVertical: spacing[1],
-  },
-  navLinkText: {
-    color: colors.textSecondary,
   },
 });
