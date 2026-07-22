@@ -56,8 +56,9 @@ function countdownLabel(countdown: DropCountdown, t: TFunction): string | null {
 export function RegularDropSection({
   onSelectOption,
 }: {
-  /** Phase 7 opens the vote-confirmation sheet here. Never a vote itself. */
-  onSelectOption: (option: ApiRegularDropOption) => void;
+  /** Opens the vote-confirmation sheet (RegularDropVoteSheet). The poll is
+   * passed along so the sheet can POST against the right poll id. */
+  onSelectOption: (poll: ApiRegularDropPoll, option: ApiRegularDropOption) => void;
 }) {
   const query = useActiveRegularDropQuery({
     refetchInterval: (data) => getDropRefetchIntervalMs(data, Date.now()),
@@ -99,7 +100,7 @@ function ActivePoll({
 }: {
   poll: ApiRegularDropPoll;
   nowMs: number;
-  onSelectOption: (option: ApiRegularDropOption) => void;
+  onSelectOption: (poll: ApiRegularDropPoll, option: ApiRegularDropOption) => void;
 }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
@@ -165,7 +166,7 @@ function ActivePoll({
           option={option}
           hasVoted={poll.hasVoted}
           isSelected={votedOption?.id === option.id}
-          onSelect={() => onSelectOption(option)}
+          onSelect={() => onSelectOption(poll, option)}
         />
       ))}
     </View>
