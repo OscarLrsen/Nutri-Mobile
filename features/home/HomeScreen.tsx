@@ -11,6 +11,7 @@ import { RewardsBell } from "./RewardsBell";
 import { DailyTargetsCard } from "./DailyTargetsCard";
 import { TodayOrderStatusCard } from "./TodayOrderStatusCard";
 import { RewardsSummaryCard } from "./RewardsSummaryCard";
+import { RegularDropSection } from "./RegularDropSection";
 import { QuickActions } from "./QuickActions";
 import { LoggedOutHome } from "./LoggedOutHome";
 
@@ -72,6 +73,8 @@ export function HomeScreen() {
           <View style={styles.sections}>
             <DailyTargetsCard />
             <TodayOrderStatusCard />
+            {/* TODO fas 7: onSelectOption opens the vote-confirmation sheet. */}
+            <RegularDropSection onSelectOption={() => {}} />
             <RewardsSummaryCard />
             <QuickActions />
           </View>
