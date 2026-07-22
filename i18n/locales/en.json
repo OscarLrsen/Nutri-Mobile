@@ -898,6 +898,8 @@
     "retry": "Try again",
     "imageUnavailable": "Image unavailable",
     "optionAccessibilityLabel": "Vote for {{name}}. {{teaser}}",
-    "selectedAccessibilityLabel": "You voted for {{name}}"
+    "selectedAccessibilityLabel": "You voted for {{name}}",
+    "sharedWinner": "Shared win",
+    "yourChoice": "Your vote"
   }
 }

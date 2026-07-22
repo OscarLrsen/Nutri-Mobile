@@ -20,6 +20,7 @@ import {
   sortDropOptions,
   type DropCountdown,
 } from "./regularDropHelpers";
+import { RegularDropResults } from "./RegularDropResults";
 
 /**
  * "Rösta fram nästa Nutri Drop" — Home section for the active Regular Drop
@@ -87,10 +88,19 @@ export function RegularDropSection({
   }
 
   const poll = query.data?.poll;
-  // Silent degradation: errors, no poll, or (phase 6) an ended poll.
-  if (query.isError || !poll || !poll.isActive) return null;
+  // Silent degradation: errors or no relevant poll.
+  if (query.isError || !poll) return null;
 
-  return <ActivePoll poll={poll} nowMs={nowMs} onSelectOption={onSelectOption} />;
+  if (poll.isActive) {
+    return <ActivePoll poll={poll} nowMs={nowMs} onSelectOption={onSelectOption} />;
+  }
+  // Ended relevant poll (the user voted; server keeps it ≤7 days): final
+  // results, no vote actions. An ended poll without a result would violate
+  // the contract — degrade silently rather than invent numbers.
+  if (poll.isEnded && poll.result) {
+    return <RegularDropResults poll={poll} />;
+  }
+  return null;
 }
 
 function ActivePoll({

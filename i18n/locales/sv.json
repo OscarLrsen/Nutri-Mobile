@@ -898,6 +898,8 @@
     "retry": "Försök igen",
     "imageUnavailable": "Bilden kunde inte visas",
     "optionAccessibilityLabel": "Rösta på {{name}}. {{teaser}}",
-    "selectedAccessibilityLabel": "Du röstade på {{name}}"
+    "selectedAccessibilityLabel": "Du röstade på {{name}}",
+    "sharedWinner": "Delad vinst",
+    "yourChoice": "Din röst"
   }
 }

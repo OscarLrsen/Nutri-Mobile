@@ -898,6 +898,8 @@
     "retry": "Prøv igen",
     "imageUnavailable": "Billedet kunne ikke vises",
     "optionAccessibilityLabel": "Stem på {{name}}. {{teaser}}",
-    "selectedAccessibilityLabel": "Du stemte på {{name}}"
+    "selectedAccessibilityLabel": "Du stemte på {{name}}",
+    "sharedWinner": "Delt sejr",
+    "yourChoice": "Din stemme"
   }
 }
