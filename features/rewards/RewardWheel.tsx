@@ -103,8 +103,38 @@ function arcPath(startDeg: number, sweepDeg: number, radius: number, center: num
   return `M ${center} ${center} L ${p1.x} ${p1.y} A ${radius} ${radius} 0 ${largeArc} 1 ${p2.x} ${p2.y} Z`;
 }
 
-function sliceLabel(title: string): string {
-  return title.length > 13 ? `${title.slice(0, 12)}…` : title;
+/**
+ * Full prize titles are always shown — never truncated with an ellipsis.
+ * A title that does not fit on one line is balanced onto two lines (split
+ * at the space that minimises the longer line); a single overlong word
+ * stays on one line and the font scales down instead.
+ */
+export function splitLabelLines(title: string): string[] {
+  const trimmed = title.trim().replace(/\s+/g, " ");
+  if (trimmed.length <= 13) return [trimmed];
+  const words = trimmed.split(" ");
+  if (words.length === 1) return [trimmed];
+  let bestSplit = 1;
+  let bestLongest = Number.POSITIVE_INFINITY;
+  for (let i = 1; i < words.length; i++) {
+    const longest = Math.max(
+      words.slice(0, i).join(" ").length,
+      words.slice(i).join(" ").length
+    );
+    if (longest < bestLongest) {
+      bestLongest = longest;
+      bestSplit = i;
+    }
+  }
+  return [words.slice(0, bestSplit).join(" "), words.slice(bestSplit).join(" ")];
+}
+
+/** ~13 characters fit at the base size (the old truncation width); longer
+ * lines shrink the font proportionally instead of losing characters. */
+export function labelFontSize(baseSize: number, lines: string[]): number {
+  const longest = Math.max(...lines.map((line) => line.length));
+  if (longest <= 13) return baseSize;
+  return Math.max(6, Math.round(((baseSize * 13) / longest) * 10) / 10);
 }
 
 export function RewardWheel({
@@ -444,6 +474,9 @@ export function RewardWheel({
                 const labelPos = polar(mid, radius * 0.79, center);
                 const flip = mid > 90 && mid < 270;
                 const labelRotation = flip ? mid + 180 : mid;
+                const labelLines = splitLabelLines(slice.segment.title);
+                const labelFont = labelFontSize(size < 270 ? 8 : 9, labelLines);
+                const lineGap = labelFont + 1.5;
                 return (
                   <G key={`label-${slice.segment.id}`}>
                     <SvgText
@@ -456,20 +489,27 @@ export function RewardWheel({
                       {slice.segment.icon}
                     </SvgText>
                     {slice.sweepDeg >= 28 ? (
-                      <SvgText
-                        x={labelPos.x}
-                        y={labelPos.y}
-                        fontSize={size < 270 ? 8 : 9}
-                        fontFamily={fontFamily.bodyBold}
-                        fill="rgba(255,255,255,0.9)"
-                        stroke="rgba(20,8,3,0.32)"
-                        strokeWidth={0.35}
-                        textAnchor="middle"
-                        alignmentBaseline="central"
-                        transform={`rotate(${labelRotation} ${labelPos.x} ${labelPos.y})`}
-                      >
-                        {sliceLabel(slice.segment.title)}
-                      </SvgText>
+                      <G transform={`rotate(${labelRotation} ${labelPos.x} ${labelPos.y})`}>
+                        {labelLines.map((line, lineIndex) => (
+                          <SvgText
+                            key={`line-${lineIndex}`}
+                            x={labelPos.x}
+                            y={
+                              labelPos.y +
+                              (lineIndex - (labelLines.length - 1) / 2) * lineGap
+                            }
+                            fontSize={labelFont}
+                            fontFamily={fontFamily.bodyBold}
+                            fill="rgba(255,255,255,0.9)"
+                            stroke="rgba(20,8,3,0.32)"
+                            strokeWidth={0.35}
+                            textAnchor="middle"
+                            alignmentBaseline="central"
+                          >
+                            {line}
+                          </SvgText>
+                        ))}
+                      </G>
                     ) : null}
                   </G>
                 );
