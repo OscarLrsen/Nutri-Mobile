@@ -900,6 +900,9 @@
     "optionAccessibilityLabel": "Stem på {{name}}. {{teaser}}",
     "selectedAccessibilityLabel": "Du stemte på {{name}}",
     "sharedWinner": "Delt sejr",
-    "yourChoice": "Din stemme"
+    "yourChoice": "Din stemme",
+    "bannerTitle": "Stem på ugens belønning",
+    "bannerSubtitle": "Hjælp med at vælge næste uges special.",
+    "viewResults": "Se resultat"
   }
 }

@@ -900,6 +900,9 @@
     "optionAccessibilityLabel": "Vote for {{name}}. {{teaser}}",
     "selectedAccessibilityLabel": "You voted for {{name}}",
     "sharedWinner": "Shared win",
-    "yourChoice": "Your vote"
+    "yourChoice": "Your vote",
+    "bannerTitle": "Vote for Weekly Reward",
+    "bannerSubtitle": "Help decide next week’s special.",
+    "viewResults": "View results"
   }
 }

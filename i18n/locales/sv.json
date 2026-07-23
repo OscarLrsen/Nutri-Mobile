@@ -900,6 +900,9 @@
     "optionAccessibilityLabel": "Rösta på {{name}}. {{teaser}}",
     "selectedAccessibilityLabel": "Du röstade på {{name}}",
     "sharedWinner": "Delad vinst",
-    "yourChoice": "Din röst"
+    "yourChoice": "Din röst",
+    "bannerTitle": "Rösta fram veckans belöning",
+    "bannerSubtitle": "Hjälp oss välja nästa veckas special.",
+    "viewResults": "Visa resultat"
   }
 }
