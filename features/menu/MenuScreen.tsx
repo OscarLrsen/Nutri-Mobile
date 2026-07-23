@@ -15,7 +15,7 @@ import {
   getLocationStatusLabel,
   STATUS_COLORS,
 } from "@/utils/locationStatus";
-import { heroCopy, menuCopy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { MealCard } from "./MealCard";
 import { DrinkCard } from "./DrinkCard";
@@ -49,6 +49,7 @@ type MenuItem =
   | { kind: "drink"; drink: ApiDrink };
 
 export function MenuScreen() {
+  const { t } = useTranslation();
   // Store status — MOVED HERE FROM HEM (Patch 1 IA): Meny now owns the 30s
   // poll. Same ["store","status"] key as before, so CartScreen's closed
   // banner and MealDetail keep sharing this cache row. Tab screens stay
@@ -145,13 +146,13 @@ export function MenuScreen() {
   const locationName =
     (locationData?.isVisible && locationData.locationName) ||
     storeStatus?.location ||
-    heroCopy.fallbackLocation;
-  const statusLabelText = getLocationStatusLabel(statusKind, locationData?.openTime).toUpperCase();
+    t("hero.fallbackLocation");
+  const statusLabelText = getLocationStatusLabel(statusKind, locationData?.openTime, t).toUpperCase();
 
   return (
     <Screen>
       <View style={styles.header}>
-        <ThemedText variant="headline">Meny</ThemedText>
+        <ThemedText variant="headline">{t("common.tabMenu")}</ThemedText>
         {/* PLATS · IDAG · STATUS — moved from Hem together with the poll */}
         {!storeLoading && (
           <ThemedText variant="caption" style={styles.statusText}>
@@ -162,7 +163,7 @@ export function MenuScreen() {
               {"  ·  "}
             </ThemedText>
             <ThemedText variant="caption" style={styles.statusText}>
-              {heroCopy.today}
+              {t("hero.today")}
             </ThemedText>
             <ThemedText variant="caption" style={styles.statusDot}>
               {"  ·  "}
@@ -192,7 +193,7 @@ export function MenuScreen() {
           message={
             (mealsQuery.error as { message?: string })?.message ??
             (drinksQuery.error as { message?: string })?.message ??
-            "Kunde inte ladda menyn."
+            t("menu.loadError")
           }
           onRetry={() => {
             mealsQuery.refetch();
@@ -201,7 +202,7 @@ export function MenuScreen() {
           }}
         />
       ) : availableCategories.length === 0 ? (
-        <EmptyState message={menuCopy.empty} />
+        <EmptyState message={t("menu.empty")} />
       ) : (
         <>
           {/* Category chips */}
@@ -222,7 +223,7 @@ export function MenuScreen() {
                     accessibilityState={{ selected: active }}
                   >
                     <ThemedText style={[styles.chipText, active && styles.chipTextActive]}>
-                      {menuCopy.categories[id]}
+                      {t(`menu.categories.${id}`)}
                     </ThemedText>
                   </Pressable>
                 );
@@ -249,13 +250,13 @@ export function MenuScreen() {
                   </View>
                 ) : null}
                 <ThemedText style={styles.sectionLabel}>
-                  {menuCopy.categories[activeId].toUpperCase()} ·{" "}
-                  {menuCopy.itemCount(activeItems.length).toUpperCase()}
+                  {t(`menu.categories.${activeId}`).toUpperCase()} ·{" "}
+                  {t("menu.itemCount", { count: activeItems.length }).toUpperCase()}
                 </ThemedText>
                 {activeId === "frukost" ? (
                   <View style={styles.breakfastBanner}>
                     <ThemedText variant="caption" style={styles.breakfastText}>
-                      {menuCopy.breakfastServed}
+                      {t("menu.breakfastServed")}
                     </ThemedText>
                   </View>
                 ) : null}
@@ -339,11 +340,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[2],
     paddingHorizontal: spacing[1],
   },
-  // Two equal-width main-meal entry cards side by side. `flex: 1` on each
-  // card (MenuPlanCard) splits the row evenly; row stretch keeps them the
-  // same height, and the gap holds on the narrowest phones without overflow.
+  // Two full-width main-meal entry cards stacked vertically. Column stretch
+  // makes each card (MenuPlanCard) fill the available width on its own row;
+  // the gap gives consistent vertical spacing between them.
   planRow: {
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "stretch",
     gap: spacing[3],
     width: "100%",

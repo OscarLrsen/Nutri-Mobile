@@ -1,8 +1,9 @@
+import type { TFunction } from "i18next";
+
 /**
- * Ported VERBATIM from Nutri-Frontend's src/lib/locationStatus.ts — pure TS,
- * no DOM dependency. If the web version ever changes, re-port it; do not let
- * the two drift (this is the single source of truth for customer-facing
- * location status on both platforms).
+ * Ported from Nutri-Frontend's src/lib/locationStatus.ts — pure TS, no DOM
+ * dependency. Status derivation is identical to the web; labels go through
+ * i18n (stable LocationStatusKind keys → locationStatus.* translations).
  */
 export type LocationStatusKind =
   | "loading"
@@ -86,24 +87,13 @@ export const STATUS_COLORS: Record<LocationStatusKind, string> = {
 
 export function getLocationStatusLabel(
   kind: LocationStatusKind,
-  openTime?: string | null,
+  openTime: string | null | undefined,
+  t: TFunction,
 ): string {
-  switch (kind) {
-    case "loading":
-      return "Laddar";
-    case "noLocation":
-      return "Kommer snart";
-    case "closed":
-      return "Stängt";
-    case "paused":
-      return "Pausad";
-    case "tempClosed":
-      return "Tillfälligt stängt";
-    case "notYetOpen":
-      return openTime ? `Öppnar ${openTime}` : "Öppnar snart";
-    case "closedForDay":
-      return "Stängt för idag";
-    case "open":
-      return "Öppet";
+  if (kind === "notYetOpen") {
+    return openTime
+      ? t("locationStatus.notYetOpen", { time: openTime })
+      : t("locationStatus.notYetOpenSoon");
   }
+  return t(`locationStatus.${kind}`);
 }

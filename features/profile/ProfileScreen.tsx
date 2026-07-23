@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronRight } from "lucide-react-native";
+import { ChevronRight, Globe } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
@@ -26,7 +26,8 @@ import {
 } from "@/services/api/weeklySchedule";
 import { ACTIVE_ORDER_KEY } from "@/utils/activeOrder";
 import { deriveDisplayName, deriveInitials } from "@/utils/displayName";
-import { authCopy, couponCopy, pointsCopy, profileCopy as copy } from "@/constants/copy";
+import { LanguagePickerSheet } from "@/components/language/LanguagePickerSheet";
+import { SUPPORTED_LANGUAGES, formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 import {
   deriveTrainingSessionsFromWeeklySchedule,
@@ -125,6 +126,9 @@ export function ProfileScreen() {
   const queryClient = useQueryClient();
   const { user, signOut } = useAuth();
   const { isOnboardingComplete } = useOnboardingStatus();
+  const { t } = useTranslation();
+  const { language } = useLanguage();
+  const [languageSheetOpen, setLanguageSheetOpen] = useState(false);
 
   // ── Nutrition profile state ──
   const [nutritionProfile, setNutritionProfile] = useState<ApiNutritionProfile | null>(null);
@@ -264,7 +268,7 @@ export function ProfileScreen() {
         isNaN(weight) || weight < 30 || weight > 400 ||
         isNaN(height) || height < 100 || height > 250
       ) {
-        setSaveError(copy.errorInvalidBasics);
+        setSaveError(t("profile.errorInvalidBasics"));
         setSaving(false);
         return;
       }
@@ -287,7 +291,7 @@ export function ProfileScreen() {
         setSaveDone(false);
       }, 900);
     } catch {
-      setSaveError(copy.errorSave);
+      setSaveError(t("profile.errorSave"));
     } finally {
       setSaving(false);
     }
@@ -372,14 +376,18 @@ export function ProfileScreen() {
   const accountEmail = user?.email ?? "";
   // Name/initials derivation lives in utils/displayName so Hem's greeting
   // uses the exact same fallback chain (full_name → email → fallback copy).
-  const displayName = deriveDisplayName(user, copy.fallbackName);
+  const displayName = deriveDisplayName(user, t("profile.fallbackName"));
   const initials = deriveInitials(user);
   const identitySub = (() => {
-    const goal = np?.primaryGoal ? copy.goalChips[np.primaryGoal] ?? np.primaryGoal : null;
-    const activity = np?.activityType ? copy.activityChips[np.activityType] ?? np.activityType : null;
+    const goal = np?.primaryGoal
+      ? t(`profile.goalChips.${np.primaryGoal}`, { defaultValue: np.primaryGoal })
+      : null;
+    const activity = np?.activityType
+      ? t(`profile.activityChips.${np.activityType}`, { defaultValue: np.activityType })
+      : null;
     if (goal && activity) return `${goal} · ${activity}`;
     if (goal) return goal;
-    return copy.identityFallback;
+    return t("profile.identityFallback");
   })();
 
   const showDeviationWarning =
@@ -402,21 +410,21 @@ export function ProfileScreen() {
         <Modal visible transparent animationType="fade" onRequestClose={() => setShowOnboardingModal(false)}>
           <View style={styles.modalBackdrop}>
             <View style={styles.modalCard}>
-              <ThemedText style={styles.modalTitle}>{copy.onboardingTitle}</ThemedText>
-              <ThemedText style={styles.modalBody}>{copy.onboardingBody}</ThemedText>
+              <ThemedText style={styles.modalTitle}>{t("profile.onboardingTitle")}</ThemedText>
+              <ThemedText style={styles.modalBody}>{t("profile.onboardingBody")}</ThemedText>
               <Pressable
                 onPress={handleOnboardingNow}
                 style={({ pressed }) => [styles.primaryButton, pressed && { backgroundColor: colors.accentHover }]}
                 accessibilityRole="button"
               >
-                <ThemedText style={styles.primaryButtonText}>{copy.getStarted}</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>{t("profile.getStarted")}</ThemedText>
               </Pressable>
               <Pressable
                 onPress={() => setShowOnboardingModal(false)}
                 style={styles.secondaryButton}
                 accessibilityRole="button"
               >
-                <ThemedText style={styles.secondaryButtonText}>{copy.onboardingLater}</ThemedText>
+                <ThemedText style={styles.secondaryButtonText}>{t("profile.onboardingLater")}</ThemedText>
               </Pressable>
             </View>
           </View>
@@ -427,15 +435,15 @@ export function ProfileScreen() {
       {isOnboardingComplete === false && (
         <View style={styles.banner}>
           <View style={{ flex: 1 }}>
-            <ThemedText style={styles.bannerTitle}>{copy.bannerIncompleteTitle}</ThemedText>
-            <ThemedText style={styles.bannerBody}>{copy.bannerIncompleteBody}</ThemedText>
+            <ThemedText style={styles.bannerTitle}>{t("profile.bannerIncompleteTitle")}</ThemedText>
+            <ThemedText style={styles.bannerBody}>{t("profile.bannerIncompleteBody")}</ThemedText>
           </View>
           <Pressable
             onPress={() => openEdit("grunddata")}
             style={styles.bannerCta}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.bannerCtaText}>{copy.bannerContinue}</ThemedText>
+            <ThemedText style={styles.bannerCtaText}>{t("profile.bannerContinue")}</ThemedText>
           </Pressable>
         </View>
       )}
@@ -459,46 +467,48 @@ export function ProfileScreen() {
       {displayResult && np ? (
         <>
           <View style={styles.sectionHeadRow}>
-            <ThemedText style={styles.sectionHead}>{copy.sectionActivePlan.toUpperCase()}</ThemedText>
-            <ThemedText style={styles.sectionHeadRight}>{copy.today}</ThemedText>
+            <ThemedText style={styles.sectionHead}>{t("profile.sectionActivePlan").toUpperCase()}</ThemedText>
+            <ThemedText style={styles.sectionHeadRight}>{t("profile.today")}</ThemedText>
           </View>
           <View style={styles.planCard}>
             <View style={styles.planTop}>
               <View style={{ gap: 6 }}>
                 <ThemedText style={styles.planKcal}>
-                  {Math.max(0, Math.round(displayResult.calorieTarget)).toLocaleString("sv-SE")}
+                  {formatNumber(Math.max(0, Math.round(displayResult.calorieTarget)), language)}
                 </ThemedText>
-                <ThemedText style={styles.planKcalLabel}>{copy.kcalPerDay}</ThemedText>
+                <ThemedText style={styles.planKcalLabel}>{t("profile.kcalPerDay")}</ThemedText>
               </View>
               {displayResult.mode === "CustomMacros" && (
                 <View style={styles.manualPill}>
                   <View style={styles.manualDot} />
-                  <ThemedText style={styles.manualPillText}>{copy.manual.toUpperCase()}</ThemedText>
+                  <ThemedText style={styles.manualPillText}>{t("profile.manual").toUpperCase()}</ThemedText>
                 </View>
               )}
             </View>
             <View style={styles.planMacroRow}>
-              <ThemedText style={styles.planMacroLabel}>{copy.macroProtein} </ThemedText>
+              <ThemedText style={styles.planMacroLabel}>{t("profile.macroProtein")} </ThemedText>
               <ThemedText style={styles.planMacroValue}>{displayResult.proteinG}g</ThemedText>
               <ThemedText style={styles.planMacroDot}> · </ThemedText>
-              <ThemedText style={styles.planMacroLabel}>{copy.macroCarbsShort} </ThemedText>
+              <ThemedText style={styles.planMacroLabel}>{t("profile.macroCarbsShort")} </ThemedText>
               <ThemedText style={styles.planMacroValue}>{displayResult.carbsG}g</ThemedText>
               <ThemedText style={styles.planMacroDot}> · </ThemedText>
-              <ThemedText style={styles.planMacroLabel}>{copy.macroFat} </ThemedText>
+              <ThemedText style={styles.planMacroLabel}>{t("profile.macroFat")} </ThemedText>
               <ThemedText style={styles.planMacroValue}>{displayResult.fatG}g</ThemedText>
             </View>
             <View style={styles.planFooter}>
               <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                 {displayResult.mode === "CustomMacros" && (
-                  <ThemedText style={styles.planNote}>{copy.manualAdjusted}</ThemedText>
+                  <ThemedText style={styles.planNote}>{t("profile.manualAdjusted")}</ThemedText>
                 )}
                 {displayResult.mode === "CustomMacros" && nutriRecommendation && (
                   <ThemedText style={styles.planNoteDim}>
-                    {copy.recommendation(nutriRecommendation.calorieTarget.toLocaleString("sv-SE"))}
+                    {t("profile.recommendation", {
+                      calories: formatNumber(nutriRecommendation.calorieTarget, language),
+                    })}
                   </ThemedText>
                 )}
                 {showDeviationWarning && (
-                  <ThemedText style={styles.planDeviation}>{copy.deviation}</ThemedText>
+                  <ThemedText style={styles.planDeviation}>{t("profile.deviation")}</ThemedText>
                 )}
               </View>
               <Pressable
@@ -506,7 +516,7 @@ export function ProfileScreen() {
                 style={styles.changePlanLink}
                 accessibilityRole="link"
               >
-                <ThemedText style={styles.changePlanText}>{copy.changePlan}</ThemedText>
+                <ThemedText style={styles.changePlanText}>{t("profile.changePlan")}</ThemedText>
                 <ChevronRight size={12} color="rgba(255,255,255,0.7)" />
               </Pressable>
             </View>
@@ -515,15 +525,15 @@ export function ProfileScreen() {
       ) : np && !np.isComplete ? (
         <View style={styles.planCard}>
           <View style={{ padding: spacing[5], gap: spacing[2] }}>
-            <ThemedText style={styles.sectionHead}>{copy.nutritionPlan.toUpperCase()}</ThemedText>
-            <ThemedText style={styles.emptyPlanText}>{copy.incompletePlan}</ThemedText>
+            <ThemedText style={styles.sectionHead}>{t("profile.nutritionPlan").toUpperCase()}</ThemedText>
+            <ThemedText style={styles.emptyPlanText}>{t("profile.incompletePlan")}</ThemedText>
             {np.missingFields.map((f) => (
               <ThemedText key={f} style={styles.missingField}>
                 ·{" "}
                 {f === "GoalPace"
-                  ? copy.missingGoalPace
+                  ? t("profile.missingGoalPace")
                   : f === "MealCount"
-                    ? copy.missingMealCount
+                    ? t("profile.missingMealCount")
                     : f}
               </ThemedText>
             ))}
@@ -532,8 +542,8 @@ export function ProfileScreen() {
       ) : !np ? (
         <View style={styles.planCard}>
           <View style={{ padding: spacing[5], gap: spacing[3] }}>
-            <ThemedText style={styles.sectionHead}>{copy.nutritionPlan.toUpperCase()}</ThemedText>
-            <ThemedText style={styles.emptyPlanText}>{copy.emptyPlan}</ThemedText>
+            <ThemedText style={styles.sectionHead}>{t("profile.nutritionPlan").toUpperCase()}</ThemedText>
+            <ThemedText style={styles.emptyPlanText}>{t("profile.emptyPlan")}</ThemedText>
             <Pressable
               onPress={() => openEdit("grunddata")}
               style={({ pressed }) => [
@@ -542,7 +552,7 @@ export function ProfileScreen() {
               ]}
               accessibilityRole="button"
             >
-              <ThemedText style={styles.primaryButtonText}>{copy.getStarted}</ThemedText>
+              <ThemedText style={styles.primaryButtonText}>{t("profile.getStarted")}</ThemedText>
             </Pressable>
           </View>
         </View>
@@ -550,7 +560,7 @@ export function ProfileScreen() {
 
       {/* ── 3. NÄSTA STEG ── */}
       <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
-        {copy.nextSteps.toUpperCase()}
+        {t("profile.nextSteps").toUpperCase()}
       </ThemedText>
       <View style={{ gap: spacing[2] }}>
         <Pressable
@@ -558,7 +568,7 @@ export function ProfileScreen() {
           style={styles.navRow}
           accessibilityRole="button"
         >
-          <ThemedText style={styles.navRowText}>{copy.orderFromMenu}</ThemedText>
+          <ThemedText style={styles.navRowText}>{t("profile.orderFromMenu")}</ThemedText>
           <ChevronRight size={14} color="rgba(255,255,255,0.32)" />
         </Pressable>
         <Pressable
@@ -566,7 +576,7 @@ export function ProfileScreen() {
           style={styles.navRow}
           accessibilityRole="button"
         >
-          <ThemedText style={styles.navRowText}>{couponCopy.listTitle}</ThemedText>
+          <ThemedText style={styles.navRowText}>{t("coupon.listTitle")}</ThemedText>
           <ChevronRight size={14} color="rgba(255,255,255,0.32)" />
         </Pressable>
         <Pressable
@@ -574,7 +584,7 @@ export function ProfileScreen() {
           style={styles.navRow}
           accessibilityRole="button"
         >
-          <ThemedText style={styles.navRowText}>{pointsCopy.screenTitle}</ThemedText>
+          <ThemedText style={styles.navRowText}>{t("points.screenTitle")}</ThemedText>
           <ChevronRight size={14} color="rgba(255,255,255,0.32)" />
         </Pressable>
         <Pressable
@@ -583,7 +593,7 @@ export function ProfileScreen() {
           accessibilityRole="button"
           accessibilityState={{ expanded: showOrders }}
         >
-          <ThemedText style={styles.navRowText}>{copy.orderHistory}</ThemedText>
+          <ThemedText style={styles.navRowText}>{t("profile.orderHistory")}</ThemedText>
           <View style={{ transform: [{ rotate: showOrders ? "90deg" : "0deg" }] }}>
             <ChevronRight size={14} color="rgba(255,255,255,0.32)" />
           </View>
@@ -595,15 +605,15 @@ export function ProfileScreen() {
       {np && (
         <>
           <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
-            {copy.myAccount.toUpperCase()}
+            {t("profile.myAccount").toUpperCase()}
           </ThemedText>
           <View style={styles.accountCard}>
             {(
               [
-                { label: copy.editBasicData, action: () => openEdit("grunddata") },
-                { label: copy.editActivity, action: () => openEdit("aktivitet") },
-                { label: copy.editGoal, action: () => openEdit("mal") },
-                { label: copy.editTrainingDays, action: () => setScheduleExpanded(true) },
+                { label: t("profile.editBasicData"), action: () => openEdit("grunddata") },
+                { label: t("profile.editActivity"), action: () => openEdit("aktivitet") },
+                { label: t("profile.editGoal"), action: () => openEdit("mal") },
+                { label: t("profile.editTrainingDays"), action: () => setScheduleExpanded(true) },
               ] as const
             ).map((row, i, arr) => (
               <Pressable
@@ -620,12 +630,45 @@ export function ProfileScreen() {
         </>
       )}
 
+      {/* ── 4b. Språk — always rendered (also without a nutrition profile) ── */}
+      <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
+        {t("language.title").toUpperCase()}
+      </ThemedText>
+      <View style={styles.accountCard}>
+        <Pressable
+          onPress={() => setLanguageSheetOpen(true)}
+          style={styles.accountRow}
+          accessibilityRole="button"
+          accessibilityLabel={t("language.changeLanguage")}
+          accessibilityValue={{
+            text: SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeLabel,
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing[3] }}>
+            <Globe size={14} color="rgba(255,255,255,0.55)" strokeWidth={1.8} />
+            <ThemedText style={styles.accountRowText}>{t("language.title")}</ThemedText>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing[2] }}>
+            <ThemedText style={styles.languageValue}>
+              {SUPPORTED_LANGUAGES.find((l) => l.code === language)?.nativeLabel}
+            </ThemedText>
+            <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
+          </View>
+        </Pressable>
+      </View>
+
       {/* ── 5. Footer (logout only — no account deletion in V1) ── */}
       <View style={styles.footer}>
         <Pressable onPress={handleLogout} accessibilityRole="button" style={{ padding: spacing[2] }}>
-          <ThemedText style={styles.footerLink}>{authCopy.navLogout}</ThemedText>
+          <ThemedText style={styles.footerLink}>{t("auth.navLogout")}</ThemedText>
         </Pressable>
       </View>
+
+      {/* ── Language picker sheet ── */}
+      <LanguagePickerSheet
+        visible={languageSheetOpen}
+        onClose={() => setLanguageSheetOpen(false)}
+      />
 
       {/* ── Edit modal (section or new-profile variant) ── */}
       {editing && (
@@ -875,6 +918,7 @@ const styles = StyleSheet.create({
   },
   accountRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.borderSoft },
   accountRowText: { fontSize: 14, fontFamily: fontFamily.bodyMedium, letterSpacing: -0.1, color: colors.textPrimary },
+  languageValue: { fontSize: 13, color: colors.textSecondary, letterSpacing: -0.1 },
 
   footer: { marginTop: spacing[5], alignItems: "center" },
   footerLink: { fontSize: 12, color: "rgba(255,255,255,0.38)" },

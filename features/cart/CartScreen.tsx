@@ -47,8 +47,11 @@ import {
   isStockOutError,
 } from "@/utils/orderErrors";
 import { setActiveOrderId, getActiveOrderId, setPendingStripeClear } from "@/utils/activeOrder";
+import type { TFunction } from "i18next";
+
 import { env } from "@/lib/env";
-import { authCopy, cartCopy as copy, checkoutCopy, couponCopy } from "@/constants/copy";
+import { formatDateTime, formatTime, useLanguage, useTranslation } from "@/i18n";
+import type { AppLanguage } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -86,6 +89,8 @@ const SIZE_LABEL_SHORT: Record<string, string> = {
 type PaymentMethod = "pay_on_site" | "stripe";
 
 export function CartScreen() {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { items, hydrated, clearCart, subtotalOre, totalOre } = useCart();
@@ -93,7 +98,7 @@ export function CartScreen() {
   const { user, loading: authLoading } = useAuth();
 
   const authEmail = user?.email ?? null;
-  const authName = (user?.user_metadata?.full_name as string | undefined) || authCopy.guest;
+  const authName = (user?.user_metadata?.full_name as string | undefined) || t("auth.guest");
   const userLoaded = !authLoading;
 
   /* ── Coupon (preview only — the backend recomputes authoritatively) ── */
@@ -224,12 +229,12 @@ export function CartScreen() {
         let checkoutUrl: string;
         try {
           const session = await createCheckoutSession(order.id);
-          if (!session?.url) throw new Error("Checkout session saknar url.");
+          if (!session?.url) throw new Error("Checkout session missing url");
           checkoutUrl = session.url;
         } catch {
           // Order exists and is saved; cart is preserved — surface a clear
           // error and STAY in the cart (web parity).
-          setError(checkoutCopy.errorStripeStartFailed);
+          setError(t("checkout.errorStripeStartFailed"));
           return;
         }
         // Mark this order for the one-time cart clear once it reports Paid
@@ -258,10 +263,10 @@ export function CartScreen() {
         // own message plus what just happened to the selection.
         clearSelectedCoupon();
         queryClient.invalidateQueries({ queryKey: ["coupons"] }).catch(() => {});
-        const { message } = formatOrderError(err);
-        setError(`${message ?? checkoutCopy.errorGeneric} ${couponCopy.rejectedSuffix}`);
+        const { message } = formatOrderError(err, t);
+        setError(`${message ?? t("checkout.errorGeneric")} ${t("coupon.rejectedSuffix")}`);
       } else {
-        const { message, unauthorized } = formatOrderError(err);
+        const { message, unauthorized } = formatOrderError(err, t);
         if (unauthorized) {
           goToLogin();
         } else if (message) {
@@ -276,20 +281,20 @@ export function CartScreen() {
 
   /* ── CTA label state machine (web parity) ── */
 
-  const amountStr = formatPriceKr(effectiveTotalOre).replace(" kr", "");
+  const amountStr = formatPriceKr(effectiveTotalOre, language).replace(" kr", "");
   const ctaLabel = isClosed
-    ? (formatNextOpen(storeStatus?.nextOpenAtUtc) ?? checkoutCopy.closedNow)
+    ? (formatNextOpen(storeStatus?.nextOpenAtUtc, t, language) ?? t("checkout.closedNow"))
     : isPaused
-      ? checkoutCopy.pausedNow
+      ? t("checkout.pausedNow")
       : !userLoaded
-        ? checkoutCopy.loading
+        ? t("checkout.loading")
         : hasUnavailableItems || stockBlocked
-          ? checkoutCopy.ctaCannotReserve
+          ? t("checkout.ctaCannotReserve")
           : !authEmail
-            ? checkoutCopy.ctaLoginToReserve
+            ? t("checkout.ctaLoginToReserve")
             : paymentMethod === "stripe"
-              ? checkoutCopy.ctaPayOnline(amountStr)
-              : checkoutCopy.ctaReserve(amountStr);
+              ? t("checkout.ctaPayOnline", { amount: amountStr })
+              : t("checkout.ctaReserve", { amount: amountStr });
   const ctaMuted = isClosed || isPaused || hasUnavailableItems || stockBlocked;
   const ctaDisabled =
     submitting || isClosed || isPaused || !userLoaded || hasUnavailableItems || stockBlocked;
@@ -298,7 +303,7 @@ export function CartScreen() {
     <Screen>
       {/* Header — web's sticky cart header, sans back button (tab root). */}
       <View style={styles.header}>
-        <ThemedText style={styles.headerTitle}>{copy.title}</ThemedText>
+        <ThemedText style={styles.headerTitle}>{t("cart.title")}</ThemedText>
       </View>
 
       {!hydrated ? (
@@ -316,15 +321,15 @@ export function CartScreen() {
                 <Info size={16} color={colors.accent} style={{ marginTop: 2 }} />
                 <View style={{ flex: 1 }}>
                   <ThemedText style={styles.closedBannerHeading}>
-                    {checkoutCopy.closedHeading}
+                    {t("checkout.closedHeading")}
                   </ThemedText>
-                  {formatOpeningCopy(storeStatus?.nextOpenAtUtc) ? (
+                  {formatOpeningCopy(storeStatus?.nextOpenAtUtc, t, language) ? (
                     <ThemedText style={styles.closedBannerText}>
-                      {formatOpeningCopy(storeStatus?.nextOpenAtUtc)}
+                      {formatOpeningCopy(storeStatus?.nextOpenAtUtc, t, language)}
                     </ThemedText>
                   ) : null}
                   <ThemedText style={[styles.closedBannerText, { opacity: 0.8 }]}>
-                    {checkoutCopy.closedText}
+                    {t("checkout.closedText")}
                   </ThemedText>
                 </View>
               </View>
@@ -335,8 +340,8 @@ export function CartScreen() {
                 const mealCount = items.filter((i) => i.kind !== "drink").length;
                 const drinkCount = items.filter((i) => i.kind === "drink").length;
                 const parts: string[] = [];
-                if (mealCount > 0) parts.push(copy.countMeal(mealCount));
-                if (drinkCount > 0) parts.push(copy.countDrink(drinkCount));
+                if (mealCount > 0) parts.push(t("cart.countMeal", { count: mealCount }));
+                if (drinkCount > 0) parts.push(t("cart.countDrink", { count: drinkCount }));
                 return parts.join(" · ");
               })()}
             </SectionHead>
@@ -346,7 +351,7 @@ export function CartScreen() {
             ))}
 
             {/* Customer note to kitchen (web parity; input capped at 100) */}
-            <SectionHead style={{ marginTop: spacing[5] }}>{checkoutCopy.noteHead}</SectionHead>
+            <SectionHead style={{ marginTop: spacing[5] }}>{t("checkout.noteHead")}</SectionHead>
             <View style={styles.noteCard}>
               <TextInput
                 value={customerNote}
@@ -354,7 +359,7 @@ export function CartScreen() {
                 maxLength={100}
                 multiline
                 numberOfLines={2}
-                placeholder={checkoutCopy.notePlaceholder}
+                placeholder={t("checkout.notePlaceholder")}
                 placeholderTextColor="rgba(255,255,255,0.28)"
                 style={styles.noteInput}
               />
@@ -365,7 +370,7 @@ export function CartScreen() {
             {appliedCoupon || (user && usableCoupons.length > 0) ? (
               <>
                 <SectionHead style={{ marginTop: spacing[5] }}>
-                  {couponCopy.cartSectionHead}
+                  {t("coupon.cartSectionHead")}
                 </SectionHead>
                 {appliedCoupon && discountPreview ? (
                   <View style={styles.couponCard}>
@@ -375,19 +380,19 @@ export function CartScreen() {
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <ThemedText style={styles.couponCode}>{appliedCoupon.code}</ThemedText>
                       <ThemedText style={styles.couponMeta}>
-                        {couponCopy.percentOff(appliedCoupon.percentage)} · −
-                        {formatPriceKr(discountPreview.discountAmountOre)}
+                        {t("coupon.percentOff", { pct: appliedCoupon.percentage })} · −
+                        {formatPriceKr(discountPreview.discountAmountOre, language)}
                       </ThemedText>
                     </View>
                     <Pressable
                       onPress={clearSelectedCoupon}
                       style={styles.couponRemove}
                       accessibilityRole="button"
-                      accessibilityLabel={couponCopy.cartRemove}
+                      accessibilityLabel={t("coupon.cartRemove")}
                     >
                       <X size={13} color="rgba(255,255,255,0.35)" strokeWidth={1.6} />
                       <ThemedText style={styles.couponRemoveText}>
-                        {couponCopy.cartRemove}
+                        {t("coupon.cartRemove")}
                       </ThemedText>
                     </Pressable>
                   </View>
@@ -399,15 +404,15 @@ export function CartScreen() {
                       pressed && { backgroundColor: colors.cardAlt },
                     ]}
                     accessibilityRole="button"
-                    accessibilityLabel={couponCopy.cartChoose}
+                    accessibilityLabel={t("coupon.cartChoose")}
                   >
                     <View style={styles.couponIcon}>
                       <BadgePercent size={18} color={colors.accent} strokeWidth={1.75} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <ThemedText style={styles.couponCode}>{couponCopy.cartChoose}</ThemedText>
+                      <ThemedText style={styles.couponCode}>{t("coupon.cartChoose")}</ThemedText>
                       <ThemedText style={styles.couponMeta}>
-                        {couponCopy.cartChooseSub(usableCoupons.length)}
+                        {t("coupon.cartChooseSub", { count: usableCoupons.length })}
                       </ThemedText>
                     </View>
                     <ChevronRight size={15} color="rgba(255,255,255,0.3)" />
@@ -416,7 +421,7 @@ export function CartScreen() {
               </>
             ) : null}
 
-            <SectionHead style={{ marginTop: spacing[5] }}>{copy.summaryHead}</SectionHead>
+            <SectionHead style={{ marginTop: spacing[5] }}>{t("cart.summaryHead")}</SectionHead>
             <SummaryCard
               coupon={appliedCoupon}
               discountAmountOre={discountPreview?.discountAmountOre ?? 0}
@@ -425,20 +430,20 @@ export function CartScreen() {
 
             {/* Payment methods (web parity: pay_on_site / stripe / swish-disabled) */}
             <SectionHead style={{ marginTop: spacing[5] }}>
-              {checkoutCopy.paymentHeading}
+              {t("checkout.paymentHeading")}
             </SectionHead>
             <View style={[styles.paymentCard, isClosed && { opacity: 0.55 }]} pointerEvents={isClosed ? "none" : "auto"}>
               <PaymentRow
-                label={checkoutCopy.payAtPickup}
-                sublabel={checkoutCopy.payAtPickupSub}
+                label={t("checkout.payAtPickup")}
+                sublabel={t("checkout.payAtPickupSub")}
                 icon={<Wallet size={18} color="rgba(255,255,255,0.75)" strokeWidth={1.5} />}
                 iconBg="rgba(255,255,255,0.07)"
                 selected={paymentMethod === "pay_on_site"}
                 onSelect={() => setPaymentMethod("pay_on_site")}
               />
               <PaymentRow
-                label={checkoutCopy.payOnline}
-                sublabel={checkoutCopy.payOnlineSub}
+                label={t("checkout.payOnline")}
+                sublabel={t("checkout.payOnlineSub")}
                 icon={<CreditCard size={18} color={colors.textPrimary} strokeWidth={1.6} />}
                 iconBg={colors.accent}
                 selected={paymentMethod === "stripe"}
@@ -446,8 +451,8 @@ export function CartScreen() {
                 disabled={isDrinksOnly}
               />
               <PaymentRow
-                label={checkoutCopy.swish}
-                sublabel={checkoutCopy.comingSoon}
+                label={t("checkout.swish")}
+                sublabel={t("checkout.comingSoon")}
                 icon={<ThemedText style={styles.swishIcon}>S</ThemedText>}
                 iconBg="#0F4EFF"
                 selected={false}
@@ -461,7 +466,7 @@ export function CartScreen() {
             {isDrinksOnly && (
               <View style={styles.mutedBox}>
                 <ThemedText style={styles.mutedBoxText}>
-                  {checkoutCopy.onlineDrinksOnly}
+                  {t("checkout.onlineDrinksOnly")}
                 </ThemedText>
               </View>
             )}
@@ -469,8 +474,8 @@ export function CartScreen() {
             {/* Pay-at-counter info box (web parity) */}
             {paymentMethod === "pay_on_site" && (
               <View style={styles.infoBox}>
-                <ThemedText style={styles.infoBoxHeading}>{checkoutCopy.infoHeading}</ThemedText>
-                <ThemedText style={styles.infoBoxText}>{checkoutCopy.infoText}</ThemedText>
+                <ThemedText style={styles.infoBoxHeading}>{t("checkout.infoHeading")}</ThemedText>
+                <ThemedText style={styles.infoBoxText}>{t("checkout.infoText")}</ThemedText>
               </View>
             )}
 
@@ -488,7 +493,7 @@ export function CartScreen() {
                     style={styles.inlineAction}
                     accessibilityRole="button"
                   >
-                    <ThemedText style={styles.inlineActionText}>{copy.emptyCta}</ThemedText>
+                    <ThemedText style={styles.inlineActionText}>{t("cart.emptyCta")}</ThemedText>
                   </Pressable>
                 </View>
               </View>
@@ -502,10 +507,10 @@ export function CartScreen() {
                 <AlertTriangle size={15} color={colors.accent} style={{ marginTop: 1 }} />
                 <View style={{ flex: 1 }}>
                   <ThemedText style={styles.warnBoxHeading}>
-                    {checkoutCopy.activeReservationTitle}
+                    {t("checkout.activeReservationTitle")}
                   </ThemedText>
                   <ThemedText style={styles.warnBoxText}>
-                    {checkoutCopy.activeReservationBody}
+                    {t("checkout.activeReservationBody")}
                   </ThemedText>
                   {activeOrderIdFromError ? (
                     <Pressable
@@ -514,7 +519,7 @@ export function CartScreen() {
                       accessibilityRole="button"
                     >
                       <ThemedText style={styles.inlineActionText}>
-                        {checkoutCopy.activeReservationViewOrder}
+                        {t("checkout.activeReservationViewOrder")}
                       </ThemedText>
                     </Pressable>
                   ) : null}
@@ -527,10 +532,10 @@ export function CartScreen() {
                 <AlertTriangle size={14} color={colors.accent} style={{ marginTop: 1 }} />
                 <View style={{ flex: 1 }}>
                   <ThemedText style={styles.warnBoxHeading}>
-                    {checkoutCopy.unavailableHeading}
+                    {t("checkout.unavailableHeading")}
                   </ThemedText>
                   <ThemedText style={styles.warnBoxText}>
-                    {checkoutCopy.unavailableText}
+                    {t("checkout.unavailableText")}
                   </ThemedText>
                 </View>
               </View>
@@ -539,14 +544,14 @@ export function CartScreen() {
             {!authEmail && userLoaded && (
               <View style={styles.mutedBox}>
                 <ThemedText style={styles.accountRequiredTitle}>
-                  {checkoutCopy.accountRequiredTitle}
+                  {t("checkout.accountRequiredTitle")}
                 </ThemedText>
                 <ThemedText style={styles.accountRequiredBody}>
-                  {checkoutCopy.accountRequiredBody}
+                  {t("checkout.accountRequiredBody")}
                 </ThemedText>
                 <Pressable onPress={goToLogin} style={styles.inlineAction} accessibilityRole="button">
                   <ThemedText style={styles.inlineActionText}>
-                    {checkoutCopy.accountRequiredCta}
+                    {t("checkout.accountRequiredCta")}
                   </ThemedText>
                 </Pressable>
               </View>
@@ -567,18 +572,18 @@ export function CartScreen() {
               <ThemedText style={[styles.ctaText, ctaMuted && styles.ctaTextMuted]}>
                 {submitting
                   ? paymentMethod === "stripe"
-                    ? checkoutCopy.redirecting
-                    : checkoutCopy.submitting
+                    ? t("checkout.redirecting")
+                    : t("checkout.submitting")
                   : ctaLabel}
               </ThemedText>
             </Pressable>
             <ThemedText style={styles.terms}>
-              {checkoutCopy.termsPrefix}
+              {t("checkout.termsPrefix")}
               <ThemedText
                 style={styles.termsLink}
                 onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/kopvillkor`)}
               >
-                {checkoutCopy.termsLink}
+                {t("checkout.termsLink")}
               </ThemedText>
               .
             </ThemedText>
@@ -589,17 +594,24 @@ export function CartScreen() {
   );
 }
 
-/* ── Date helpers (verbatim web ports, sv-SE only — mobile is sv-only) ── */
+/* ── Date helpers (verbatim web ports; locale follows the active language) ── */
 
-function formatNextOpen(iso: string | null | undefined): string | null {
+function formatNextOpen(
+  iso: string | null | undefined,
+  t: TFunction,
+  language: AppLanguage,
+): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (isNaN(d.getTime())) return null;
-  const time = d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
-  return checkoutCopy.openAt(time);
+  return t("checkout.openAt", { time: formatTime(d, language) });
 }
 
-function formatOpeningCopy(iso: string | null | undefined): string | null {
+function formatOpeningCopy(
+  iso: string | null | undefined,
+  t: TFunction,
+  language: AppLanguage,
+): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (isNaN(d.getTime())) return null;
@@ -608,11 +620,10 @@ function formatOpeningCopy(iso: string | null | undefined): string | null {
     d.getFullYear() === now.getFullYear() &&
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
-  const time = d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
-  if (sameDay) return checkoutCopy.openToday(time);
-  return checkoutCopy.openOn(
-    d.toLocaleString("sv-SE", { weekday: "short", hour: "2-digit", minute: "2-digit" })
-  );
+  if (sameDay) return t("checkout.openToday", { time: formatTime(d, language) });
+  return t("checkout.openOn", {
+    when: formatDateTime(d, language, { weekday: "short", hour: "2-digit", minute: "2-digit" }),
+  });
 }
 
 /* ── Payment method row (port of the web PaymentRow) ── */
@@ -664,6 +675,8 @@ function PaymentRow({
 /* ── Item card (unchanged from Feature 4) ─────────────────── */
 
 function CartItemCard({ item }: { item: CartItem }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const { updateQuantity, updateSize, removeItem } = useCart();
 
   const isDrink = item.kind === "drink";
@@ -735,7 +748,7 @@ function CartItemCard({ item }: { item: CartItem }) {
                 </ThemedText>
                 {item.isCustom ? (
                   <View style={styles.customBadge}>
-                    <ThemedText style={styles.customBadgeText}>{copy.itemCustom}</ThemedText>
+                    <ThemedText style={styles.customBadgeText}>{t("cart.itemCustom")}</ThemedText>
                   </View>
                 ) : null}
                 {item.slot ? (
@@ -767,16 +780,16 @@ function CartItemCard({ item }: { item: CartItem }) {
             </View>
 
             <View style={styles.itemPriceRow}>
-              <ThemedText style={styles.linePrice}>{formatPriceKr(krToOre(linePriceKr))}</ThemedText>
+              <ThemedText style={styles.linePrice}>{formatPriceKr(krToOre(linePriceKr), language)}</ThemedText>
               {item.quantity > 1 && (
                 <ThemedText style={styles.unitPrice}>
-                  {formatPriceKr(krToOre(unitPriceKr))} × {item.quantity}
+                  {formatPriceKr(krToOre(unitPriceKr), language)} × {item.quantity}
                 </ThemedText>
               )}
             </View>
             {surcharge > 0 && (
               <ThemedText style={styles.surchargeText}>
-                {checkoutCopy.surcharge(surcharge)}
+                {t("checkout.surcharge", { amount: surcharge })}
               </ThemedText>
             )}
           </View>
@@ -789,7 +802,7 @@ function CartItemCard({ item }: { item: CartItem }) {
               onPress={() => updateQuantity(item.id, item.quantity - 1)}
               style={styles.stepperButton}
               accessibilityRole="button"
-              accessibilityLabel={copy.qtyDecrease}
+              accessibilityLabel={t("cart.qtyDecrease")}
             >
               <Minus size={12} color="rgba(255,255,255,0.5)" strokeWidth={2} />
             </Pressable>
@@ -798,7 +811,7 @@ function CartItemCard({ item }: { item: CartItem }) {
               onPress={() => updateQuantity(item.id, item.quantity + 1)}
               style={styles.stepperButton}
               accessibilityRole="button"
-              accessibilityLabel={copy.qtyIncrease}
+              accessibilityLabel={t("cart.qtyIncrease")}
             >
               <Plus size={12} color="rgba(255,255,255,0.5)" strokeWidth={2} />
             </Pressable>
@@ -830,10 +843,10 @@ function CartItemCard({ item }: { item: CartItem }) {
             onPress={() => removeItem(item.id)}
             style={styles.removeButton}
             accessibilityRole="button"
-            accessibilityLabel={copy.itemRemove}
+            accessibilityLabel={t("cart.itemRemove")}
           >
             <X size={13} color="rgba(255,255,255,0.25)" strokeWidth={1.6} />
-            <ThemedText style={styles.removeText}>{copy.itemRemove}</ThemedText>
+            <ThemedText style={styles.removeText}>{t("cart.itemRemove")}</ThemedText>
           </Pressable>
         </View>
       </View>
@@ -842,12 +855,12 @@ function CartItemCard({ item }: { item: CartItem }) {
         <View style={styles.unavailableBox}>
           <AlertTriangle size={13} color={colors.accent} style={{ marginTop: 2 }} />
           <View style={{ flex: 1 }}>
-            <ThemedText style={styles.unavailableHeading}>{copy.stockOutHeading}</ThemedText>
+            <ThemedText style={styles.unavailableHeading}>{t("cart.stockOutHeading")}</ThemedText>
             <ThemedText style={styles.unavailableName}>
               {item.meal.name}
               {sizeShort ? ` · ${sizeShort}` : ""}
             </ThemedText>
-            <ThemedText style={styles.unavailableText}>{copy.stockOutText}</ThemedText>
+            <ThemedText style={styles.unavailableText}>{t("cart.stockOutText")}</ThemedText>
           </View>
         </View>
       )}
@@ -867,19 +880,21 @@ function SummaryCard({
   discountAmountOre: number;
   effectiveTotalOre: number;
 }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const { subtotalOre } = useCart();
   return (
     <View style={styles.summaryCard}>
-      <SummaryRow label={copy.summarySubtotal} value={formatPriceKr(subtotalOre)} />
+      <SummaryRow label={t("cart.summarySubtotal")} value={formatPriceKr(subtotalOre, language)} />
       {coupon ? (
         <SummaryRow
-          label={couponCopy.cartDiscountRow(coupon.code, coupon.percentage)}
-          value={`−${formatPriceKr(discountAmountOre)}`}
+          label={t("coupon.cartDiscountRow", { code: coupon.code, pct: coupon.percentage })}
+          value={`−${formatPriceKr(discountAmountOre, language)}`}
           valueAccent
         />
       ) : null}
-      <SummaryRow label={copy.summaryPickup} value={copy.summaryFree} valueMuted />
-      <SummaryRow label={copy.summaryTotal} value={formatPriceKr(effectiveTotalOre)} isTotal />
+      <SummaryRow label={t("cart.summaryPickup")} value={t("cart.summaryFree")} valueMuted />
+      <SummaryRow label={t("cart.summaryTotal")} value={formatPriceKr(effectiveTotalOre, language)} isTotal />
     </View>
   );
 }
@@ -919,6 +934,7 @@ function SummaryRow({
 /* ── Empty state (port of the web EmptyCart, static ring) ──── */
 
 function EmptyCart() {
+  const { t } = useTranslation();
   const router = useRouter();
   return (
     <ScrollView contentContainerStyle={styles.emptyContent}>
@@ -929,19 +945,19 @@ function EmptyCart() {
             <ShoppingBag size={32} strokeWidth={1.75} color={colors.accent} />
           </View>
         </View>
-        <ThemedText style={styles.emptyHeading}>{copy.emptyHeading}</ThemedText>
-        <ThemedText style={styles.emptyText}>{copy.emptyText}</ThemedText>
+        <ThemedText style={styles.emptyHeading}>{t("cart.emptyHeading")}</ThemedText>
+        <ThemedText style={styles.emptyText}>{t("cart.emptyText")}</ThemedText>
         <Pressable
           onPress={() => router.navigate("/(tabs)/meny")}
           style={({ pressed }) => [styles.emptyCta, pressed && { backgroundColor: colors.accentHover }]}
           accessibilityRole="button"
-          accessibilityLabel={copy.emptyCta}
+          accessibilityLabel={t("cart.emptyCta")}
         >
           <Menu size={14} color={colors.textPrimary} strokeWidth={1.75} />
-          <ThemedText style={styles.emptyCtaText}>{copy.emptyCta}</ThemedText>
+          <ThemedText style={styles.emptyCtaText}>{t("cart.emptyCta")}</ThemedText>
         </Pressable>
       </View>
-      <ThemedText style={styles.emptySubline}>{copy.emptySubline}</ThemedText>
+      <ThemedText style={styles.emptySubline}>{t("cart.emptySubline")}</ThemedText>
     </ScrollView>
   );
 }

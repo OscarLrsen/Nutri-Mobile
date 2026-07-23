@@ -1,5 +1,6 @@
+import type { TFunction } from "i18next";
+
 import type { ApiError } from "@/types/api";
-import { checkoutCopy } from "@/constants/copy";
 
 /**
  * Order-placement error classification, ported from the local helpers in the
@@ -36,7 +37,7 @@ export interface OrderErrorResult {
   unauthorized: boolean;
 }
 
-export function formatOrderError(err: unknown): OrderErrorResult {
+export function formatOrderError(err: unknown, t: TFunction): OrderErrorResult {
   if (!isApiError(err)) {
     // Includes the pre-network "Not authenticated" throw from the auth
     // interceptor / createOrder fast-fail — treat as unauthorized so the
@@ -45,29 +46,29 @@ export function formatOrderError(err: unknown): OrderErrorResult {
     if (err instanceof Error && /not authenticated/i.test(err.message)) {
       return { message: null, unauthorized: true };
     }
-    return { message: checkoutCopy.errorGeneric, unauthorized: false };
+    return { message: t("checkout.errorGeneric"), unauthorized: false };
   }
   if (err.status === 401) {
     return { message: null, unauthorized: true };
   }
   const text = errorText(err);
   if (err.status === 409 && /service is not live/i.test(text)) {
-    return { message: checkoutCopy.errorJustClosed, unauthorized: false };
+    return { message: t("checkout.errorJustClosed"), unauthorized: false };
   }
   if (err.status === 409 && /slut i lager:/i.test(text)) {
     // Web: pull the meal name out of "Slut i lager: <name> storlek <s>" /
     // "Slut i lager: <name> (…)".
     const nameMatch = text.match(/slut i lager:\s*(.+?)(?:\s+storlek\s+|\s+\()/i);
     if (nameMatch) {
-      return { message: checkoutCopy.errorOutOfStockNamed(nameMatch[1]), unauthorized: false };
+      return { message: t("checkout.errorOutOfStockNamed", { name: nameMatch[1] }), unauthorized: false };
     }
-    return { message: checkoutCopy.errorOutOfStockGeneric, unauthorized: false };
+    return { message: t("checkout.errorOutOfStockGeneric"), unauthorized: false };
   }
   if (err.status === 0) {
     // Network-level failure — the interceptor's own Swedish message.
     return { message: err.message, unauthorized: false };
   }
-  return { message: err.message || checkoutCopy.errorGeneric, unauthorized: false };
+  return { message: err.message || t("checkout.errorGeneric"), unauthorized: false };
 }
 
 /** The ONLY messages OrdersController.Create sends when it explicitly

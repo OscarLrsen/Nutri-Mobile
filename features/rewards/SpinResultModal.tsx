@@ -7,7 +7,7 @@ import Animated, { FadeIn, useReducedMotion, ZoomIn } from "react-native-reanima
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import type { ApiSpinResult } from "@/services/api/rewards";
-import { rewardsCopy as copy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -25,6 +25,7 @@ export function SpinResultModal({
   onClose: () => void;
   onShowRewards: () => void;
 }) {
+  const { t } = useTranslation();
   const isWin = !!result && result.resultType !== "NoReward";
   const reducedMotion = useReducedMotion();
 
@@ -39,16 +40,16 @@ export function SpinResultModal({
   if (!result) return null;
   const headline =
     result.resultType === "Points"
-      ? copy.modalWinPoints(result.rewardValue ?? "")
+      ? t("rewards.modalWinPoints", { amount: result.rewardValue ?? "" })
       : result.resultType === "Coupon"
-        ? copy.modalWinCoupon(result.rewardValue ?? "")
-        : copy.modalNoWin;
+        ? t("rewards.modalWinCoupon", { pct: result.rewardValue ?? "" })
+        : t("rewards.modalNoWin");
   const body =
     result.resultType === "Points"
-      ? copy.modalPointsBody
+      ? t("rewards.modalPointsBody")
       : result.resultType === "Coupon"
-        ? copy.modalCouponBody
-        : copy.modalNoWinBody;
+        ? t("rewards.modalCouponBody")
+        : t("rewards.modalNoWinBody");
 
   return (
     <Modal
@@ -85,7 +86,7 @@ export function SpinResultModal({
           {result.resultType === "Points" ? (
             <View style={styles.balanceChip}>
               <ThemedText style={styles.balanceText}>
-                {result.pointsBalance} {copy.pointsUnit}
+                {result.pointsBalance} {t("rewards.pointsUnit")}
               </ThemedText>
             </View>
           ) : result.resultType === "Coupon" && result.coupon ? (
@@ -104,7 +105,9 @@ export function SpinResultModal({
                 ]}
                 accessibilityRole="button"
               >
-                <ThemedText style={styles.primaryButtonText}>{copy.modalShowRewards}</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>
+                  {t("rewards.modalShowRewards")}
+                </ThemedText>
               </Pressable>
             ) : null}
             <Pressable
@@ -112,7 +115,7 @@ export function SpinResultModal({
               style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.7 }]}
               accessibilityRole="button"
             >
-              <ThemedText style={styles.secondaryButtonText}>{copy.modalClose}</ThemedText>
+              <ThemedText style={styles.secondaryButtonText}>{t("rewards.modalClose")}</ThemedText>
             </Pressable>
           </View>
         </Animated.View>

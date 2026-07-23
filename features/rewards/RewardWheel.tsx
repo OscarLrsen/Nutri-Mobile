@@ -24,6 +24,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily } from "@/theme";
 import type { ApiWheelSegment } from "@/services/api/rewards";
 
@@ -153,6 +154,7 @@ export function RewardWheel({
   size?: number;
   onSettled?: () => void;
 }) {
+  const { t } = useTranslation();
   const reducedMotion = useReducedMotion();
   const rotation = useSharedValue(0);
   const wheelScale = useSharedValue(1);
@@ -347,7 +349,7 @@ export function RewardWheel({
   return (
     <View
       style={[styles.wrap, { width: size, height: size }]}
-      accessibilityLabel="Belöningshjul"
+      accessibilityLabel={t("rewards.wheelAria")}
       accessibilityRole="image"
     >
       <Animated.View

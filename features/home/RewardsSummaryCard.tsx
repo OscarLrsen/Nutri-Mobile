@@ -8,7 +8,7 @@ import { ThemedText } from "@/components/ui/ThemedText";
 import { Skeleton } from "@/components/feedback/Skeleton";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { getRewardStatus } from "@/services/api/rewards";
-import { homeCopy, pointsCopy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 
 /**
@@ -19,6 +19,7 @@ import { colors, fontFamily, spacing } from "@/theme";
  */
 export function RewardsSummaryCard() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { user } = useAuth();
 
   const statusQuery = useQuery({
@@ -29,15 +30,21 @@ export function RewardsSummaryCard() {
 
   const status = statusQuery.data ?? null;
   const canSpin = status?.canSpin === true;
-  const balanceLabel = status ? `${status.pointsBalance} ${pointsCopy.balanceUnit}` : homeCopy.pointsHead;
+  const balanceLabel = status
+    ? `${status.pointsBalance} ${t("points.balanceUnit")}`
+    : t("home.pointsHead");
 
   return (
     <Pressable
       onPress={() => router.push("/poang")}
       style={({ pressed }) => [styles.pressTarget, pressed && styles.pressTargetPressed]}
       accessibilityRole="button"
-      accessibilityLabel={`Öppna dina Nutri-poäng${status ? `, saldo ${balanceLabel}` : ""}`}
-      accessibilityHint="Visar poängsaldo och transaktioner"
+      accessibilityLabel={
+        status
+          ? t("home.pointsCardAriaWithBalance", { balance: balanceLabel })
+          : t("home.pointsCardAria")
+      }
+      accessibilityHint={t("home.pointsCardHint")}
     >
       <LinearGradient
         colors={["rgba(232,101,10,0.17)", "rgba(34,27,23,0.96)", colors.card]}
@@ -52,8 +59,8 @@ export function RewardsSummaryCard() {
             <Star size={19} color="#FFAA5B" strokeWidth={2} />
           </View>
           <View style={styles.headingBlock}>
-            <ThemedText style={styles.sectionLabel}>{homeCopy.pointsHead.toUpperCase()}</ThemedText>
-            <ThemedText style={styles.openHint}>Saldo och transaktioner</ThemedText>
+            <ThemedText style={styles.sectionLabel}>{t("home.pointsHead").toUpperCase()}</ThemedText>
+            <ThemedText style={styles.openHint}>{t("home.pointsSubtitle")}</ThemedText>
           </View>
           <View style={styles.chevronWrap}>
             <ChevronRight size={17} color="rgba(255,255,255,0.48)" strokeWidth={2.2} />
@@ -68,7 +75,7 @@ export function RewardsSummaryCard() {
               {status ? status.pointsBalance : "–"}
             </ThemedText>
             <ThemedText variant="caption" style={styles.balanceUnit}>
-              {pointsCopy.balanceUnit}
+              {t("points.balanceUnit")}
             </ThemedText>
           </View>
         )}
@@ -77,7 +84,7 @@ export function RewardsSummaryCard() {
           <View style={styles.spinStatus}>
             <Gift size={14} color={colors.accent} strokeWidth={2} />
             <ThemedText variant="caption" style={styles.spinStatusText}>
-              {homeCopy.spinReady}
+              {t("home.spinReady")}
             </ThemedText>
           </View>
         ) : null}
@@ -101,8 +108,8 @@ const styles = StyleSheet.create({
   },
   card: {
     overflow: "hidden",
-    minHeight: 150,
-    gap: spacing[3],
+    minHeight: 132,
+    gap: spacing[2],
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(255,151,63,0.24)",

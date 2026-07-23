@@ -11,13 +11,14 @@ import {
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { ArrowLeft, Lock, Mail, Shield } from "lucide-react-native";
 
+import { LanguageButton } from "@/components/language/LanguageButton";
 import { Screen } from "@/components/ui/Screen";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { AuthTextField } from "@/components/auth/AuthTextField";
 import { supabase } from "@/services/auth/supabase";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { env } from "@/lib/env";
-import { authCopy as copy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 
 /**
@@ -38,6 +39,7 @@ import { colors, fontFamily, spacing } from "@/theme";
  *   (the reset flow lives on the web; mobile has no reset route yet).
  */
 export function LoginScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { next } = useLocalSearchParams<{ next?: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -72,9 +74,9 @@ export function LoginScreen() {
 
     const trimmedEmail = email.trim();
     const nextErrors: typeof fieldErrors = {};
-    if (!trimmedEmail) nextErrors.email = copy.emailRequired;
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) nextErrors.email = copy.emailInvalid;
-    if (!password) nextErrors.password = copy.passwordRequired;
+    if (!trimmedEmail) nextErrors.email = t("auth.emailRequired");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) nextErrors.email = t("auth.emailInvalid");
+    if (!password) nextErrors.password = t("auth.passwordRequired");
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -82,7 +84,7 @@ export function LoginScreen() {
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (signInError) {
-      setError(copy.loginErrorWrong);
+      setError(t("auth.loginErrorWrong"));
       setLoading(false);
       return;
     }
@@ -97,25 +99,28 @@ export function LoginScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Pressable
-            onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)"))}
-            style={styles.backButton}
-            accessibilityRole="button"
-            accessibilityLabel="Tillbaka"
-          >
-            <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
-          </Pressable>
+          <View style={styles.topRow}>
+            <Pressable
+              onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)"))}
+              style={styles.backButton}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.back")}
+            >
+              <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
+            </Pressable>
+            <LanguageButton />
+          </View>
 
           {/* Brand */}
           <ThemedText style={styles.wordmark}>NUTRI</ThemedText>
 
           {/* Heading */}
-          <ThemedText style={styles.title}>{copy.loginTitle}</ThemedText>
-          <ThemedText style={styles.subtitle}>{copy.loginSubtitle}</ThemedText>
+          <ThemedText style={styles.title}>{t("auth.loginTitle")}</ThemedText>
+          <ThemedText style={styles.subtitle}>{t("auth.loginSubtitle")}</ThemedText>
 
           <View style={styles.fields}>
             <AuthTextField
-              label={copy.email}
+              label={t("auth.email")}
               icon={<Mail size={16} color="rgba(255,255,255,0.4)" strokeWidth={1.6} />}
               error={fieldErrors.email}
               value={email}
@@ -123,13 +128,13 @@ export function LoginScreen() {
                 setEmail(v);
                 if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
               }}
-              placeholder={copy.emailPlaceholder}
+              placeholder={t("auth.emailPlaceholder")}
               autoCapitalize="none"
               autoComplete="email"
               keyboardType="email-address"
             />
             <AuthTextField
-              label={copy.password}
+              label={t("auth.password")}
               icon={<Lock size={16} color="rgba(255,255,255,0.4)" strokeWidth={1.6} />}
               error={fieldErrors.password}
               isPassword
@@ -138,7 +143,7 @@ export function LoginScreen() {
                   onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/glomt-losenord`)}
                   accessibilityRole="link"
                 >
-                  <ThemedText style={styles.forgotLink}>{copy.forgot}</ThemedText>
+                  <ThemedText style={styles.forgotLink}>{t("auth.forgot")}</ThemedText>
                 </Pressable>
               }
               value={password}
@@ -163,28 +168,28 @@ export function LoginScreen() {
               loading && { opacity: 0.7 },
             ]}
             accessibilityRole="button"
-            accessibilityLabel={copy.loginCta}
+            accessibilityLabel={t("auth.loginCta")}
           >
             <ThemedText style={styles.ctaText}>
-              {loading ? `${copy.loginCta}…` : copy.loginCta}
+              {loading ? `${t("auth.loginCta")}…` : t("auth.loginCta")}
             </ThemedText>
           </Pressable>
 
           <View style={styles.promptRow}>
-            <ThemedText style={styles.promptText}>{copy.loginPrompt}</ThemedText>
+            <ThemedText style={styles.promptText}>{t("auth.loginPrompt")}</ThemedText>
             <Pressable
               onPress={() =>
                 router.push(next ? { pathname: "/registrera", params: { next } } : "/registrera")
               }
               accessibilityRole="link"
             >
-              <ThemedText style={styles.promptLink}>{copy.createAccount}</ThemedText>
+              <ThemedText style={styles.promptLink}>{t("auth.createAccount")}</ThemedText>
             </Pressable>
           </View>
 
           <View style={styles.securityRow}>
             <Shield size={11} color={colors.accent} strokeWidth={1.6} />
-            <ThemedText style={styles.securityText}>{copy.security}</ThemedText>
+            <ThemedText style={styles.securityText}>{t("auth.security")}</ThemedText>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -194,6 +199,11 @@ export function LoginScreen() {
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingHorizontal: spacing[5], paddingTop: spacing[3], gap: spacing[4] },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   backButton: {
     width: 36,
     height: 36,

@@ -1,6 +1,7 @@
 import { StyleSheet, View } from "react-native";
 import { AlertCircle } from "lucide-react-native";
 
+import { useTranslation } from "@/i18n";
 import { colors, spacing } from "@/theme";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { Button } from "@/components/ui/Button";
@@ -12,13 +13,14 @@ import { Button } from "@/components/ui/Button";
  * web app's lucide-react (same icon names, spec §15.4).
  */
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.container}>
       <AlertCircle color={colors.error} size={28} />
       <ThemedText variant="body" color="error" style={styles.message}>
         {message}
       </ThemedText>
-      {onRetry ? <Button label="Försök igen" variant="secondary" onPress={onRetry} /> : null}
+      {onRetry ? <Button label={t("common.retry")} variant="secondary" onPress={onRetry} /> : null}
     </View>
   );
 }

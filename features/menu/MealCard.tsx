@@ -9,7 +9,7 @@ import { useCart } from "@/context/CartContext";
 import type { ApiMeal, ApiMealAvailability } from "@/services/api/meals";
 import { apiMealToMeal, CUSTOMER_SIZE_OPTIONS, previewMealPriceOre } from "@/utils/pricing";
 import { formatPriceKr } from "@/utils/money";
-import { mealDetailCopy, menuCopy } from "@/constants/copy";
+import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -32,6 +32,8 @@ interface MealCardProps {
 }
 
 export function MealCard({ meal, availability }: MealCardProps) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const router = useRouter();
   const { addItem } = useCart();
   const isFixed = meal.portionMode === "fixed";
@@ -109,7 +111,7 @@ export function MealCard({ meal, availability }: MealCardProps) {
         style={({ pressed }) => [styles.detailArea, pressed && styles.detailAreaPressed]}
         accessibilityRole="button"
         accessibilityLabel={meal.name}
-        accessibilityHint="Öppnar måltidens detaljer"
+        accessibilityHint={t("menu.openMealDetailsHint")}
       >
       {/* Image */}
       <View style={styles.imageWrap}>
@@ -140,7 +142,7 @@ export function MealCard({ meal, availability }: MealCardProps) {
           <ThemedText variant="bodyMedium" style={styles.title} numberOfLines={2}>
             {meal.name}
           </ThemedText>
-          <ThemedText style={styles.price}>{formatPriceKr(priceOre)}</ThemedText>
+          <ThemedText style={styles.price}>{formatPriceKr(priceOre, language)}</ThemedText>
         </View>
 
         {meal.description ? (
@@ -162,13 +164,13 @@ export function MealCard({ meal, availability }: MealCardProps) {
             {allSoldOut ? (
               <View style={[styles.stockPill, styles.soldOutPill]}>
                 <ThemedText style={styles.soldOutText}>
-                  {menuCopy.soldOutToday.toUpperCase()}
+                  {t("menu.soldOutToday").toUpperCase()}
                 </ThemedText>
               </View>
             ) : showLowStock && selected.count !== null ? (
               <View style={[styles.stockPill, styles.lowStockPill]}>
                 <ThemedText style={styles.lowStockText}>
-                  {menuCopy.stockLeft(selected.count).toUpperCase()}
+                  {t("menu.stockLeft", { count: selected.count }).toUpperCase()}
                 </ThemedText>
               </View>
             ) : null}
@@ -192,7 +194,7 @@ export function MealCard({ meal, availability }: MealCardProps) {
                   style={[styles.sizeButton, isSelected && !sSoldOut && styles.sizeButtonSelected]}
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected, disabled: sSoldOut }}
-                  accessibilityLabel={sSoldOut ? menuCopy.sizeSoldOut(s.label) : s.label}
+                  accessibilityLabel={sSoldOut ? t("menu.sizeSoldOut", { size: s.label }) : s.label}
                 >
                   <ThemedText
                     style={[
@@ -223,22 +225,22 @@ export function MealCard({ meal, availability }: MealCardProps) {
           accessibilityRole="button"
           accessibilityState={{ disabled: stockLocked || added }}
           accessibilityLabel={
-            stockLocked ? menuCopy.soldOutToday : added ? menuCopy.added : mealDetailCopy.add
+            stockLocked ? t("menu.soldOutToday") : added ? t("menu.added") : t("mealDetail.add")
           }
         >
           {stockLocked ? (
-            <ThemedText style={styles.addLabelLocked}>{menuCopy.soldOutToday}</ThemedText>
+            <ThemedText style={styles.addLabelLocked}>{t("menu.soldOutToday")}</ThemedText>
           ) : added ? (
             <>
               <Check size={12} color={colors.accent} strokeWidth={2.5} />
               <ThemedText style={[styles.addLabel, styles.addLabelAdded]}>
-                {menuCopy.added}
+                {t("menu.added")}
               </ThemedText>
             </>
           ) : (
             <>
               <Plus size={12} color={colors.textPrimary} strokeWidth={2.5} />
-              <ThemedText style={styles.addLabel}>{mealDetailCopy.add}</ThemedText>
+              <ThemedText style={styles.addLabel}>{t("mealDetail.add")}</ThemedText>
             </>
           )}
         </Pressable>

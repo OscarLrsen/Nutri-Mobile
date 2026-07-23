@@ -15,18 +15,21 @@ import { RewardsBell } from "./RewardsBell";
 import { DailyTargetsCard } from "./DailyTargetsCard";
 import { TodayOrderStatusCard } from "./TodayOrderStatusCard";
 import { RewardsSummaryCard } from "./RewardsSummaryCard";
-import { QuickActions } from "./QuickActions";
 import { LoggedOutHome } from "./LoggedOutHome";
 
 /**
  * Hem — personal nutrition dashboard (Patch 1 IA).
  *
- * Signed in: greeting → today's targets → today's order status → points →
- * quick actions. Each section is its own component owning its own query via
- * the shared auth-gated hooks (services/api/nutritionQueries, rewards
- * status) — no store status here anymore: the 30s ["store","status"] poll
- * moved to Meny together with all ordering-related content (the old sales
- * hero, "Se menyn" main CTA, FullDayMealCard, FindUs/About/Footer).
+ * Signed in: greeting → today's targets → today's order status → points.
+ * Quick actions (Snabbval) was removed from Hem so the whole dashboard fits
+ * a normal phone screen without scrolling; its destinations remain reachable
+ * elsewhere (Meny and Mina sidor via the tab bar, Nutri Anpassar via its
+ * entry card on Meny).
+ * Each remaining section is its own component owning its own query via the
+ * shared auth-gated hooks (services/api/nutritionQueries, rewards status) —
+ * no store status here anymore: the 30s ["store","status"] poll moved to
+ * Meny together with all ordering-related content (the old sales hero, "Se
+ * menyn" main CTA, FullDayMealCard, FindUs/About/Footer).
  *
  * Signed out: a static entry point that fetches nothing (every dashboard
  * endpoint requires auth).
@@ -86,7 +89,6 @@ export function HomeScreen() {
             <DailyTargetsCard />
             <TodayOrderStatusCard />
             <RewardsSummaryCard />
-            <QuickActions />
           </View>
         ) : (
           <LoggedOutHome />
@@ -105,23 +107,23 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: spacing[5],
-    paddingTop: spacing[4],
-    paddingBottom: spacing[8],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[5],
   },
   contentLoggedOut: {
     flexGrow: 1,
   },
   hero: {
     overflow: "hidden",
-    gap: spacing[4],
+    gap: spacing[3],
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.07)",
     backgroundColor: colors.card,
     paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    paddingBottom: spacing[4],
-    marginBottom: spacing[4],
+    paddingTop: spacing[2],
+    paddingBottom: spacing[3],
+    marginBottom: spacing[3],
   },
   heroLoggedOut: {
     paddingBottom: spacing[3],
@@ -151,6 +153,6 @@ const styles = StyleSheet.create({
     height: 46,
   },
   sections: {
-    gap: 14,
+    gap: spacing[2],
   },
 });

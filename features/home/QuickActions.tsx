@@ -3,7 +3,7 @@ import { useRouter } from "expo-router";
 import { ChevronRight, UtensilsCrossed, User, WandSparkles } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
-import { heroCopy, homeCopy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -12,29 +12,30 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  * Deliberately NOT labelled "Min profil" (Patch 1 IA decision).
  */
 export function QuickActions() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   return (
     <View style={styles.container}>
-      <ThemedText style={styles.sectionLabel}>{homeCopy.actionsHead.toUpperCase()}</ThemedText>
+      <ThemedText style={styles.sectionLabel}>{t("home.actionsHead").toUpperCase()}</ThemedText>
 
       <View style={styles.list}>
         <ActionRow
           icon={<UtensilsCrossed size={17} color={colors.accent} />}
-          label={heroCopy.seeMenu}
-          sub={homeCopy.actionMenuSub}
+          label={t("hero.seeMenu")}
+          sub={t("home.actionMenuSub")}
           onPress={() => router.navigate("/(tabs)/meny")}
         />
         <ActionRow
           icon={<WandSparkles size={17} color={colors.accent} />}
-          label={heroCopy.nutriCustomize}
-          sub={homeCopy.actionAnpassarSub}
+          label={t("hero.nutriCustomize")}
+          sub={t("home.actionAnpassarSub")}
           onPress={() => router.push("/nutri-anpassar")}
         />
         <ActionRow
           icon={<User size={17} color={colors.accent} />}
-          label={homeCopy.actionAccount}
-          sub={homeCopy.actionAccountSub}
+          label={t("home.actionAccount")}
+          sub={t("home.actionAccountSub")}
           onPress={() => router.navigate("/(tabs)/konto")}
           last
         />

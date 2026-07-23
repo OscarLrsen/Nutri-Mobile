@@ -1,5 +1,6 @@
 import axios, { AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
 
+import i18n from "@/i18n/config";
 import { env } from "@/lib/env";
 import { getAccessToken } from "@/services/auth/getAccessToken";
 import type { ApiError } from "@/types/api";
@@ -72,7 +73,9 @@ apiClient.interceptors.response.use(
           // equivalent issue. status: 0 lets callers distinguish "server
           // said no" from "couldn't reach the server at all".
           status: 0,
-          message: "Kunde inte nå Nutri. Kontrollera din internetanslutning.",
+          // Resolved at error time via the shared i18n instance (module
+          // scope has no hooks) — follows the language active right now.
+          message: i18n.t("common.networkError"),
           details: error.message,
         };
     return Promise.reject(normalized);

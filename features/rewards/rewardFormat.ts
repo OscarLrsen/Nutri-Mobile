@@ -1,21 +1,29 @@
+import type { TFunction } from "i18next";
+
 import type { ApiUserReward } from "@/services/api/rewards";
-import { rewardsCopy as copy } from "@/constants/copy";
+import { formatDate, type AppLanguage } from "@/i18n";
 
 /** Feature-local formatting shared by the rewards screen sections —
  * mirrors features/coupons/couponFormat.ts. */
 
-export function formatRewardDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("sv-SE", { day: "numeric", month: "long" });
+export function formatRewardDate(iso: string, language: AppLanguage): string {
+  return formatDate(new Date(iso), language, { day: "numeric", month: "long" });
 }
 
-/** One status-appropriate meta line: validity, redeemed-at or expired-at. */
-export function rewardMetaLine(reward: ApiUserReward): string {
+/** One status-appropriate meta line: validity, redeemed-at or expired-at. The
+ * caller passes its own `t`/`language` so the line follows the active language. */
+export function rewardMetaLine(
+  reward: ApiUserReward,
+  t: TFunction,
+  language: AppLanguage,
+): string {
   if (reward.status === "Redeemed" && reward.redeemedAt)
-    return copy.redeemedAt(formatRewardDate(reward.redeemedAt));
+    return t("rewards.redeemedAt", { date: formatRewardDate(reward.redeemedAt, language) });
   if (reward.status === "Expired" && reward.expiresAt)
-    return copy.expiredAt(formatRewardDate(reward.expiresAt));
-  if (reward.expiresAt) return copy.validUntil(formatRewardDate(reward.expiresAt));
-  return copy.wonAt(formatRewardDate(reward.createdAt));
+    return t("rewards.expiredAt", { date: formatRewardDate(reward.expiresAt, language) });
+  if (reward.expiresAt)
+    return t("rewards.validUntil", { date: formatRewardDate(reward.expiresAt, language) });
+  return t("rewards.wonAt", { date: formatRewardDate(reward.createdAt, language) });
 }
 
 /** Same palette as COUPON_STATUS_COLORS, keyed by UserRewardStatus. */

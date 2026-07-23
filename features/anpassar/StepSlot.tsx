@@ -3,7 +3,7 @@ import { ArrowRight, Star } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import type { ApiMealDistribution, MacroTargetDto } from "@/services/api/nutrition";
-import { nutriAnpassarCopy as copy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import type { WizardSlot } from "./optimizer";
 
@@ -37,6 +37,8 @@ const SLOT_OPEN_HOURS: Record<ShownSlot, { from: number; to: number }> = {
 type SlotState = "active" | "upcoming" | "past";
 
 function getStockholmHour(): number {
+  // Locale here only satisfies the API — the numeric hour in
+  // Europe/Stockholm is locale-independent (not user-facing formatting).
   const parts = new Intl.DateTimeFormat("sv-SE", {
     hour: "2-digit",
     hour12: false,
@@ -61,6 +63,7 @@ interface Props {
 }
 
 export function StepSlot({ meals, remainingToday, isClosed, onSelect }: Props) {
+  const { t } = useTranslation();
   const swHour = getStockholmHour();
   const totalProtein = meals.reduce((sum, m) => sum + m.proteinG, 0);
 
@@ -68,15 +71,15 @@ export function StepSlot({ meals, remainingToday, isClosed, onSelect }: Props) {
 
   const getUpcomingSubText = (slot: ShownSlot) => {
     const { from } = SLOT_OPEN_HOURS[slot];
-    return swHour >= from ? copy.slotChooseMealType : copy.slotOpensAt(from);
+    return swHour >= from ? t("nutriAnpassar.slotChooseMealType") : t("nutriAnpassar.slotOpensAt", { hour: from });
   };
 
   return (
     <View>
       {/* Hero */}
       <View style={styles.hero}>
-        <ThemedText style={styles.heroTitle}>{copy.slotHeroTitle}</ThemedText>
-        <ThemedText style={styles.heroSubtitle}>{copy.slotHeroSubtitle}</ThemedText>
+        <ThemedText style={styles.heroTitle}>{t("nutriAnpassar.slotHeroTitle")}</ThemedText>
+        <ThemedText style={styles.heroSubtitle}>{t("nutriAnpassar.slotHeroSubtitle")}</ThemedText>
       </View>
 
       {/* Remaining-today info (web: shown when < 600 kcal left) */}
@@ -87,8 +90,8 @@ export function StepSlot({ meals, remainingToday, isClosed, onSelect }: Props) {
       {/* Closed banner */}
       {isClosed && (
         <View style={styles.infoCard}>
-          <ThemedText style={styles.infoCardTitle}>{copy.slotClosedTitle}</ThemedText>
-          <ThemedText style={styles.infoCardBody}>{copy.slotClosedBody}</ThemedText>
+          <ThemedText style={styles.infoCardTitle}>{t("nutriAnpassar.slotClosedTitle")}</ThemedText>
+          <ThemedText style={styles.infoCardBody}>{t("nutriAnpassar.slotClosedBody")}</ThemedText>
         </View>
       )}
 
@@ -106,7 +109,9 @@ export function StepSlot({ meals, remainingToday, isClosed, onSelect }: Props) {
               key={slot}
               slot={slot}
               subText={
-                state === "upcoming" ? getUpcomingSubText(slot) : copy.slotServed(SLOT_WINDOW[slot])
+                state === "upcoming"
+                  ? getUpcomingSubText(slot)
+                  : t("nutriAnpassar.slotServed", { window: SLOT_WINDOW[slot] })
               }
               onSelect={onSelect}
             />
@@ -118,8 +123,8 @@ export function StepSlot({ meals, remainingToday, isClosed, onSelect }: Props) {
       {totalProtein > 0 && (
         <View style={styles.goalFooter}>
           <View style={styles.goalDot} />
-          <ThemedText style={styles.goalText}>{copy.slotBasedOnGoal}</ThemedText>
-          <ThemedText style={styles.goalValue}>{copy.slotProteinPerDay(totalProtein)}</ThemedText>
+          <ThemedText style={styles.goalText}>{t("nutriAnpassar.slotBasedOnGoal")}</ThemedText>
+          <ThemedText style={styles.goalValue}>{t("nutriAnpassar.slotProteinPerDay", { protein: totalProtein })}</ThemedText>
         </View>
       )}
     </View>
@@ -127,22 +132,23 @@ export function StepSlot({ meals, remainingToday, isClosed, onSelect }: Props) {
 }
 
 function RemainingInfoCard({ remaining }: { remaining: MacroTargetDto }) {
+  const { t } = useTranslation();
   const GREEN = "#22c55e";
   let title: string;
   let sub: string;
   let color: string;
 
   if (remaining.calories <= 0 && remaining.proteinG <= 0) {
-    title = copy.remainingGoalReachedTitle;
-    sub = copy.remainingGoalReachedSub;
+    title = t("nutriAnpassar.remainingGoalReachedTitle");
+    sub = t("nutriAnpassar.remainingGoalReachedSub");
     color = GREEN;
   } else if (remaining.calories < 300 && remaining.proteinG > 0) {
-    title = copy.remainingLowEnergyTitle;
-    sub = copy.remainingLowEnergySub;
+    title = t("nutriAnpassar.remainingLowEnergyTitle");
+    sub = t("nutriAnpassar.remainingLowEnergySub");
     color = colors.accent;
   } else {
-    title = copy.remainingLeftToday(remaining.calories, remaining.proteinG);
-    sub = copy.remainingLightMeal;
+    title = t("nutriAnpassar.remainingLeftToday", { calories: remaining.calories, protein: remaining.proteinG });
+    sub = t("nutriAnpassar.remainingLightMeal");
     color = "rgba(255,255,255,0.5)";
   }
 
@@ -163,7 +169,8 @@ function ActiveMealCard({
   target: ApiMealDistribution | undefined;
   onSelect: (slot: WizardSlot) => void;
 }) {
-  const label = copy.slotNames[slot] ?? slot;
+  const { t } = useTranslation();
+  const label = t(`nutriAnpassar.slotNames.${slot}`, { defaultValue: slot });
   return (
     <Pressable
       onPress={() => onSelect(slot)}
@@ -173,7 +180,7 @@ function ActiveMealCard({
         pressed && { borderColor: "rgba(232,101,10,0.85)" },
       ]}
       accessibilityRole="button"
-      accessibilityLabel={copy.chooseSlotAria(label)}
+      accessibilityLabel={t("nutriAnpassar.chooseSlotAria", { slot: label })}
     >
       <View style={styles.slotCardRow}>
         <View style={{ flex: 1 }}>
@@ -192,7 +199,7 @@ function ActiveMealCard({
           )}
           <View style={styles.adaptedRow}>
             <Star size={11} color={colors.accent} strokeWidth={1.2} fill="rgba(232,101,10,0.15)" />
-            <ThemedText style={styles.adaptedText}>{copy.slotAdapted}</ThemedText>
+            <ThemedText style={styles.adaptedText}>{t("nutriAnpassar.slotAdapted")}</ThemedText>
           </View>
         </View>
         <View style={styles.arrowCircleActive}>
@@ -212,7 +219,8 @@ function UpcomingMealCard({
   subText: string;
   onSelect: (slot: WizardSlot) => void;
 }) {
-  const label = copy.slotNames[slot] ?? slot;
+  const { t } = useTranslation();
+  const label = t(`nutriAnpassar.slotNames.${slot}`, { defaultValue: slot });
   return (
     <Pressable
       onPress={() => onSelect(slot)}
@@ -222,7 +230,7 @@ function UpcomingMealCard({
         pressed && { borderColor: "rgba(232,101,10,0.48)" },
       ]}
       accessibilityRole="button"
-      accessibilityLabel={copy.chooseSlotAria(label)}
+      accessibilityLabel={t("nutriAnpassar.chooseSlotAria", { slot: label })}
     >
       <View style={styles.slotCardRow}>
         <View style={{ flex: 1 }}>

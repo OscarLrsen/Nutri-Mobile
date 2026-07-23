@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { Skeleton } from "@/components/feedback/Skeleton";
 import { isProfileGapError, useTodayNutritionQuery } from "@/services/api/nutritionQueries";
-import { homeCopy, menuCopy, profileCopy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -18,12 +18,13 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  * base targets with an explanatory caption.
  */
 export function DailyTargetsCard() {
+  const { t } = useTranslation();
   const router = useRouter();
   const todayQuery = useTodayNutritionQuery();
 
   if (todayQuery.isLoading) {
     return (
-      <Card style={styles.card} accessibilityLabel={homeCopy.planHead}>
+      <Card style={styles.card} accessibilityLabel={t("home.planHead")}>
         <SectionLabel />
         <Skeleton height={40} width={140} />
         <Skeleton height={16} />
@@ -35,19 +36,19 @@ export function DailyTargetsCard() {
     return (
       <Card style={styles.card}>
         <ThemedText variant="bodyMedium" style={styles.missingTitle}>
-          {homeCopy.missingProfileTitle}
+          {t("home.missingProfileTitle")}
         </ThemedText>
         <ThemedText variant="caption" style={styles.missingBody}>
-          {homeCopy.missingProfileBody}
+          {t("home.missingProfileBody")}
         </ThemedText>
         <Pressable
           onPress={() => router.navigate("/(tabs)/konto")}
           style={({ pressed }) => [styles.missingCta, pressed && { opacity: 0.85 }]}
           accessibilityRole="button"
-          accessibilityLabel={homeCopy.missingProfileCta}
+          accessibilityLabel={t("home.missingProfileCta")}
         >
           <ThemedText variant="bodyMedium" style={styles.missingCtaText}>
-            {homeCopy.missingProfileCta}
+            {t("home.missingProfileCta")}
           </ThemedText>
         </Pressable>
       </Card>
@@ -59,16 +60,16 @@ export function DailyTargetsCard() {
       <Card style={styles.card}>
         <SectionLabel />
         <ThemedText variant="caption" style={styles.errorText}>
-          {homeCopy.planError}
+          {t("home.planError")}
         </ThemedText>
         <Pressable
           onPress={() => todayQuery.refetch()}
           style={({ pressed }) => [styles.retry, pressed && { opacity: 0.7 }]}
           accessibilityRole="button"
-          accessibilityLabel={menuCopy.retry}
+          accessibilityLabel={t("menu.retry")}
         >
           <ThemedText variant="caption" style={styles.retryText}>
-            {menuCopy.retry}
+            {t("menu.retry")}
           </ThemedText>
         </Pressable>
       </Card>
@@ -78,11 +79,11 @@ export function DailyTargetsCard() {
   const today = todayQuery.data;
   const target = today.adjustedTarget;
   const dayTypeName = today.dayType
-    ? (profileCopy.dayTypeNames[today.dayType] ?? today.dayType)
+    ? t(`profile.dayTypeNames.${today.dayType}`, { defaultValue: today.dayType })
     : null;
 
   return (
-    <Card style={styles.card} accessibilityLabel={homeCopy.planHead}>
+    <Card style={styles.card} accessibilityLabel={t("home.planHead")}>
       <View style={styles.headRow}>
         <SectionLabel />
         {dayTypeName ? (
@@ -97,19 +98,19 @@ export function DailyTargetsCard() {
           {target.calories}
         </ThemedText>
         <ThemedText variant="caption" style={styles.kcalLabel}>
-          {homeCopy.kcalPerDay}
+          {t("home.kcalPerDay")}
         </ThemedText>
       </View>
 
       <View style={styles.macroRow}>
-        <Macro label={homeCopy.macroProtein} grams={target.proteinG} highlight />
-        <Macro label={homeCopy.macroCarbs} grams={target.carbsG} />
-        <Macro label={homeCopy.macroFat} grams={target.fatG} />
+        <Macro label={t("home.macroProtein")} grams={target.proteinG} highlight />
+        <Macro label={t("home.macroCarbs")} grams={target.carbsG} />
+        <Macro label={t("home.macroFat")} grams={target.fatG} />
       </View>
 
       {!today.dayType ? (
         <ThemedText variant="caption" style={styles.noSchedule}>
-          {homeCopy.noSchedule}
+          {t("home.noSchedule")}
         </ThemedText>
       ) : null}
     </Card>
@@ -117,16 +118,18 @@ export function DailyTargetsCard() {
 }
 
 function SectionLabel() {
-  return <ThemedText style={styles.sectionLabel}>{homeCopy.planHead.toUpperCase()}</ThemedText>;
+  const { t } = useTranslation();
+  return <ThemedText style={styles.sectionLabel}>{t("home.planHead").toUpperCase()}</ThemedText>;
 }
 
 function Macro({ label, grams, highlight = false }: { label: string; grams: number; highlight?: boolean }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.macro}>
       <ThemedText variant="monoLarge" style={[styles.macroValue, highlight && styles.macroValueHighlight]}>
         {grams}
         <ThemedText variant="caption" style={styles.macroUnit}>
-          {homeCopy.gramUnit}
+          {t("home.gramUnit")}
         </ThemedText>
       </ThemedText>
       <ThemedText variant="caption" style={styles.macroLabel}>

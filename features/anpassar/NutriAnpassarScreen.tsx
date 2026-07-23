@@ -26,7 +26,7 @@ import type { CustomMealCalculateResponse } from "@/services/api/customMeal";
 import type { ApiError } from "@/types/api";
 import { apiMealToMeal } from "@/utils/pricing";
 import { env } from "@/lib/env";
-import { nutriAnpassarCopy as copy, onboardingGateCopy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 import { buildNutriAdaptiveTarget } from "./buildNutriAdaptiveTarget";
 import type { NutriGoalType } from "./nutriAnpassarTypes";
@@ -78,6 +78,7 @@ interface AnpassarData {
 }
 
 export function NutriAnpassarScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, loading: authLoading } = useAuth();
@@ -241,9 +242,9 @@ export function NutriAnpassarScreen() {
     return (
       <ErrorScreen
         emoji="🥗"
-        title={copy.errorProfileTitle}
-        body={copy.errorProfileBody}
-        ctaLabel={copy.errorProfileCta}
+        title={t("nutriAnpassar.errorProfileTitle")}
+        body={t("nutriAnpassar.errorProfileBody")}
+        ctaLabel={t("nutriAnpassar.errorProfileCta")}
         onCta={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/profil`)}
         onBack={handleBack}
       />
@@ -253,9 +254,9 @@ export function NutriAnpassarScreen() {
     return (
       <ErrorScreen
         emoji="⚡"
-        title={copy.errorNetworkTitle}
-        body={copy.errorNetworkBody}
-        ctaLabel={copy.errorRetry}
+        title={t("nutriAnpassar.errorNetworkTitle")}
+        body={t("nutriAnpassar.errorNetworkBody")}
+        ctaLabel={t("nutriAnpassar.errorRetry")}
         onCta={() => {
           setErrorKind(null);
           setLoading(true);
@@ -336,13 +337,14 @@ export function NutriAnpassarScreen() {
 /* ── Header (web: AppPageHeader — back + wordmark) ─────────── */
 
 function Header({ onBack, insetsTop }: { onBack: () => void; insetsTop: number }) {
+  const { t } = useTranslation();
   return (
     <View style={[styles.header, { paddingTop: insetsTop }]}>
       <Pressable
         onPress={onBack}
         style={styles.headerButton}
         accessibilityRole="button"
-        accessibilityLabel="Tillbaka"
+        accessibilityLabel={t("common.back")}
       >
         <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
       </Pressable>
@@ -363,6 +365,7 @@ export function OnboardingGate({
   onPrimary: () => void;
   onSecondary: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.gateBackdrop}>
       <View style={styles.gateSheet}>
@@ -370,21 +373,21 @@ export function OnboardingGate({
         <View style={styles.gateIcon}>
           <Clock size={20} color={colors.accent} strokeWidth={1.8} />
         </View>
-        <ThemedText style={styles.gateTitle}>{onboardingGateCopy.title}</ThemedText>
-        <ThemedText style={styles.gateBody}>{onboardingGateCopy.body}</ThemedText>
+        <ThemedText style={styles.gateTitle}>{t("onboardingGate.title")}</ThemedText>
+        <ThemedText style={styles.gateBody}>{t("onboardingGate.body")}</ThemedText>
         <Pressable
           onPress={onPrimary}
           style={({ pressed }) => [styles.gatePrimary, pressed && { backgroundColor: colors.accentHover }]}
           accessibilityRole="button"
         >
-          <ThemedText style={styles.gatePrimaryText}>{onboardingGateCopy.primary}</ThemedText>
+          <ThemedText style={styles.gatePrimaryText}>{t("onboardingGate.primary")}</ThemedText>
         </Pressable>
         <Pressable
           onPress={onSecondary}
           style={({ pressed }) => [styles.gateSecondary, pressed && { backgroundColor: "rgba(255,255,255,0.06)" }]}
           accessibilityRole="button"
         >
-          <ThemedText style={styles.gateSecondaryText}>{onboardingGateCopy.secondary}</ThemedText>
+          <ThemedText style={styles.gateSecondaryText}>{t("onboardingGate.secondary")}</ThemedText>
         </Pressable>
       </View>
     </View>

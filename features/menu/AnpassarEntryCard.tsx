@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 
-import { heroCopy, landingCopy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { MenuPlanCard } from "./MenuPlanCard";
 
 /**
@@ -10,15 +10,16 @@ import { MenuPlanCard } from "./MenuPlanCard";
  * NutriAnpassarScreen (web parity), so a plain push is correct here.
  */
 export function AnpassarEntryCard() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   return (
     <MenuPlanCard
-      badge={landingCopy.anpassarBadge}
-      heading={heroCopy.nutriCustomize}
-      subheading={landingCopy.anpassarSubheading}
-      ctaLabel={landingCopy.anpassarCta}
-      accessibilityLabel={heroCopy.nutriCustomize}
+      badge={t("landing.anpassarBadge")}
+      heading={t("hero.nutriCustomize")}
+      subheading={t("landing.anpassarSubheading")}
+      ctaLabel={t("landing.anpassarCta")}
+      accessibilityLabel={t("hero.nutriCustomize")}
       onPress={() => router.push("/nutri-anpassar")}
     />
   );

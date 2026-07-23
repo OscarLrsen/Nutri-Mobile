@@ -16,7 +16,7 @@ import { getIngredients } from "@/services/api/ingredients";
 import { getStoreStatus } from "@/services/api/store";
 import { apiMealToMeal, CUSTOMER_SIZE_OPTIONS, previewMealPriceOre } from "@/utils/pricing";
 import { formatPriceKr } from "@/utils/money";
-import { mealDetailCopy as copy, menuCopy } from "@/constants/copy";
+import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -43,6 +43,8 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
 const LOW_STOCK_THRESHOLD = 3;
 
 export function MealDetailScreen() {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -163,7 +165,7 @@ export function MealDetailScreen() {
   if (mealQuery.isLoading) {
     return (
       <View style={[styles.root, styles.center]}>
-        <LoadingIndicator label={`${copy.loading}...`} />
+        <LoadingIndicator label={`${t("mealDetail.loading")}...`} />
       </View>
     );
   }
@@ -171,10 +173,10 @@ export function MealDetailScreen() {
   if (mealQuery.isError || !meal) {
     return (
       <View style={[styles.root, styles.center]}>
-        <ErrorState message={copy.notFound} onRetry={() => router.back()} />
+        <ErrorState message={t("mealDetail.notFound")} onRetry={() => router.back()} />
         <Pressable onPress={() => router.back()} accessibilityRole="button">
           <ThemedText variant="body" color="accent" style={styles.backLink}>
-            {copy.backToMenu}
+            {t("mealDetail.backToMenu")}
           </ThemedText>
         </Pressable>
       </View>
@@ -191,7 +193,7 @@ export function MealDetailScreen() {
           onPress={() => router.back()}
           style={styles.headerButton}
           accessibilityRole="button"
-          accessibilityLabel="Tillbaka"
+          accessibilityLabel={t("common.back")}
         >
           <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
         </Pressable>
@@ -200,7 +202,7 @@ export function MealDetailScreen() {
           onPress={() => router.navigate("/(tabs)/varukorg")}
           style={styles.headerButton}
           accessibilityRole="button"
-          accessibilityLabel="Öppna varukorgen"
+          accessibilityLabel={t("mealDetail.openCart")}
         >
           <ShoppingCart size={16} color={colors.textPrimary} strokeWidth={1.75} />
           {totalItems > 0 && (
@@ -258,14 +260,14 @@ export function MealDetailScreen() {
               <>
                 <ThemedText style={styles.compactDot}>·</ThemedText>
                 <ThemedText style={[styles.compactMacro, { opacity: 0.6, fontSize: 11 }]}>
-                  {copy.sizeNames[effectiveSize]}
+                  {t(`mealDetail.sizeNames.${effectiveSize}`, { defaultValue: effectiveSize })}
                 </ThemedText>
               </>
             )}
           </View>
           {isClosed && (
             <ThemedText variant="caption" style={styles.closedNote}>
-              {copy.closedNote}
+              {t("mealDetail.closedNote")}
             </ThemedText>
           )}
 
@@ -273,16 +275,18 @@ export function MealDetailScreen() {
 
           {/* ── Full macros ── */}
           <SectionHead>
-            {isFixed ? copy.nutrition : `${copy.nutrition} · ${copy.sizeNames[effectiveSize]}`}
+            {isFixed
+              ? t("mealDetail.nutrition")
+              : `${t("mealDetail.nutrition")} · ${t(`mealDetail.sizeNames.${effectiveSize}`, { defaultValue: effectiveSize })}`}
             {totalGramsBase > 0
               ? ` (${Math.round(totalGramsBase * sizeDef.macroMultiplier)}g)`
               : ""}
           </SectionHead>
           <View style={styles.macroGrid}>
             {[
-              { val: macros?.proteinG ?? 0, unit: "g", label: copy.macroProtein, hi: true },
-              { val: macros?.carbsG ?? 0, unit: "g", label: copy.macroCarbs, hi: false },
-              { val: macros?.fatG ?? 0, unit: "g", label: copy.macroFat, hi: false },
+              { val: macros?.proteinG ?? 0, unit: "g", label: t("mealDetail.macroProtein"), hi: true },
+              { val: macros?.carbsG ?? 0, unit: "g", label: t("mealDetail.macroCarbs"), hi: false },
+              { val: macros?.fatG ?? 0, unit: "g", label: t("mealDetail.macroFat"), hi: false },
               { val: macros?.calories ?? 0, unit: "", label: "kcal", hi: false },
             ].map((m) => (
               <View key={m.label} style={[styles.macroCell, m.hi && styles.macroCellHi]}>
@@ -299,7 +303,7 @@ export function MealDetailScreen() {
           {!isFixed && (
             <>
               <Divider />
-              <SectionHead>{copy.chooseSize}</SectionHead>
+              <SectionHead>{t("mealDetail.chooseSize")}</SectionHead>
               <View style={styles.sizeList}>
                 {CUSTOMER_SIZE_OPTIONS.map((s) => {
                   const isSel = selectedSize === s.id;
@@ -311,7 +315,7 @@ export function MealDetailScreen() {
                   const sizePriceOre = previewMealPriceOre(meal.basePrice, s.priceMultiplier);
                   const sizeGrams =
                     totalGramsBase > 0 ? `${Math.round(totalGramsBase * s.macroMultiplier)}g` : null;
-                  const sizeName = copy.sizeNames[s.id] ?? s.label;
+                  const sizeName = t(`mealDetail.sizeNames.${s.id}`, { defaultValue: s.label });
                   return (
                     <Pressable
                       key={s.id}
@@ -324,7 +328,7 @@ export function MealDetailScreen() {
                       ]}
                       accessibilityRole="radio"
                       accessibilityState={{ selected: isSel, disabled: sSoldOut }}
-                      accessibilityLabel={sSoldOut ? menuCopy.sizeSoldOut(sizeName) : sizeName}
+                      accessibilityLabel={sSoldOut ? t("menu.sizeSoldOut", { size: sizeName }) : sizeName}
                     >
                       <View style={styles.sizeLeft}>
                         <View style={[styles.radioOuter, isSel && !sSoldOut && styles.radioOuterSel]}>
@@ -342,13 +346,13 @@ export function MealDetailScreen() {
                           {sSoldOut ? (
                             <View style={[styles.pill, styles.soldOutPill]}>
                               <ThemedText style={styles.soldOutPillText}>
-                                {copy.soldOut.toUpperCase()}
+                                {t("mealDetail.soldOut").toUpperCase()}
                               </ThemedText>
                             </View>
                           ) : sShowLow && sCount !== null ? (
                             <View style={[styles.pill, styles.lowPill]}>
                               <ThemedText style={styles.lowPillText}>
-                                {menuCopy.stockLeft(sCount).toUpperCase()}
+                                {t("menu.stockLeft", { count: sCount }).toUpperCase()}
                               </ThemedText>
                             </View>
                           ) : null}
@@ -361,7 +365,7 @@ export function MealDetailScreen() {
                           sSoldOut && { opacity: 0.5 },
                         ]}
                       >
-                        {formatPriceKr(sizePriceOre)}
+                        {formatPriceKr(sizePriceOre, language)}
                       </ThemedText>
                     </Pressable>
                   );
@@ -374,7 +378,7 @@ export function MealDetailScreen() {
           {meal.ingredients.length > 0 && (
             <>
               <Divider />
-              <SectionHead>{copy.ingredients}</SectionHead>
+              <SectionHead>{t("mealDetail.ingredients")}</SectionHead>
               <View>
                 {meal.ingredients.map((ing, i) => (
                   <View
@@ -401,12 +405,12 @@ export function MealDetailScreen() {
               {/* Aggregated allergens (web shows this on the /meny card) */}
               <ThemedText variant="caption" style={styles.allergenLine}>
                 {mealAllergens.length === 0
-                  ? copy.noAllergens
-                  : `${copy.allergensLabel}: ${mealAllergens.join(", ")}`}
+                  ? t("mealDetail.noAllergens")
+                  : `${t("mealDetail.allergensLabel")}: ${mealAllergens.join(", ")}`}
               </ThemedText>
 
               <ThemedText variant="caption" style={styles.allergyNote}>
-                {copy.allergyNote}
+                {t("mealDetail.allergyNote")}
               </ThemedText>
             </>
           )}
@@ -421,7 +425,7 @@ export function MealDetailScreen() {
             disabled={quantity <= 1}
             style={[styles.stepperButton, quantity <= 1 && { opacity: 0.3 }]}
             accessibilityRole="button"
-            accessibilityLabel="Minska antal"
+            accessibilityLabel={t("cart.qtyDecrease")}
           >
             <Minus size={14} color="rgba(255,255,255,0.6)" strokeWidth={2} />
           </Pressable>
@@ -432,7 +436,7 @@ export function MealDetailScreen() {
             onPress={() => setQuantity((q) => q + 1)}
             style={styles.stepperButton}
             accessibilityRole="button"
-            accessibilityLabel="Öka antal"
+            accessibilityLabel={t("cart.qtyIncrease")}
           >
             <Plus size={14} color="rgba(255,255,255,0.6)" strokeWidth={2} />
           </Pressable>
@@ -447,27 +451,29 @@ export function MealDetailScreen() {
             pressed && !stockLocked && { backgroundColor: colors.accentHover },
           ]}
           accessibilityRole="button"
-          accessibilityLabel={copy.add}
+          accessibilityLabel={t("mealDetail.add")}
         >
           {allSoldOut ? (
-            <ThemedText style={styles.ctaLockedText}>{menuCopy.soldOutToday}</ThemedText>
+            <ThemedText style={styles.ctaLockedText}>{t("menu.soldOutToday")}</ThemedText>
           ) : selected.soldOut ? (
             <ThemedText style={styles.ctaLockedText}>
-              {copy.sizeSoldOutChoose(copy.sizeNames[effectiveSize] ?? effectiveSize)}
+              {t("mealDetail.sizeSoldOutChoose", {
+                size: t(`mealDetail.sizeNames.${effectiveSize}`, { defaultValue: effectiveSize }),
+              })}
             </ThemedText>
           ) : added ? (
             <View style={styles.ctaAddedRow}>
               <Check size={14} color={colors.textPrimary} strokeWidth={2.5} />
-              <ThemedText style={styles.ctaText}>{menuCopy.added}</ThemedText>
+              <ThemedText style={styles.ctaText}>{t("menu.added")}</ThemedText>
             </View>
           ) : (
             <>
               <ThemedText style={styles.ctaText}>
                 {showLowStock && selected.count !== null
-                  ? copy.addWithStock(selected.count)
-                  : copy.add}
+                  ? t("mealDetail.addWithStock", { count: selected.count })
+                  : t("mealDetail.add")}
               </ThemedText>
-              <ThemedText style={styles.ctaPrice}>{formatPriceKr(totalOre)}</ThemedText>
+              <ThemedText style={styles.ctaPrice}>{formatPriceKr(totalOre, language)}</ThemedText>
             </>
           )}
         </Pressable>

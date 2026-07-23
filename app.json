@@ -14,13 +14,14 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#0B0B0B",
-          "image": "./assets/icon.png",
+          "image": "./assets/splash-icon.png",
           "imageWidth": 120
         }
       ],
       "expo-secure-store",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-localization"
     ],
     "ios": {
       "supportsTablet": true,

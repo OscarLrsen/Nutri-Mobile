@@ -2,8 +2,9 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { Button } from "@/components/ui/Button";
+import { LanguageButton } from "@/components/language/LanguageButton";
 import { ThemedText } from "@/components/ui/ThemedText";
-import { authCopy, heroCopy, homeCopy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, spacing } from "@/theme";
 
 /**
@@ -13,41 +14,45 @@ import { colors, spacing } from "@/theme";
  * endpoint is auth-gated, and the store status now lives on Meny.
  */
 export function LoggedOutHome() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   return (
     <View style={styles.container}>
+      {/* Discreet language switch — top-right, away from the login/register CTAs. */}
+      <LanguageButton style={styles.languageButton} />
+
       <View accessibilityRole="header" style={styles.headlineBlock}>
         <ThemedText variant="headline" style={styles.headline}>
-          {heroCopy.headline1}
+          {t("hero.headline1")}
         </ThemedText>
         <ThemedText variant="headline" style={[styles.headline, styles.headlineAccent]}>
-          {heroCopy.headline2}
+          {t("hero.headline2")}
         </ThemedText>
       </View>
 
-      <ThemedText style={styles.pitch}>{homeCopy.pitchBody}</ThemedText>
+      <ThemedText style={styles.pitch}>{t("home.pitchBody")}</ThemedText>
 
       <View style={styles.ctaBlock}>
         <Button
-          label={authCopy.navLogin}
+          label={t("auth.navLogin")}
           onPress={() => router.push("/logga-in")}
-          accessibilityLabel={authCopy.navLogin}
+          accessibilityLabel={t("auth.navLogin")}
         />
         <Button
-          label={authCopy.createAccount}
+          label={t("auth.createAccount")}
           variant="secondary"
           onPress={() => router.push("/registrera")}
-          accessibilityLabel={authCopy.createAccount}
+          accessibilityLabel={t("auth.createAccount")}
         />
         <Pressable
           onPress={() => router.navigate("/(tabs)/meny")}
           style={({ pressed }) => [styles.menuLink, pressed && { opacity: 0.7 }]}
           accessibilityRole="link"
-          accessibilityLabel={homeCopy.seeMenuSecondary}
+          accessibilityLabel={t("home.seeMenuSecondary")}
         >
           <ThemedText variant="caption" style={styles.menuLinkText}>
-            {homeCopy.seeMenuSecondary}
+            {t("home.seeMenuSecondary")}
           </ThemedText>
         </Pressable>
       </View>
@@ -89,5 +94,10 @@ const styles = StyleSheet.create({
   menuLinkText: {
     color: colors.textSecondary,
     textDecorationLine: "underline",
+  },
+  languageButton: {
+    position: "absolute",
+    top: spacing[4],
+    right: 0,
   },
 });

@@ -10,7 +10,7 @@ import type { ApiIngredient } from "@/services/api/ingredients";
 import type { ApiMealDistribution, MacroTargetDto } from "@/services/api/nutrition";
 import type { ApiContainerType } from "@/services/api/containerTypes";
 import { calculateCustomMeal, type CustomMealCalculateResponse } from "@/services/api/customMeal";
-import { nutriAnpassarCopy as copy } from "@/constants/copy";
+import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 import {
   optimizeIngredients,
@@ -76,7 +76,9 @@ export function StepMeals({
   onAdjust,
   onBack,
 }: Props) {
-  const slotName = copy.slotNames[slot] ?? slot;
+  const { t } = useTranslation();
+  const { language } = useLanguage();
+  const slotName = t(`nutriAnpassar.slotNames.${slot}`, { defaultValue: slot });
   const [results, setResults] = useState<OptimizedResult[]>([]);
   const [optimizing, setOptimizing] = useState(true);
   const [expandedMacroMealIds, setExpandedMacroMealIds] = useState<Set<string>>(new Set());
@@ -142,10 +144,10 @@ export function StepMeals({
   // Status line — based on whole-day remainingToday, not the slot share.
   const statusLine = (() => {
     if (remainingTotal && remainingTotal.calories <= 0 && remainingTotal.proteinG <= 0) {
-      return { text: copy.remainingGoalReachedTitle, color: "rgb(90,210,140)" };
+      return { text: t("nutriAnpassar.remainingGoalReachedTitle"), color: "rgb(90,210,140)" };
     }
     if (remainingTotal && remainingTotal.calories > 0 && remainingTotal.calories < 200) {
-      return { text: copy.mealsNearGoal, color: "rgba(255,255,255,0.45)" };
+      return { text: t("nutriAnpassar.mealsNearGoal"), color: "rgba(255,255,255,0.45)" };
     }
     return null;
   })();
@@ -155,24 +157,24 @@ export function StepMeals({
       {/* Change-meal link */}
       <Pressable onPress={onBack} style={styles.backLink} accessibilityRole="button">
         <ArrowLeft size={12} color="rgba(255,255,255,0.45)" strokeWidth={2} />
-        <ThemedText style={styles.backLinkText}>{copy.mealsChangeMeal}</ThemedText>
+        <ThemedText style={styles.backLinkText}>{t("nutriAnpassar.mealsChangeMeal")}</ThemedText>
       </Pressable>
 
       {/* Hero */}
       <View style={styles.hero}>
         <View style={styles.stepRow}>
-          <ThemedText style={styles.stepAccent}>{copy.step2.toUpperCase()}</ThemedText>
+          <ThemedText style={styles.stepAccent}>{t("nutriAnpassar.step2").toUpperCase()}</ThemedText>
           <ThemedText style={styles.stepDot}>·</ThemedText>
           <ThemedText style={styles.stepMuted}>{slotName.toUpperCase()}</ThemedText>
         </View>
-        <ThemedText style={styles.heroTitle}>{copy.mealsHeroTitle}</ThemedText>
+        <ThemedText style={styles.heroTitle}>{t("nutriAnpassar.mealsHeroTitle")}</ThemedText>
         {statusLine ? (
           <ThemedText style={[styles.statusLine, { color: statusLine.color }]}>
             {statusLine.text}
           </ThemedText>
         ) : (
           <View style={styles.targetRow}>
-            <ThemedText style={styles.targetLabel}>{copy.targetLabel}</ThemedText>
+            <ThemedText style={styles.targetLabel}>{t("nutriAnpassar.targetLabel")}</ThemedText>
             <ThemedText style={styles.targetValue}>{slotTarget.calories} kcal</ThemedText>
             <View style={styles.macroDot} />
             <ThemedText style={styles.targetValue}>{slotTarget.proteinG}g protein</ThemedText>
@@ -187,7 +189,9 @@ export function StepMeals({
             <Star size={9} color={colors.accent} strokeWidth={1} fill="rgba(232,101,10,0.25)" />
           </View>
           <ThemedText style={styles.whyText}>
-            {copy.mealsWhy(copy.optionWords[slot] ?? slot)}
+            {t("nutriAnpassar.mealsWhy", {
+              optionWord: t(`nutriAnpassar.optionWords.${slot}`, { defaultValue: slot }),
+            })}
           </ThemedText>
         </View>
       )}
@@ -195,21 +199,21 @@ export function StepMeals({
       {/* Loading */}
       {optimizing && (
         <View style={styles.loading}>
-          <LoadingIndicator label={copy.mealsLoading} />
+          <LoadingIndicator label={t("nutriAnpassar.mealsLoading")} />
         </View>
       )}
 
       {/* Empty state */}
       {!optimizing && results.length === 0 && (
         <View style={styles.emptyCard}>
-          <ThemedText style={styles.emptyTitle}>{copy.mealsEmptyTitle(slotName)}</ThemedText>
-          <ThemedText style={styles.emptyBody}>{copy.mealsEmptyBody}</ThemedText>
+          <ThemedText style={styles.emptyTitle}>{t("nutriAnpassar.mealsEmptyTitle", { slot: slotName })}</ThemedText>
+          <ThemedText style={styles.emptyBody}>{t("nutriAnpassar.mealsEmptyBody")}</ThemedText>
           <Pressable
             onPress={onBack}
             style={({ pressed }) => [styles.emptyCta, pressed && { backgroundColor: colors.accentHover }]}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.emptyCtaText}>{copy.mealsEmptyCta}</ThemedText>
+            <ThemedText style={styles.emptyCtaText}>{t("nutriAnpassar.mealsEmptyCta")}</ThemedText>
           </Pressable>
         </View>
       )}
@@ -218,7 +222,7 @@ export function StepMeals({
       {!optimizing && results.length > 0 && (
         <View style={styles.resultsList}>
           {results.map(({ meal, ingredients, containerTypeId, calcResult }) => {
-            const displayPrice = Math.round(calcResult.totalPriceOre / 100);
+            const displayPrice = formatNumber(Math.round(calcResult.totalPriceOre / 100), language);
             const displayProtein = Math.round(calcResult.totalProteinG);
             const displayCalories = Math.round(calcResult.totalKcal);
             const displayCarbs = Math.round(calcResult.totalCarbsG);
@@ -228,9 +232,9 @@ export function StepMeals({
             const isPerfectMatch = Math.abs(proteinDelta) <= 3;
             const matchLabel = (() => {
               const abs = Math.abs(proteinDelta);
-              if (abs <= 5) return copy.matchClose;
-              if (abs <= 10) return copy.matchGood;
-              return copy.matchBest;
+              if (abs <= 5) return t("nutriAnpassar.matchClose");
+              if (abs <= 10) return t("nutriAnpassar.matchGood");
+              return t("nutriAnpassar.matchBest");
             })();
 
             const visibleChips = ingredients.slice(0, 3);
@@ -256,7 +260,7 @@ export function StepMeals({
                   <View style={styles.badgeBest}>
                     <Star size={8} color={colors.textPrimary} fill={colors.textPrimary} />
                     <ThemedText style={styles.badgeBestText}>
-                      {copy.mealsBestForGoal.toUpperCase()}
+                      {t("nutriAnpassar.mealsBestForGoal").toUpperCase()}
                     </ThemedText>
                   </View>
                   <View style={styles.badgeMatch}>
@@ -271,7 +275,7 @@ export function StepMeals({
                 <View style={styles.proteinHeroRow}>
                   <ThemedText style={styles.proteinHeroValue}>{displayProtein}g</ThemedText>
                   <ThemedText style={styles.proteinHeroLabel}>
-                    {copy.protein.toUpperCase()}
+                    {t("nutriAnpassar.protein").toUpperCase()}
                   </ThemedText>
                 </View>
 
@@ -285,16 +289,16 @@ export function StepMeals({
                     <>
                       <ThemedText style={styles.macroSep}>·</ThemedText>
                       <ThemedText style={styles.macroVal}>
-                        {displayCarbs}g<ThemedText style={styles.macroUnit}> {copy.carbsShort}</ThemedText>
+                        {displayCarbs}g<ThemedText style={styles.macroUnit}> {t("nutriAnpassar.carbsShort")}</ThemedText>
                       </ThemedText>
                       <ThemedText style={styles.macroSep}>·</ThemedText>
                       <ThemedText style={styles.macroVal}>
-                        {displayFat}g<ThemedText style={styles.macroUnit}> {copy.fatShort}</ThemedText>
+                        {displayFat}g<ThemedText style={styles.macroUnit}> {t("nutriAnpassar.fatShort")}</ThemedText>
                       </ThemedText>
                       <Pressable
                         onPress={() => toggleMacros(meal.id)}
                         accessibilityRole="button"
-                        accessibilityLabel={copy.mealsHideMacrosAria}
+                        accessibilityLabel={t("nutriAnpassar.mealsHideMacrosAria")}
                         style={{ padding: 2 }}
                       >
                         <ChevronUp size={11} color="rgba(255,255,255,0.25)" strokeWidth={1.5} />
@@ -306,7 +310,7 @@ export function StepMeals({
                       style={styles.macroToggle}
                       accessibilityRole="button"
                     >
-                      <ThemedText style={styles.macroToggleText}>{copy.mealsMacros}</ThemedText>
+                      <ThemedText style={styles.macroToggleText}>{t("nutriAnpassar.mealsMacros")}</ThemedText>
                       <ChevronDown size={9} color={colors.accent} strokeWidth={1.4} />
                     </Pressable>
                   )}
@@ -324,7 +328,7 @@ export function StepMeals({
                   {extraCount > 0 && (
                     <View style={[styles.chip, styles.chipDashed]}>
                       <ThemedText style={[styles.chipText, { color: "rgba(255,255,255,0.4)" }]}>
-                        +{extraCount} {copy.mealsMore}
+                        +{extraCount} {t("nutriAnpassar.mealsMore")}
                       </ThemedText>
                     </View>
                   )}
@@ -335,7 +339,7 @@ export function StepMeals({
                   <View style={styles.fitBox}>
                     <Check size={13} color="rgb(90,210,140)" strokeWidth={1.6} />
                     <ThemedText style={styles.fitText}>
-                      {isPerfectMatch ? copy.mealsInGoal : copy.mealsBestPossible}
+                      {isPerfectMatch ? t("nutriAnpassar.mealsInGoal") : t("nutriAnpassar.mealsBestPossible")}
                     </ThemedText>
                   </View>
                 )}
@@ -350,7 +354,7 @@ export function StepMeals({
                     ]}
                     accessibilityRole="button"
                   >
-                    <ThemedText style={styles.adjustButtonText}>{copy.mealsAdjust}</ThemedText>
+                    <ThemedText style={styles.adjustButtonText}>{t("nutriAnpassar.mealsAdjust")}</ThemedText>
                   </Pressable>
                   <Pressable
                     onPress={() => onSelect(meal, ingredients, containerTypeId, calcResult)}
@@ -361,7 +365,7 @@ export function StepMeals({
                     <ThemedText
                       style={[styles.addButtonText, isClosed && { color: "rgba(255,255,255,0.35)" }]}
                     >
-                      {isClosed ? copy.mealsOrderingClosed : copy.mealsAddToCart}
+                      {isClosed ? t("nutriAnpassar.mealsOrderingClosed") : t("nutriAnpassar.mealsAddToCart")}
                     </ThemedText>
                     {!isClosed && (
                       <ThemedText style={styles.addButtonPrice}>{displayPrice} kr</ThemedText>
@@ -372,7 +376,7 @@ export function StepMeals({
                 {/* Meta row */}
                 <View style={styles.metaRow}>
                   <Clock size={10} color="rgba(255,255,255,0.38)" strokeWidth={1.5} />
-                  <ThemedText style={styles.metaText}>{copy.mealsReadyIn}</ThemedText>
+                  <ThemedText style={styles.metaText}>{t("nutriAnpassar.mealsReadyIn")}</ThemedText>
                   <View style={styles.macroDot} />
                   <ThemedText style={styles.metaText}>{matchLabel}</ThemedText>
                 </View>

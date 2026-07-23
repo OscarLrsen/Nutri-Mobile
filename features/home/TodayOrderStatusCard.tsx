@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { Skeleton } from "@/components/feedback/Skeleton";
 import { isProfileGapError, useRemainingTodayQuery } from "@/services/api/nutritionQueries";
-import { homeCopy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -20,12 +20,13 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  * not add a second error banner under the plan card.
  */
 export function TodayOrderStatusCard() {
+  const { t } = useTranslation();
   const remainingQuery = useRemainingTodayQuery();
 
   if (remainingQuery.isLoading) {
     return (
-      <Card style={styles.card} accessibilityLabel={homeCopy.statusHead}>
-        <ThemedText style={styles.sectionLabel}>{homeCopy.statusHead.toUpperCase()}</ThemedText>
+      <Card style={styles.card} accessibilityLabel={t("home.statusHead")}>
+        <ThemedText style={styles.sectionLabel}>{t("home.statusHead").toUpperCase()}</ThemedText>
         <Skeleton height={44} />
       </Card>
     );
@@ -39,24 +40,24 @@ export function TodayOrderStatusCard() {
   const { consumedToday, remainingToday } = remainingQuery.data;
 
   return (
-    <Card style={styles.card} accessibilityLabel={homeCopy.statusHead}>
-      <ThemedText style={styles.sectionLabel}>{homeCopy.statusHead.toUpperCase()}</ThemedText>
+    <Card style={styles.card} accessibilityLabel={t("home.statusHead")}>
+      <ThemedText style={styles.sectionLabel}>{t("home.statusHead").toUpperCase()}</ThemedText>
 
       <View style={styles.columns}>
         <View style={styles.column}>
           <ThemedText variant="caption" style={styles.columnLabel}>
-            {homeCopy.orderedToday}
+            {t("home.orderedToday")}
           </ThemedText>
           <ThemedText variant="monoLarge" style={styles.columnValue}>
             {consumedToday.calories}
             <ThemedText variant="caption" style={styles.columnUnit}>
               {" "}
-              {homeCopy.kcalUnit}
+              {t("home.kcalUnit")}
             </ThemedText>
           </ThemedText>
           <ThemedText variant="caption" style={styles.columnSub}>
             {consumedToday.proteinG}
-            {homeCopy.gramUnit} {homeCopy.macroProtein.toLowerCase()}
+            {t("home.gramUnit")} {t("home.macroProtein").toLowerCase()}
           </ThemedText>
         </View>
 
@@ -64,25 +65,25 @@ export function TodayOrderStatusCard() {
 
         <View style={styles.column}>
           <ThemedText variant="caption" style={styles.columnLabel}>
-            {homeCopy.remainingToday}
+            {t("home.remainingToday")}
           </ThemedText>
           <ThemedText variant="monoLarge" style={styles.columnValue}>
             {remainingToday.calories}
             <ThemedText variant="caption" style={styles.columnUnit}>
               {" "}
-              {homeCopy.kcalUnit}
+              {t("home.kcalUnit")}
             </ThemedText>
           </ThemedText>
           <ThemedText variant="caption" style={styles.columnSub}>
             {remainingToday.proteinG}
-            {homeCopy.gramUnit} {homeCopy.macroProtein.toLowerCase()}
+            {t("home.gramUnit")} {t("home.macroProtein").toLowerCase()}
           </ThemedText>
         </View>
       </View>
 
       <View style={styles.noteBox}>
         <ThemedText variant="caption" style={styles.noteText}>
-          {homeCopy.orderedNote}
+          {t("home.orderedNote")}
         </ThemedText>
       </View>
     </Card>

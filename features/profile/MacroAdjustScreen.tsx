@@ -16,7 +16,7 @@ import {
   type ApiNutritionResult,
   type MacroOverrideDto,
 } from "@/services/api/nutrition";
-import { macroAdjustCopy as copy } from "@/constants/copy";
+import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 import { mapBodyFat } from "./profileOptions";
 
@@ -40,6 +40,8 @@ const STEP = { kcal: 50, macro: 5 } as const;
 export function MacroAdjustScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
+  const { language } = useLanguage();
 
   const [result, setResult] = useState<ApiNutritionResult | null>(null);
   const [recommendation, setRecommendation] = useState<ApiNutritionResult | null>(null);
@@ -264,11 +266,11 @@ export function MacroAdjustScreen() {
           onPress={() => (router.canGoBack() ? router.back() : router.navigate("/(tabs)/konto"))}
           style={styles.headerButton}
           accessibilityRole="button"
-          accessibilityLabel="Tillbaka"
+          accessibilityLabel={t("common.back")}
         >
           <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
         </Pressable>
-        <ThemedText style={styles.headerTitle}>{copy.title}</ThemedText>
+        <ThemedText style={styles.headerTitle}>{t("macroAdjust.title")}</ThemedText>
         <View style={{ width: 36 }} />
       </View>
 
@@ -294,10 +296,10 @@ export function MacroAdjustScreen() {
           </View>
           <View style={{ flex: 1, gap: 2 }}>
             <ThemedText style={styles.statusTitle}>
-              {inBalance ? copy.statusMatch : copy.statusNeeds}
+              {inBalance ? t("macroAdjust.statusMatch") : t("macroAdjust.statusNeeds")}
             </ThemedText>
             <ThemedText style={styles.statusSub}>
-              {userKcal.toLocaleString("sv-SE")} kcal ·{" "}
+              {formatNumber(userKcal, language)} kcal ·{" "}
               <ThemedText style={[styles.statusSub, { color: inBalance ? "#6DD49F" : colors.accent }]}>
                 {totalPct}%
               </ThemedText>
@@ -306,13 +308,13 @@ export function MacroAdjustScreen() {
         </View>
 
         {/* Kalorimål */}
-        <ThemedText style={styles.sectionHead}>{copy.calorieGoal.toUpperCase()}</ThemedText>
+        <ThemedText style={styles.sectionHead}>{t("macroAdjust.calorieGoal").toUpperCase()}</ThemedText>
         <View style={[styles.card, { paddingHorizontal: spacing[4], paddingVertical: spacing[4] }]}>
           <View style={styles.kcalRow}>
             <StepperButton
               onPress={() => handleStepKcal(-STEP.kcal)}
               disabled={userKcal <= 1500}
-              label={copy.decreaseCalories}
+              label={t("macroAdjust.decreaseCalories")}
             >
               <Minus size={14} color="rgba(255,255,255,0.85)" strokeWidth={1.6} />
             </StepperButton>
@@ -325,7 +327,7 @@ export function MacroAdjustScreen() {
                 selectTextOnFocus
                 keyboardType="number-pad"
                 maxLength={4}
-                accessibilityLabel={copy.calorieGoal}
+                accessibilityLabel={t("macroAdjust.calorieGoal")}
                 style={styles.kcalInput}
               />
               <ThemedText style={styles.kcalUnit}>kcal</ThemedText>
@@ -333,7 +335,7 @@ export function MacroAdjustScreen() {
             <StepperButton
               onPress={() => handleStepKcal(STEP.kcal)}
               disabled={userKcal >= 5000}
-              label={copy.increaseCalories}
+              label={t("macroAdjust.increaseCalories")}
             >
               <Plus size={14} color="rgba(255,255,255,0.85)" strokeWidth={1.6} />
             </StepperButton>
@@ -341,9 +343,9 @@ export function MacroAdjustScreen() {
           {recKcal !== null && (
             <View style={styles.recLine}>
               <ThemedText style={styles.recText}>
-                {copy.recommendation}{" "}
+                {t("macroAdjust.recommendation")}{" "}
                 <ThemedText style={styles.recValue}>
-                  {recKcal.toLocaleString("sv-SE")} kcal
+                  {formatNumber(recKcal, language)} kcal
                 </ThemedText>
               </ThemedText>
             </View>
@@ -357,9 +359,9 @@ export function MacroAdjustScreen() {
               <Sparkles size={12} color="#8FB9FF" />
             </View>
             <ThemedText style={styles.recalcText}>
-              {copy.recalcFor}{" "}
+              {t("macroAdjust.recalcFor")}{" "}
               <ThemedText style={[styles.recalcText, { color: "#B3D0FF", fontFamily: fontFamily.monoMedium }]}>
-                {userKcal.toLocaleString("sv-SE")}
+                {formatNumber(userKcal, language)}
               </ThemedText>{" "}
               kcal
             </ThemedText>
@@ -367,10 +369,10 @@ export function MacroAdjustScreen() {
         )}
 
         {/* Makrofördelning */}
-        <ThemedText style={styles.sectionHead}>{copy.macroDistribution.toUpperCase()}</ThemedText>
+        <ThemedText style={styles.sectionHead}>{t("macroAdjust.macroDistribution").toUpperCase()}</ThemedText>
         <View style={[styles.card, { paddingHorizontal: spacing[4], paddingTop: spacing[3], paddingBottom: spacing[3], gap: spacing[4] }]}>
           <MacroRow
-            name={copy.macroProtein}
+            name={t("macroAdjust.macroProtein")}
             colorKey="protein"
             grams={protein}
             totalKcal={userKcal}
@@ -380,7 +382,7 @@ export function MacroAdjustScreen() {
             onPlus={() => setProtein((p) => p + STEP.macro)}
           />
           <MacroRow
-            name={copy.macroCarbs}
+            name={t("macroAdjust.macroCarbs")}
             colorKey="carbs"
             grams={carbs}
             totalKcal={userKcal}
@@ -390,7 +392,7 @@ export function MacroAdjustScreen() {
             onPlus={() => setCarbs((c) => c + STEP.macro)}
           />
           <MacroRow
-            name={copy.macroFat}
+            name={t("macroAdjust.macroFat")}
             colorKey="fat"
             grams={fat}
             totalKcal={userKcal}
@@ -400,9 +402,9 @@ export function MacroAdjustScreen() {
             onPlus={() => setFat((f) => f + STEP.macro)}
           />
           <View style={styles.sumRow}>
-            <ThemedText style={styles.sumLabel}>{copy.macroSum}</ThemedText>
+            <ThemedText style={styles.sumLabel}>{t("macroAdjust.macroSum")}</ThemedText>
             <ThemedText style={[styles.sumValue, { color: inBalance ? "#6DD49F" : colors.accent }]}>
-              {macroPlanKcal.toLocaleString("sv-SE")} kcal
+              {formatNumber(macroPlanKcal, language)} kcal
               {diff !== 0 ? (
                 <ThemedText style={styles.sumDiff}>
                   {" "}
@@ -424,7 +426,7 @@ export function MacroAdjustScreen() {
           >
             <RotateCcw size={13} color="rgba(255,255,255,0.55)" strokeWidth={1.5} />
             <ThemedText style={styles.resetText}>
-              {resetting ? copy.resetting : copy.reset}
+              {resetting ? t("macroAdjust.resetting") : t("macroAdjust.reset")}
             </ThemedText>
           </Pressable>
 
@@ -448,14 +450,14 @@ export function MacroAdjustScreen() {
               ]}
             >
               {saving
-                ? copy.saving
+                ? t("macroAdjust.saving")
                 : saveSuccess
-                  ? copy.saved
+                  ? t("macroAdjust.saved")
                   : canSave
-                    ? copy.saveChanges
+                    ? t("macroAdjust.saveChanges")
                     : isDirty
-                      ? copy.adjustMacros(`${diff > 0 ? "+" : ""}${diff}`)
-                      : copy.noChanges}
+                      ? t("macroAdjust.adjustMacros", { diff: `${diff > 0 ? "+" : ""}${diff}` })
+                      : t("macroAdjust.noChanges")}
             </ThemedText>
           </Pressable>
         </View>
@@ -510,6 +512,7 @@ function MacroRow({
   onMinus: () => void;
   onPlus: () => void;
 }) {
+  const { t } = useTranslation();
   const color = MACRO_COLORS[colorKey];
   const macroKcal = grams * MACRO_KCAL_FACTOR[colorKey];
   const pct = totalKcal > 0 ? Math.round((macroKcal / totalKcal) * 100) : 0;
@@ -523,7 +526,12 @@ function MacroRow({
         <ThemedText style={styles.macroPct}>{pct}%</ThemedText>
       </View>
       <View style={styles.macroSliderRow}>
-        <StepperButton onPress={onMinus} disabled={grams <= 0} label={copy.decreaseNamed(name)} small>
+        <StepperButton
+          onPress={onMinus}
+          disabled={grams <= 0}
+          label={t("macroAdjust.decreaseNamed", { name })}
+          small
+        >
           <Minus size={12} color="rgba(255,255,255,0.85)" strokeWidth={1.6} />
         </StepperButton>
         <Slider
@@ -537,7 +545,7 @@ function MacroRow({
           maximumTrackTintColor="rgba(255,255,255,0.06)"
           thumbTintColor={color}
         />
-        <StepperButton onPress={onPlus} label={copy.increaseNamed(name)} small>
+        <StepperButton onPress={onPlus} label={t("macroAdjust.increaseNamed", { name })} small>
           <Plus size={12} color="rgba(255,255,255,0.85)" strokeWidth={1.6} />
         </StepperButton>
       </View>

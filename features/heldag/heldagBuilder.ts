@@ -1,4 +1,6 @@
 import type { ApiMeal } from "@/services/api/meals";
+import { LOCALE_BY_LANGUAGE } from "@/i18n/formatters";
+import type { AppLanguage } from "@/i18n/languages";
 import type { ApiIngredient } from "@/services/api/ingredients";
 import type { ApiContainerType } from "@/services/api/containerTypes";
 import type { ApiMealDistribution, ApiTodayNutrition } from "@/services/api/nutrition";
@@ -69,8 +71,8 @@ export type SlotResult =
 
 /* ── Stockholm time + availability ─────────────────────────── */
 
-export function getStockholmHour(): number {
-  const parts = new Intl.DateTimeFormat("sv-SE", {
+export function getStockholmHour(language: AppLanguage): number {
+  const parts = new Intl.DateTimeFormat(LOCALE_BY_LANGUAGE[language], {
     hour: "2-digit",
     hour12: false,
     timeZone: "Europe/Stockholm",

@@ -1,87 +1,73 @@
+import type { TFunction } from "i18next";
+
 import type { WeeklyScheduleDto } from "@/services/api/weeklySchedule";
 
 /**
  * Option lists + enum mappings, ported from the web's app/profil/page.tsx.
- * Values are backend enum strings — never rename. Labels/descriptions are
- * the exact sv strings from translations.ts (profile.* keys, noted per
- * list). Mobile is sv-only, so the strings are baked in here just like the
- * web page's own hardcoded fallbacks.
+ * Values are backend enum strings — never rename. Labels/descriptions live
+ * in the i18n resources under profileOptions.* keyed by these stable values;
+ * components render them via t(`profileOptions...${value}...`).
  */
 
-/** profile.activityType.*.label/.description */
 export const ACTIVITY_TYPE_OPTIONS = [
-  { value: "Sedentary", label: "Stillasittande", description: "Kontorsarbete, lite rörelse" },
-  { value: "Mixed", label: "Blandat", description: "Promenader, måttlig rörelse" },
-  { value: "Active", label: "Aktiv", description: "Fysiskt arbete eller mycket rörelse" },
+  { value: "Sedentary" },
+  { value: "Mixed" },
+  { value: "Active" },
 ] as const;
 
-/** profile.steps.*.label */
 export const STEPS_OPTIONS = [
-  { value: "Under5K", label: "Under 5 000 steg/dag" },
-  { value: "FiveK7500", label: "5 000 – 7 500 steg/dag" },
-  { value: "SevenFiveHundred10K", label: "7 500 – 10 000 steg/dag" },
-  { value: "TenK12500", label: "10 000 – 12 500 steg/dag" },
-  { value: "Over12500", label: "Över 12 500 steg/dag" },
+  { value: "Under5K" },
+  { value: "FiveK7500" },
+  { value: "SevenFiveHundred10K" },
+  { value: "TenK12500" },
+  { value: "Over12500" },
 ] as const;
 
-/** profile.training.*.label */
 export const TRAINING_OPTIONS = [
-  { value: "Zero", label: "Ingen träning" },
-  { value: "OneTwoPerWeek", label: "1–2 pass / vecka" },
-  { value: "ThreeFourPerWeek", label: "3–4 pass / vecka" },
-  { value: "FiveSixPerWeek", label: "5–6 pass / vecka" },
-  { value: "SevenPlusPerWeek", label: "7+ pass / vecka" },
+  { value: "Zero" },
+  { value: "OneTwoPerWeek" },
+  { value: "ThreeFourPerWeek" },
+  { value: "FiveSixPerWeek" },
+  { value: "SevenPlusPerWeek" },
 ] as const;
 
-/** profile.goal.*.label/.description */
 export const PRIMARY_GOAL_OPTIONS = [
-  { value: "FatLoss", label: "Fettförbränning", description: "Minska kroppsfett med kontrollerat underskott" },
-  { value: "Maintain", label: "Underhåll", description: "Behåll vikt och energi över tid" },
-  { value: "MuscleGain", label: "Muskelbyggnad", description: "Öka muskelmassa med kontrollerat överskott" },
+  { value: "FatLoss" },
+  { value: "Maintain" },
+  { value: "MuscleGain" },
 ] as const;
 
-/** profile.goalPace.* */
+/** Pace values per goal. `hasNote` marks options with an extra note line
+ * (profileOptions.goalPace.<value>.note). */
 export const GOAL_PACE_OPTIONS: Record<
   string,
-  { value: string; label: string; description: string; note?: string }[]
+  { value: "Slow" | "Moderate" | "Aggressive" | "Careful" | "Normal"; hasNote?: boolean }[]
 > = {
-  FatLoss: [
-    { value: "Slow", label: "Lugnt", description: "−250 kcal/dag (~0.3 kg/vecka)" },
-    { value: "Moderate", label: "Måttligt", description: "−500 kcal/dag (~0.5 kg/vecka)" },
-    {
-      value: "Aggressive",
-      label: "Aggressivt",
-      description: "−750 kcal/dag (~0.75 kg/vecka)",
-      note: "Snabbare resultat, men kräver bättre följsamhet.",
-    },
-  ],
-  MuscleGain: [
-    { value: "Careful", label: "Försiktigt", description: "+200 kcal/dag (minimal fettökning)" },
-    { value: "Normal", label: "Normalt", description: "+350 kcal/dag (optimal byggnad)" },
-  ],
+  FatLoss: [{ value: "Slow" }, { value: "Moderate" }, { value: "Aggressive", hasNote: true }],
+  MuscleGain: [{ value: "Careful" }, { value: "Normal" }],
 };
 
-/** Body-fat levels per gender — labels hardcoded on web, descriptions
- * profile.bodyFat.desc.1–6. */
+/** Body-fat levels per gender. `label` is a percent figure (not translated);
+ * the description is profileOptions.bodyFatDesc.<level>. */
 export const BODY_FAT_OPTIONS: Record<
   "Male" | "Female",
-  { value: number; label: string; desc: string }[]
+  { value: 1 | 2 | 3 | 4 | 5 | 6; label: string }[]
 > = {
   Male: [
-    { value: 1, label: "~9%", desc: "Väldigt lean" },
-    { value: 2, label: "~12%", desc: "Lean" },
-    { value: 3, label: "~17%", desc: "Genomsnitt" },
-    { value: 4, label: "~22%", desc: "Lite mer" },
-    { value: 5, label: "~27%", desc: "Mer" },
-    { value: 6, label: "~32%", desc: "Högt" },
+    { value: 1, label: "~9%" },
+    { value: 2, label: "~12%" },
+    { value: 3, label: "~17%" },
+    { value: 4, label: "~22%" },
+    { value: 5, label: "~27%" },
+    { value: 6, label: "~32%" },
   ],
   Female: [
-    { value: 1, label: "~18%", desc: "Väldigt lean" },
-    { value: 2, label: "~23%", desc: "Lean" },
-    { value: 3, label: "~28%", desc: "Genomsnitt" },
-    { value: 4, label: "~33%", desc: "Lite mer" },
-    { value: 5, label: "~38%", desc: "Mer" },
-    { value: 6, label: "~43%", desc: "Högt" },
+    { value: 1, label: "~18%" },
+    { value: 2, label: "~23%" },
+    { value: 3, label: "~28%" },
+    { value: 4, label: "~33%" },
+    { value: 5, label: "~38%" },
+    { value: 6, label: "~43%" },
   ],
 };
 
@@ -118,27 +104,28 @@ export function mapBodyFat(level: number | null, gender: string): number | null 
   return m[level] ?? null;
 }
 
-/** Web lib/orderLabels.formatCategorySnapshot (sv-only port) — reformats the
- * backend's "Custom – {N} st {Container}" snapshot so N isn't mistaken for
- * ordered quantity; passes regular categories through (normalized). */
-export function formatCategorySnapshot(category: string): string {
+/** Web lib/orderLabels.formatCategorySnapshot — reformats the backend's
+ * "Custom – {N} st {Container}" snapshot so N isn't mistaken for ordered
+ * quantity; regular categories map to translated labels. Backend category
+ * strings are never sent back translated — this is display-only. */
+export function formatCategorySnapshot(category: string, t: TFunction): string {
   const normalized = category.trim().toLowerCase();
-  const regular: Record<string, string> = {
-    frukost: "Frukost",
-    "huvudmåltider": "Huvudmåltider",
-    huvudmaltider: "Huvudmåltider",
-    "mellanmål": "Mellanmål",
-    mellanmal: "Mellanmål",
-    dryck: "Dryck",
+  const regularKey: Record<string, "frukost" | "huvudmaltider" | "mellanmal" | "dryck"> = {
+    frukost: "frukost",
+    "huvudmåltider": "huvudmaltider",
+    huvudmaltider: "huvudmaltider",
+    "mellanmål": "mellanmal",
+    mellanmal: "mellanmal",
+    dryck: "dryck",
   };
-  const mapped = regular[normalized];
-  if (mapped) return mapped;
+  const mappedKey = regularKey[normalized];
+  if (mappedKey) return t(`profileOptions.categoryNames.${mappedKey}`);
 
   const m = category.match(/^Custom\s+[–-]\s+(\d+)\s+st\s+(.+)$/i);
   if (!m) return category;
   const count = parseInt(m[1], 10);
-  if (count === 1) return "Anpassad";
+  if (count === 1) return t("profileOptions.customSingle");
   const name = m[2].trim();
-  const containerName = /^bowls?$/i.test(name) ? "skålar" : name;
-  return `Anpassad · packas i ${count} ${containerName}`;
+  const containerName = /^bowls?$/i.test(name) ? t("profileOptions.bowls") : name;
+  return t("profileOptions.customPacked", { count, container: containerName });
 }

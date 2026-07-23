@@ -27,7 +27,7 @@ import {
   type ApiUserReward,
 } from "@/services/api/rewards";
 import type { ApiError } from "@/types/api";
-import { rewardsCopy as copy } from "@/constants/copy";
+import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { RewardWheel } from "./RewardWheel";
 import { SpinResultModal } from "./SpinResultModal";
@@ -48,8 +48,9 @@ import { countdownParts, REWARD_STATUS_COLORS, rewardMetaLine } from "./rewardFo
  */
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const cfg = REWARD_STATUS_COLORS[status] ?? REWARD_STATUS_COLORS.Redeemed;
-  const label = copy.statusNames[status] ?? status;
+  const label = t(`rewards.statusNames.${status}`, { defaultValue: status });
   return (
     <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
       <ThemedText style={[styles.statusBadgeText, { color: cfg.color }]}>{label}</ThemedText>
@@ -62,21 +63,27 @@ function SectionHead({ label }: { label: string }) {
 }
 
 function RewardsHero({ available, busy }: { available: boolean; busy: boolean }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.hero}>
       <View style={styles.heroBadge}>
         <Sparkles size={14} color="#FFC178" strokeWidth={2.2} />
-        <ThemedText style={styles.heroEyebrow}>{copy.weeklySectionHead}</ThemedText>
+        <ThemedText style={styles.heroEyebrow}>{t("rewards.weeklySectionHead")}</ThemedText>
       </View>
-      <ThemedText style={styles.heroTitle}>{copy.screenTitle}</ThemedText>
+      <ThemedText style={styles.heroTitle}>{t("rewards.screenTitle")}</ThemedText>
       <ThemedText style={styles.heroBody}>
-        {busy ? copy.spinning : available ? copy.spinSubtitle : copy.comeBackTitle}
+        {busy
+          ? t("rewards.spinning")
+          : available
+            ? t("rewards.spinSubtitle")
+            : t("rewards.comeBackTitle")}
       </ThemedText>
     </View>
   );
 }
 
 function SpinButton({ busy, onPress }: { busy: boolean; onPress: () => void }) {
+  const { t } = useTranslation();
   return (
     <Pressable
       onPress={onPress}
@@ -87,8 +94,8 @@ function SpinButton({ busy, onPress }: { busy: boolean; onPress: () => void }) {
         busy && styles.spinButtonBusy,
       ]}
       accessibilityRole="button"
-      accessibilityLabel={busy ? copy.spinning : copy.spinCta}
-      accessibilityHint="Snurrar hjulet och visar serverns belöning"
+      accessibilityLabel={busy ? t("rewards.spinning") : t("rewards.spinCta")}
+      accessibilityHint={t("rewards.wheelSpinningHint")}
       accessibilityState={{ disabled: busy, busy }}
     >
       <View style={styles.spinButtonDepth} />
@@ -103,7 +110,9 @@ function SpinButton({ busy, onPress }: { busy: boolean; onPress: () => void }) {
         ) : (
           <Gift size={18} color="#FFF8EE" strokeWidth={2.2} />
         )}
-        <ThemedText style={styles.spinButtonText}>{busy ? copy.spinning : copy.spinCta}</ThemedText>
+        <ThemedText style={styles.spinButtonText}>
+          {busy ? t("rewards.spinning") : t("rewards.spinCta")}
+        </ThemedText>
         {!busy ? <Sparkles size={15} color="#FFE0B8" strokeWidth={2.2} /> : null}
       </LinearGradient>
     </Pressable>
@@ -113,16 +122,19 @@ function SpinButton({ busy, onPress }: { busy: boolean; onPress: () => void }) {
 // ── Section 0: points summary ────────────────────────────────────────────
 
 function PointsCard({ balance, activeRewards }: { balance: number; activeRewards: number }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.pointsCard}>
       <View style={styles.pointsIconWrap}>
         <Star size={20} color={colors.accent} strokeWidth={1.75} />
       </View>
       <View style={{ flex: 1 }}>
-        <ThemedText style={styles.pointsLabel}>{copy.pointsLabel}</ThemedText>
+        <ThemedText style={styles.pointsLabel}>{t("rewards.pointsLabel")}</ThemedText>
         <ThemedText style={styles.pointsValue}>{balance}</ThemedText>
       </View>
-      <ThemedText style={styles.pointsActive}>{copy.activeRewardsLabel(activeRewards)}</ThemedText>
+      <ThemedText style={styles.pointsActive}>
+        {t("rewards.activeRewardsLabel", { count: activeRewards })}
+      </ThemedText>
     </View>
   );
 }
@@ -130,6 +142,7 @@ function PointsCard({ balance, activeRewards }: { balance: number; activeRewards
 // ── Section 1: the wheel / come-back card ────────────────────────────────
 
 function CountdownCard({ nextSpinAt }: { nextSpinAt: string }) {
+  const { t } = useTranslation();
   // Minute-resolution tick keeps the countdown live without burning renders.
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -138,17 +151,22 @@ function CountdownCard({ nextSpinAt }: { nextSpinAt: string }) {
   }, []);
 
   const { d, h, m } = countdownParts(nextSpinAt);
-  const label = d >= 1 ? copy.daysLeft(h > 0 || m > 0 ? d + 1 : d) : copy.countdown(0, h, m);
+  const label =
+    d >= 1
+      ? t("rewards.daysLeft", { count: h > 0 || m > 0 ? d + 1 : d })
+      : h > 0
+        ? t("rewards.countdownHourMin", { h, m })
+        : t("rewards.countdownMin", { m });
 
   return (
     <View style={styles.comeBackCard}>
       <View style={styles.comeBackIconWrap}>
         <CalendarClock size={22} color={colors.accent} strokeWidth={1.75} />
       </View>
-      <ThemedText style={styles.comeBackTitle}>{copy.comeBackTitle}</ThemedText>
+      <ThemedText style={styles.comeBackTitle}>{t("rewards.comeBackTitle")}</ThemedText>
       <View style={styles.countdownChip}>
         <ThemedText style={styles.countdownText}>
-          {copy.nextSpinLabel} · {label}
+          {t("rewards.nextSpinLabel")} · {label}
         </ThemedText>
       </View>
     </View>
@@ -159,6 +177,8 @@ function CountdownCard({ nextSpinAt }: { nextSpinAt: string }) {
 
 function RewardCard({ reward }: { reward: ApiUserReward }) {
   const router = useRouter();
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const isOpenableCoupon = reward.rewardType === "Coupon" && !!reward.couponId;
   const inactive = reward.status !== "Unused";
 
@@ -174,9 +194,9 @@ function RewardCard({ reward }: { reward: ApiUserReward }) {
           </ThemedText>
           <StatusBadge status={reward.status} />
         </View>
-        <ThemedText style={styles.rewardMeta}>{rewardMetaLine(reward)}</ThemedText>
+        <ThemedText style={styles.rewardMeta}>{rewardMetaLine(reward, t, language)}</ThemedText>
         {isOpenableCoupon ? (
-          <ThemedText style={styles.rewardOpenHint}>{copy.openCoupon}</ThemedText>
+          <ThemedText style={styles.rewardOpenHint}>{t("rewards.openCoupon")}</ThemedText>
         ) : null}
       </View>
       {isOpenableCoupon ? <ChevronRight size={15} color="rgba(255,255,255,0.3)" /> : null}
@@ -189,7 +209,7 @@ function RewardCard({ reward }: { reward: ApiUserReward }) {
       onPress={() => router.push(`/kupong/${reward.couponId}`)}
       style={({ pressed }) => pressed && { opacity: 0.8 }}
       accessibilityRole="button"
-      accessibilityLabel={`${reward.title}, ${copy.openCoupon}`}
+      accessibilityLabel={`${reward.title}, ${t("rewards.openCoupon")}`}
     >
       {card}
     </Pressable>
@@ -200,6 +220,7 @@ function RewardCard({ reward }: { reward: ApiUserReward }) {
 
 export function RewardsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const reducedMotion = useReducedMotion();
   const { width: screenWidth } = useWindowDimensions();
@@ -285,14 +306,14 @@ export function RewardsScreen() {
       const apiErr = err as ApiError;
       pendingResult.current = null;
       if (apiErr.status === 409) {
-        setSpinErrorText(copy.alreadySpun);
+        setSpinErrorText(t("rewards.alreadySpun"));
         statusQuery.refetch();
       } else if (apiErr.status === 503) {
-        setSpinErrorText(copy.wheelUnavailable);
+        setSpinErrorText(t("rewards.wheelUnavailable"));
       } else if (apiErr.status === 0) {
         setSpinErrorText(apiErr.message); // Offline copy from the client.
       } else {
-        setSpinErrorText(copy.spinError);
+        setSpinErrorText(t("rewards.spinError"));
       }
     } finally {
       // Either way the wheel decelerates; the modal only opens when a
@@ -330,12 +351,12 @@ export function RewardsScreen() {
           onPress={() => (router.canGoBack() ? router.back() : router.navigate("/(tabs)"))}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Tillbaka"
+          accessibilityLabel={t("common.back")}
           hitSlop={8}
         >
           <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
         </Pressable>
-        <ThemedText style={styles.headerTitle}>{copy.screenTitle}</ThemedText>
+        <ThemedText style={styles.headerTitle}>{t("rewards.screenTitle")}</ThemedText>
         <View style={styles.backButton} />
       </View>
 
@@ -347,7 +368,7 @@ export function RewardsScreen() {
         </View>
       ) : !user ? (
         <View style={styles.center}>
-          <ThemedText style={styles.loginText}>{copy.loginRequired}</ThemedText>
+          <ThemedText style={styles.loginText}>{t("rewards.loginRequired")}</ThemedText>
           <Pressable
             onPress={() => router.push({ pathname: "/logga-in", params: { next: "/beloningar" } })}
             style={({ pressed }) => [
@@ -357,7 +378,7 @@ export function RewardsScreen() {
             ]}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.primaryButtonText}>{copy.loginCta}</ThemedText>
+            <ThemedText style={styles.primaryButtonText}>{t("rewards.loginCta")}</ThemedText>
           </Pressable>
         </View>
       ) : statusQuery.isLoading ? (
@@ -369,13 +390,13 @@ export function RewardsScreen() {
         </View>
       ) : statusQuery.isError ? (
         <View style={styles.center}>
-          <ThemedText style={styles.errorText}>{copy.fetchError}</ThemedText>
+          <ThemedText style={styles.errorText}>{t("rewards.fetchError")}</ThemedText>
           <Pressable
             onPress={() => statusQuery.refetch()}
             style={styles.retryButton}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.retryText}>{copy.retry}</ThemedText>
+            <ThemedText style={styles.retryText}>{t("rewards.retry")}</ThemedText>
           </Pressable>
         </View>
       ) : status ? (
@@ -402,7 +423,9 @@ export function RewardsScreen() {
               <View style={styles.stageLabelRow}>
                 <View style={[styles.liveDot, !status.canSpin && styles.liveDotInactive]} />
                 <ThemedText style={styles.stageLabel}>
-                  {status.canSpin || spinBusy ? "REDO ATT SNURRA" : "NÄSTA CHANS LADDAR"}
+                  {status.canSpin || spinBusy
+                    ? t("rewards.readyToSpin").toUpperCase()
+                    : t("rewards.nextChanceLoading").toUpperCase()}
                 </ThemedText>
               </View>
               <View style={styles.wheelPad}>
@@ -418,7 +441,7 @@ export function RewardsScreen() {
 
               {status.canSpin || spinBusy ? (
                 <View style={styles.spinControls}>
-                 <ThemedText style={styles.wheelSubtitle}>{copy.spinSubtitle}</ThemedText>
+                 <ThemedText style={styles.wheelSubtitle}>{t("rewards.spinSubtitle")}</ThemedText>
                  {spinErrorText ? (
                    <ThemedText style={styles.errorText}>{spinErrorText}</ThemedText>
                  ) : null}
@@ -428,7 +451,9 @@ export function RewardsScreen() {
                 <CountdownCard nextSpinAt={status.nextSpinAt} />
               ) : (
                 <View style={styles.comeBackCard}>
-                  <ThemedText style={styles.comeBackTitle}>{copy.wheelUnavailable}</ThemedText>
+                  <ThemedText style={styles.comeBackTitle}>
+                    {t("rewards.wheelUnavailable")}
+                  </ThemedText>
                 </View>
               )}
             </View>
@@ -447,14 +472,14 @@ export function RewardsScreen() {
               mineSectionY.current = e.nativeEvent.layout.y;
             }}
           >
-            <SectionHead label={copy.mineSectionHead} />
+            <SectionHead label={t("rewards.mineSectionHead")} />
             {mineQuery.isLoading ? (
               <View style={{ gap: spacing[3] }}>
                 <Skeleton height={72} />
                 <Skeleton height={72} />
               </View>
             ) : mineQuery.isError ? (
-              <InlineError text={copy.mineFetchError} onRetry={() => mineQuery.refetch()} />
+              <InlineError text={t("rewards.mineFetchError")} onRetry={() => mineQuery.refetch()} />
             ) : mineQuery.data && mineQuery.data.length > 0 ? (
               <View style={{ gap: spacing[3] }}>
                 {mineQuery.data.map((reward) => (
@@ -462,7 +487,7 @@ export function RewardsScreen() {
                 ))}
               </View>
             ) : (
-              <EmptyState message={copy.mineEmpty} />
+              <EmptyState message={t("rewards.mineEmpty")} />
             )}
           </Animated.View>
 
@@ -475,11 +500,12 @@ export function RewardsScreen() {
 }
 
 function InlineError({ text, onRetry }: { text: string; onRetry: () => void }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.inlineError}>
       <ThemedText style={styles.errorText}>{text}</ThemedText>
       <Pressable onPress={onRetry} style={styles.retryButton} accessibilityRole="button">
-        <ThemedText style={styles.retryText}>{copy.retry}</ThemedText>
+        <ThemedText style={styles.retryText}>{t("rewards.retry")}</ThemedText>
       </Pressable>
     </View>
   );

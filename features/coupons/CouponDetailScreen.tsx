@@ -11,7 +11,7 @@ import { useAuth } from "@/services/auth/AuthProvider";
 import { useCart } from "@/context/CartContext";
 import { useCoupon } from "@/context/CouponContext";
 import { getMyCoupons, isCouponUsable } from "@/services/api/coupons";
-import { couponCopy as copy } from "@/constants/copy";
+import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { COUPON_STATUS_COLORS, couponMetaLine } from "./couponFormat";
 
@@ -26,6 +26,8 @@ import { COUPON_STATUS_COLORS, couponMetaLine } from "./couponFormat";
  * server-side when the order is placed.
  */
 export function CouponDetailScreen() {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -59,12 +61,12 @@ export function CouponDetailScreen() {
           onPress={() => (router.canGoBack() ? router.back() : router.navigate("/(tabs)"))}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Tillbaka"
+          accessibilityLabel={t("common.back")}
           hitSlop={8}
         >
           <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
         </Pressable>
-        <ThemedText style={styles.headerTitle}>{copy.detailTitle}</ThemedText>
+        <ThemedText style={styles.headerTitle}>{t("coupon.detailTitle")}</ThemedText>
         <View style={styles.backButton} />
       </View>
 
@@ -73,7 +75,7 @@ export function CouponDetailScreen() {
           <LoadingIndicator />
         </View>
       ) : !coupon ? (
-        <EmptyState message={copy.detailNotFound} />
+        <EmptyState message={t("coupon.detailNotFound")} />
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.card}>
@@ -81,26 +83,26 @@ export function CouponDetailScreen() {
               <BadgePercent size={26} color={colors.accent} strokeWidth={1.75} />
             </View>
             <ThemedText style={styles.code}>{coupon.code}</ThemedText>
-            <ThemedText style={styles.percent}>{copy.percentOff(coupon.percentage)}</ThemedText>
+            <ThemedText style={styles.percent}>{t("coupon.percentOff", { pct: coupon.percentage })}</ThemedText>
             {statusCfg ? (
               <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
                 <ThemedText style={[styles.statusBadgeText, { color: statusCfg.color }]}>
-                  {copy.statusNames[coupon.status] ?? coupon.status}
+                  {t(`coupon.statusNames.${coupon.status}`, { defaultValue: coupon.status })}
                 </ThemedText>
               </View>
             ) : null}
-            <ThemedText style={styles.meta}>{couponMetaLine(coupon)}</ThemedText>
+            <ThemedText style={styles.meta}>{couponMetaLine(coupon, t, language)}</ThemedText>
           </View>
 
           <View style={styles.infoBox}>
-            <ThemedText style={styles.infoText}>{copy.detailHowItWorks}</ThemedText>
+            <ThemedText style={styles.infoText}>{t("coupon.detailHowItWorks")}</ThemedText>
           </View>
 
           {usable ? (
             isSelected ? (
               <>
                 <View style={styles.selectedBox}>
-                  <ThemedText style={styles.selectedText}>{copy.selected}</ThemedText>
+                  <ThemedText style={styles.selectedText}>{t("coupon.selected")}</ThemedText>
                 </View>
                 <Pressable
                   onPress={clearSelectedCoupon}
@@ -111,7 +113,7 @@ export function CouponDetailScreen() {
                   accessibilityRole="button"
                 >
                   <ThemedText style={styles.secondaryButtonText}>
-                    {copy.removeSelection}
+                    {t("coupon.removeSelection")}
                   </ThemedText>
                 </Pressable>
               </>
@@ -124,7 +126,7 @@ export function CouponDetailScreen() {
                 ]}
                 accessibilityRole="button"
               >
-                <ThemedText style={styles.primaryButtonText}>{copy.use}</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>{t("coupon.use")}</ThemedText>
               </Pressable>
             )
           ) : null}

@@ -14,6 +14,7 @@ import Animated, {
 
 import { useAuth } from "@/services/auth/AuthProvider";
 import { getRewardStatus } from "@/services/api/rewards";
+import { useTranslation } from "@/i18n";
 import { colors } from "@/theme";
 
 /**
@@ -34,6 +35,7 @@ const REWARD_DOT = "#4ade80";
 
 export function RewardsBell() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const reducedMotion = useReducedMotion();
 
@@ -63,7 +65,7 @@ export function RewardsBell() {
       hitSlop={8}
       onPress={() => router.push("/beloningar")}
       accessibilityRole="button"
-      accessibilityLabel={canSpin ? "Veckans belöning — en snurr väntar" : "Veckans belöning"}
+      accessibilityLabel={canSpin ? t("home.rewardsBellAriaSpinReady") : t("home.rewardsBellAria")}
     >
       <Animated.View style={floatStyle}>
         <Gift size={22} color={canSpin ? colors.accent : colors.textPrimary} />

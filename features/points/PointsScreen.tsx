@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/feedback/EmptyState";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { getMyPointsTransactions, type ApiPointsTransaction } from "@/services/api/points";
 import { getRewardStatus } from "@/services/api/rewards";
-import { pointsCopy as copy } from "@/constants/copy";
+import { formatDate, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -22,13 +22,11 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  * deliberately absent — display only in V1.
  */
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("sv-SE", { day: "numeric", month: "long" });
-}
-
 function TransactionRow({ tx }: { tx: ApiPointsTransaction }) {
-  const label = copy.reasonNames[tx.reason] ?? tx.reason;
-  const icon = copy.reasonIcons[tx.reason] ?? "⭐";
+  const { t } = useTranslation();
+  const { language } = useLanguage();
+  const label = t(`points.reasonNames.${tx.reason}`, { defaultValue: tx.reason });
+  const icon = t(`points.reasonIcons.${tx.reason}`, { defaultValue: "⭐" });
   return (
     <View style={styles.txRow}>
       <View style={styles.txIconWrap}>
@@ -36,7 +34,9 @@ function TransactionRow({ tx }: { tx: ApiPointsTransaction }) {
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <ThemedText style={styles.txLabel}>{label}</ThemedText>
-        <ThemedText style={styles.txDate}>{formatDate(tx.createdAt)}</ThemedText>
+        <ThemedText style={styles.txDate}>
+          {formatDate(new Date(tx.createdAt), language, { day: "numeric", month: "long" })}
+        </ThemedText>
       </View>
       <ThemedText style={[styles.txAmount, tx.amount < 0 && styles.txAmountNegative]}>
         {tx.amount > 0 ? `+${tx.amount}` : `${tx.amount}`}
@@ -47,6 +47,7 @@ function TransactionRow({ tx }: { tx: ApiPointsTransaction }) {
 
 export function PointsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { user, loading: authLoading } = useAuth();
 
   const statusQuery = useQuery({
@@ -68,12 +69,12 @@ export function PointsScreen() {
           onPress={() => (router.canGoBack() ? router.back() : router.navigate("/(tabs)"))}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Tillbaka"
+          accessibilityLabel={t("common.back")}
           hitSlop={8}
         >
           <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
         </Pressable>
-        <ThemedText style={styles.headerTitle}>{copy.screenTitle}</ThemedText>
+        <ThemedText style={styles.headerTitle}>{t("points.screenTitle")}</ThemedText>
         <View style={styles.backButton} />
       </View>
 
@@ -85,7 +86,7 @@ export function PointsScreen() {
         </View>
       ) : !user ? (
         <View style={styles.center}>
-          <ThemedText style={styles.loginText}>{copy.loginRequired}</ThemedText>
+          <ThemedText style={styles.loginText}>{t("points.loginRequired")}</ThemedText>
           <Pressable
             onPress={() => router.push({ pathname: "/logga-in", params: { next: "/poang" } })}
             style={({ pressed }) => [
@@ -94,7 +95,7 @@ export function PointsScreen() {
             ]}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.loginButtonText}>{copy.loginCta}</ThemedText>
+            <ThemedText style={styles.loginButtonText}>{t("points.loginCta")}</ThemedText>
           </Pressable>
         </View>
       ) : (
@@ -108,17 +109,17 @@ export function PointsScreen() {
                 <Star size={22} color={colors.accent} strokeWidth={1.75} />
               </View>
               <View>
-                <ThemedText style={styles.balanceLabel}>{copy.balanceLabel}</ThemedText>
+                <ThemedText style={styles.balanceLabel}>{t("points.balanceLabel")}</ThemedText>
                 <ThemedText style={styles.balanceValue}>
                   {statusQuery.data?.pointsBalance ?? "–"}{" "}
-                  <ThemedText style={styles.balanceUnit}>{copy.balanceUnit}</ThemedText>
+                  <ThemedText style={styles.balanceUnit}>{t("points.balanceUnit")}</ThemedText>
                 </ThemedText>
               </View>
             </View>
           )}
 
           {/* ── Ledger ── */}
-          <ThemedText style={styles.sectionHead}>{copy.historyHead}</ThemedText>
+          <ThemedText style={styles.sectionHead}>{t("points.historyHead")}</ThemedText>
           {txQuery.isLoading ? (
             <View style={{ gap: spacing[3] }}>
               <Skeleton height={64} />
@@ -127,13 +128,13 @@ export function PointsScreen() {
             </View>
           ) : txQuery.isError ? (
             <View style={styles.inlineError}>
-              <ThemedText style={styles.errorText}>{copy.fetchError}</ThemedText>
+              <ThemedText style={styles.errorText}>{t("points.fetchError")}</ThemedText>
               <Pressable
                 onPress={() => txQuery.refetch()}
                 style={styles.retryButton}
                 accessibilityRole="button"
               >
-                <ThemedText style={styles.retryText}>{copy.retry}</ThemedText>
+                <ThemedText style={styles.retryText}>{t("points.retry")}</ThemedText>
               </Pressable>
             </View>
           ) : txQuery.data && txQuery.data.length > 0 ? (
@@ -146,7 +147,7 @@ export function PointsScreen() {
               ))}
             </View>
           ) : (
-            <EmptyState message={copy.historyEmpty} />
+            <EmptyState message={t("points.historyEmpty")} />
           )}
         </ScrollView>
       )}
