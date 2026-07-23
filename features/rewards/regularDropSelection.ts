@@ -9,7 +9,15 @@ export function selectDropOption(current: string | null, tapped: string): string
   return current === tapped ? current : tapped;
 }
 
-/** The confirm button is enabled only once something is selected. */
-export function canConfirmSelection(selected: string | null): boolean {
-  return selected !== null;
+/**
+ * The confirm button is enabled only once something is selected — and, when
+ * the user already has a registered vote (votedOptionId), only when the
+ * selection actually differs from it: confirming the current server vote
+ * would be a pointless request, so it is disabled instead.
+ */
+export function canConfirmSelection(
+  selected: string | null,
+  votedOptionId: string | null = null
+): boolean {
+  return selected !== null && selected !== votedOptionId;
 }

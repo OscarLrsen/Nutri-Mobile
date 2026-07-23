@@ -874,7 +874,8 @@
     "confirmVote": "Bekræft din stemme",
     "cancel": "Annuller",
     "voting": "Stemmer…",
-    "voteLockedNotice": "Din stemme kan ikke ændres bagefter.",
+    "voteChangeNotice": "Du kan ændre din stemme, så længe afstemningen er i gang.",
+    "changeVote": "Skift stemme",
     "voteRegistered": "Din stemme er registreret.",
     "youVotedFor": "Du stemte på:",
     "thankYou": "Tak, fordi du hjælper os med at vælge den næste Nutri Drop.",
@@ -901,7 +902,7 @@
     "selectedAccessibilityLabel": "Du stemte på {{name}}",
     "sharedWinner": "Delt sejr",
     "yourChoice": "Din stemme",
-    "bannerTitle": "Stem på ugens belønning",
+    "bannerTitle": "Stem på næste madtema",
     "bannerSubtitle": "Hjælp med at vælge næste uges special.",
     "viewResults": "Se resultat"
   }

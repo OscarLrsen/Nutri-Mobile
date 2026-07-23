@@ -874,7 +874,8 @@
     "confirmVote": "Confirm your vote",
     "cancel": "Cancel",
     "voting": "Voting…",
-    "voteLockedNotice": "Your vote can't be changed afterwards.",
+    "voteChangeNotice": "You can change your vote while the poll is open.",
+    "changeVote": "Change vote",
     "voteRegistered": "Your vote has been registered.",
     "youVotedFor": "You voted for:",
     "thankYou": "Thanks for helping us choose the next Nutri Drop.",
@@ -901,7 +902,7 @@
     "selectedAccessibilityLabel": "You voted for {{name}}",
     "sharedWinner": "Shared win",
     "yourChoice": "Your vote",
-    "bannerTitle": "Vote for Weekly Reward",
+    "bannerTitle": "Vote for next food theme",
     "bannerSubtitle": "Help decide next week’s special.",
     "viewResults": "View results"
   }

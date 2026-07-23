@@ -35,9 +35,14 @@ import { canConfirmSelection, selectDropOption } from "./regularDropSelection";
  * selection — exactly one card selected, tapping another moves the mark,
  * no POST. The confirm button (disabled until a selection exists) leads to
  * the confirmation step, and only its explicit confirm fires exactly one
- * POST (lock-ref + busy). The server response stays the sole truth: a
- * registered vote can never be changed, duplicate/two-device answers show
- * the ORIGINAL vote, and ended polls render the server's final result.
+ * POST (lock-ref + busy). The server response stays the sole truth.
+ *
+ * Changing a vote (phase 11E): while the poll is ACTIVE a registered vote
+ * is not locked — the server's votedOptionId starts out marked, tapping
+ * another card moves only the local mark, and the "change vote" confirm is
+ * enabled only when the selection differs from the server vote. The same
+ * single POST then moves the vote server-side; on error the server's
+ * registered vote remains the truth. Ended polls are read-only results.
  */
 
 const IMAGE_ASPECT = 3 / 2;
@@ -83,6 +88,11 @@ export function RegularDropSheet({ onClose }: { onClose: () => void }) {
   const options = poll ? sortDropOptions(poll.options) : [];
   const selectedOption = options.find((o) => o.id === selectedId) ?? null;
   const isEnded = !!poll && poll.isEnded && poll.result !== null;
+
+  // Change-vote flow: the server's registered vote is the initial mark;
+  // local taps only move shownSelectedId until the explicit confirm.
+  const serverVotedId = poll?.votedOptionId ?? null;
+  const shownSelectedId = selectedId ?? serverVotedId;
 
   const handleDismiss = () => {
     if (busy) return;
@@ -220,7 +230,7 @@ export function RegularDropSheet({ onClose }: { onClose: () => void }) {
                 ) : null}
                 <ThemedText style={styles.successThanks}>{t("regularDrops.thankYou")}</ThemedText>
                 <ThemedText style={styles.lockedNotice}>
-                  {t("regularDrops.voteLockedNotice")}
+                  {t("regularDrops.voteChangeNotice")}
                 </ThemedText>
                 <Pressable
                   onPress={onClose}
@@ -232,6 +242,74 @@ export function RegularDropSheet({ onClose }: { onClose: () => void }) {
                   accessibilityLabel={t("common.close")}
                 >
                   <ThemedText style={styles.primaryButtonText}>{t("common.close")}</ThemedText>
+                </Pressable>
+              </View>
+            ) : step === "confirm" && selectedOption ? (
+              <View style={{ gap: spacing[3] }}>
+                <ThemedText style={styles.confirmHeading}>
+                  {t("regularDrops.confirmVote")}
+                </ThemedText>
+                <DropOptionCard
+                  option={selectedOption}
+                  selected
+                  selectable={false}
+                  onPress={() => {}}
+                />
+                <ThemedText style={styles.lockedNotice}>
+                  {t("regularDrops.voteChangeNotice")}
+                </ThemedText>
+                {errorCode && (
+                  <View style={styles.errorBox} accessibilityRole="alert">
+                    <AlertCircle size={14} color={colors.error} strokeWidth={2} />
+                    <ThemedText style={styles.errorText}>
+                      {t(voteErrorI18nKey(errorCode))}
+                    </ThemedText>
+                  </View>
+                )}
+                <Pressable
+                  onPress={handleConfirmVote}
+                  disabled={busy}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    pressed && !busy && { backgroundColor: colors.accentHover },
+                    busy && { opacity: 0.6 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    retryable
+                      ? t("regularDrops.retry")
+                      : poll.hasVoted
+                        ? t("regularDrops.changeVote")
+                        : t("regularDrops.vote")
+                  }
+                  accessibilityState={{ disabled: busy, busy }}
+                >
+                  <ThemedText style={styles.primaryButtonText}>
+                    {busy
+                      ? t("regularDrops.voting")
+                      : retryable
+                        ? t("regularDrops.retry")
+                        : poll.hasVoted
+                          ? t("regularDrops.changeVote")
+                          : t("regularDrops.vote")}
+                  </ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    if (busy) return;
+                    // Back to the list — the local selection is kept.
+                    setErrorCode(null);
+                    setStep("list");
+                  }}
+                  disabled={busy}
+                  style={[styles.secondaryButton, busy && { opacity: 0.4 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("regularDrops.cancel")}
+                  accessibilityState={{ disabled: busy }}
+                >
+                  <ThemedText style={styles.secondaryButtonText}>
+                    {t("regularDrops.cancel")}
+                  </ThemedText>
                 </Pressable>
               </View>
             ) : poll.hasVoted ? (
@@ -257,9 +335,11 @@ export function RegularDropSheet({ onClose }: { onClose: () => void }) {
                         )}
                       </ThemedText>
                     )}
-                    <ThemedText style={styles.lockedNotice}>
-                      {t("regularDrops.voteLockedNotice")}
-                    </ThemedText>
+                    {poll.isActive && (
+                      <ThemedText style={styles.lockedNotice}>
+                        {t("regularDrops.voteChangeNotice")}
+                      </ThemedText>
+                    )}
                   </View>
                 </View>
                 {countdownText && (
@@ -269,71 +349,36 @@ export function RegularDropSheet({ onClose }: { onClose: () => void }) {
                   <DropOptionCard
                     key={option.id}
                     option={option}
-                    selected={votedOption?.id === option.id}
-                    selectable={false}
-                    onPress={() => {}}
+                    selected={shownSelectedId === option.id}
+                    selectable={poll.isActive}
+                    onPress={() =>
+                      setSelectedId((prev) => selectDropOption(prev ?? serverVotedId, option.id))
+                    }
                   />
                 ))}
-              </View>
-            ) : step === "confirm" && selectedOption ? (
-              <View style={{ gap: spacing[3] }}>
-                <ThemedText style={styles.confirmHeading}>
-                  {t("regularDrops.confirmVote")}
-                </ThemedText>
-                <DropOptionCard
-                  option={selectedOption}
-                  selected
-                  selectable={false}
-                  onPress={() => {}}
-                />
-                <ThemedText style={styles.lockedNotice}>
-                  {t("regularDrops.voteLockedNotice")}
-                </ThemedText>
-                {errorCode && (
-                  <View style={styles.errorBox} accessibilityRole="alert">
-                    <AlertCircle size={14} color={colors.error} strokeWidth={2} />
-                    <ThemedText style={styles.errorText}>
-                      {t(voteErrorI18nKey(errorCode))}
+                {poll.isActive && (
+                  <Pressable
+                    onPress={() => {
+                      if (!canConfirmSelection(shownSelectedId, serverVotedId)) return;
+                      setErrorCode(null);
+                      setStep("confirm");
+                    }}
+                    disabled={!canConfirmSelection(shownSelectedId, serverVotedId)}
+                    style={[
+                      styles.primaryButton,
+                      !canConfirmSelection(shownSelectedId, serverVotedId) && { opacity: 0.5 },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("regularDrops.changeVote")}
+                    accessibilityState={{
+                      disabled: !canConfirmSelection(shownSelectedId, serverVotedId),
+                    }}
+                  >
+                    <ThemedText style={styles.primaryButtonText}>
+                      {t("regularDrops.changeVote")}
                     </ThemedText>
-                  </View>
+                  </Pressable>
                 )}
-                <Pressable
-                  onPress={handleConfirmVote}
-                  disabled={busy}
-                  style={({ pressed }) => [
-                    styles.primaryButton,
-                    pressed && !busy && { backgroundColor: colors.accentHover },
-                    busy && { opacity: 0.6 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={retryable ? t("regularDrops.retry") : t("regularDrops.vote")}
-                  accessibilityState={{ disabled: busy, busy }}
-                >
-                  <ThemedText style={styles.primaryButtonText}>
-                    {busy
-                      ? t("regularDrops.voting")
-                      : retryable
-                        ? t("regularDrops.retry")
-                        : t("regularDrops.vote")}
-                  </ThemedText>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    if (busy) return;
-                    // Back to the list — the local selection is kept.
-                    setErrorCode(null);
-                    setStep("list");
-                  }}
-                  disabled={busy}
-                  style={[styles.secondaryButton, busy && { opacity: 0.4 }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={t("regularDrops.cancel")}
-                  accessibilityState={{ disabled: busy }}
-                >
-                  <ThemedText style={styles.secondaryButtonText}>
-                    {t("regularDrops.cancel")}
-                  </ThemedText>
-                </Pressable>
               </View>
             ) : (
               <View style={{ gap: spacing[3] }}>

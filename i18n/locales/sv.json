@@ -874,7 +874,8 @@
     "confirmVote": "Bekräfta din röst",
     "cancel": "Avbryt",
     "voting": "Röstar…",
-    "voteLockedNotice": "Din röst kan inte ändras efteråt.",
+    "voteChangeNotice": "Du kan ändra din röst så länge omröstningen pågår.",
+    "changeVote": "Ändra röst",
     "voteRegistered": "Din röst är registrerad.",
     "youVotedFor": "Du röstade på:",
     "thankYou": "Tack för att du hjälper oss välja nästa Nutri Drop.",
@@ -901,7 +902,7 @@
     "selectedAccessibilityLabel": "Du röstade på {{name}}",
     "sharedWinner": "Delad vinst",
     "yourChoice": "Din röst",
-    "bannerTitle": "Rösta fram veckans belöning",
+    "bannerTitle": "Rösta på nästa mattema",
     "bannerSubtitle": "Hjälp oss välja nästa veckas special.",
     "viewResults": "Visa resultat"
   }

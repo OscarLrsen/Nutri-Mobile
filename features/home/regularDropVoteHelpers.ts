@@ -44,10 +44,11 @@ export function isStaleDataVoteError(code: RegularDropApiErrorCode): boolean {
 
 /**
  * Resolves the option the SERVER says the user voted for. The requested
- * option is deliberately not an input — on a duplicate/two-device race the
- * 200 carries the ORIGINAL vote, and the UI must show that. Null when the
- * server's votedOptionId matches no option (render generic success copy,
- * never guess).
+ * option is deliberately not an input — the 200 carries the server's
+ * CURRENT registered vote (votes are changeable while the poll is active;
+ * on a two-device race the last write wins), and the UI must show that.
+ * Null when the server's votedOptionId matches no option (render generic
+ * success copy, never guess).
  */
 export function resolveVotedOption(
   response: ApiRegularDropResponse
