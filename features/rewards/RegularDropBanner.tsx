@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, View } from "react-native";
-import { Check, ChevronRight, Circle, Vote } from "lucide-react-native";
+import { Check, ChevronRight, Circle, Star, Vote } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { pickLang, useLanguage, useTranslation } from "@/i18n";
@@ -54,6 +54,10 @@ export function RegularDropBanner({
       <View style={styles.optionRow}>
         {options.map((option) => {
           const chosen = poll.hasVoted && poll.votedOptionId === option.id;
+          // Leader star: the server names WHO leads (never counts) via
+          // leadingOptionIds — every option sharing the top count is
+          // starred, none while nobody has voted.
+          const leading = (poll.leadingOptionIds ?? []).includes(option.id);
           const name = pickLang(
             { sv: option.nameSv, en: option.nameEn, da: option.nameDa },
             language
@@ -71,6 +75,9 @@ export function RegularDropBanner({
               >
                 {name}
               </ThemedText>
+              {leading && (
+                <Star size={10} color="#F5C518" fill="#F5C518" strokeWidth={1.5} />
+              )}
             </View>
           );
         })}

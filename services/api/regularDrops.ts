@@ -14,11 +14,13 @@ import { apiClient, requireAuth } from "./client";
  * Contract rules the data layer relies on:
  * - an ACTIVE poll never carries `result` (product decision — no results
  *   until the poll has ended); the client must never derive live numbers.
+ *   The one exception is `leadingOptionIds`: only WHICH option(s) share
+ *   the current top vote count (Home's leader star) — never counts.
  * - `result` exists only for a recently ended poll the user voted in
  *   (visible for at most 7 days server-side).
- * - a vote is immutable; a duplicate/two-device vote answers 200 with the
- *   ORIGINAL vote, so the response's votedOptionId — not the tapped
- *   option — is the truth the cache stores.
+ * - while the poll is active a vote may be CHANGED (idempotent
+ *   last-write-wins server-side); the response's votedOptionId is always
+ *   the server's current registered vote and is the truth the cache stores.
  * - the voter is always the JWT subject; no user id is ever sent.
  */
 
@@ -58,6 +60,9 @@ export interface ApiRegularDropPoll {
   isEnded: boolean;
   hasVoted: boolean;
   votedOptionId: string | null;
+  /** Option ids sharing the current top vote count (no numbers exposed);
+   * empty while nobody has voted, equals the winners once ended. */
+  leadingOptionIds: string[];
   options: ApiRegularDropOption[];
   /** Null while the poll is active — always, even after the user's vote. */
   result: ApiRegularDropResult | null;
@@ -77,10 +82,10 @@ export async function getActiveRegularDrop(): Promise<ApiRegularDropResponse> {
   return data;
 }
 
-/** POST /api/regular-drops/{pollId}/vote — casts the caller's single,
- * immutable vote. Idempotent: an already-voted user gets 200 with the
- * original vote. Errors surface as normalized ApiError (parse with
- * utils/regularDropErrors). */
+/** POST /api/regular-drops/{pollId}/vote — casts or changes the caller's
+ * single vote (idempotent last-write-wins while the poll is active; the
+ * response carries the server's current registered vote). Errors surface
+ * as normalized ApiError (parse with utils/regularDropErrors). */
 export async function voteOnRegularDrop(
   pollId: string,
   optionId: string
@@ -131,9 +136,10 @@ export function useActiveRegularDropQuery(options?: {
 
 /**
  * The vote action. No optimistic update — the cache is written only with
- * the server's confirmed response, whose votedOptionId is the original
- * vote even when this call raced a vote from another device. Errors are
- * rethrown for the UI to parse/translate (no toast here).
+ * the server's confirmed response, whose votedOptionId is the server's
+ * current registered vote (last write wins when this call raced a vote
+ * from another device). Errors are rethrown for the UI to parse/translate
+ * (no toast here).
  */
 export function useRegularDropVote() {
   const queryClient = useQueryClient();
