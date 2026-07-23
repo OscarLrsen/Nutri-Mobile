@@ -1,16 +1,9 @@
-import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useQueryClient } from "@tanstack/react-query";
 
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/services/auth/AuthProvider";
-import {
-  regularDropKeys,
-  type ApiRegularDropOption,
-  type ApiRegularDropPoll,
-} from "@/services/api/regularDrops";
 import { colors, spacing } from "@/theme";
 
 import { GreetingHeader } from "./GreetingHeader";
@@ -18,8 +11,6 @@ import { RewardsBell } from "./RewardsBell";
 import { DailyTargetsCard } from "./DailyTargetsCard";
 import { TodayOrderStatusCard } from "./TodayOrderStatusCard";
 import { RewardsSummaryCard } from "./RewardsSummaryCard";
-import { RegularDropSection } from "./RegularDropSection";
-import { RegularDropVoteSheet } from "./RegularDropVoteSheet";
 import { QuickActions } from "./QuickActions";
 import { LoggedOutHome } from "./LoggedOutHome";
 
@@ -38,13 +29,6 @@ import { LoggedOutHome } from "./LoggedOutHome";
  */
 export function HomeScreen() {
   const { user, loading } = useAuth();
-  const queryClient = useQueryClient();
-  // Selected drop option — mounts the vote sheet; cleared on close so every
-  // opening starts fresh in the confirmation state.
-  const [selectedDrop, setSelectedDrop] = useState<{
-    poll: ApiRegularDropPoll;
-    option: ApiRegularDropOption;
-  } | null>(null);
 
   // Same gate pattern as app/(tabs)/konto.tsx — blank Screen while the
   // Supabase session restores, so the wrong view never flashes.
@@ -88,9 +72,6 @@ export function HomeScreen() {
           <View style={styles.sections}>
             <DailyTargetsCard />
             <TodayOrderStatusCard />
-            <RegularDropSection
-              onSelectOption={(poll, option) => setSelectedDrop({ poll, option })}
-            />
             <RewardsSummaryCard />
             <QuickActions />
           </View>
@@ -98,20 +79,6 @@ export function HomeScreen() {
           <LoggedOutHome />
         )}
       </ScrollView>
-
-      {/* Vote-confirmation sheet — conditional mount keeps state fresh per
-          opening. Stale server data closes the sheet and refetches. */}
-      {selectedDrop && (
-        <RegularDropVoteSheet
-          poll={selectedDrop.poll}
-          option={selectedDrop.option}
-          onClose={() => setSelectedDrop(null)}
-          onPollStale={() => {
-            setSelectedDrop(null);
-            queryClient.invalidateQueries({ queryKey: regularDropKeys.all });
-          }}
-        />
-      )}
     </Screen>
   );
 }

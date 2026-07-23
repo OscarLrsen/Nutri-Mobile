@@ -27,6 +27,8 @@ import Animated, {
 import { colors, fontFamily } from "@/theme";
 import type { ApiWheelSegment } from "@/services/api/rewards";
 
+import { isUltraRarePrize, wheelSharePercent } from "./rarity";
+
 /**
  * The reward wheel is visual only. Segment widths mirror the backend's
  * probability weights, while targetSegmentId is the already-drawn server
@@ -63,14 +65,23 @@ interface Slice {
   /** Degrees from 12 o'clock, clockwise. */
   startDeg: number;
   sweepDeg: number;
+  /** Share < 5 % — gold premium treatment, preview content hidden. The
+   * post-spin result still reveals the actual prize (server-drawn). */
+  ultraRare: boolean;
 }
 
 function buildSlices(segments: ApiWheelSegment[]): Slice[] {
   const total = segments.reduce((sum, segment) => sum + Math.max(1, segment.probabilityWeight), 0);
+  const rawTotal = segments.reduce((sum, segment) => sum + Math.max(0, segment.probabilityWeight), 0);
   let cursor = 0;
   return segments.map((segment) => {
     const sweepDeg = (Math.max(1, segment.probabilityWeight) / total) * 360;
-    const slice = { segment, startDeg: cursor, sweepDeg };
+    const slice = {
+      segment,
+      startDeg: cursor,
+      sweepDeg,
+      ultraRare: isUltraRarePrize(wheelSharePercent(segment.probabilityWeight, rawTotal)),
+    };
     cursor += sweepDeg;
     return slice;
   });
@@ -349,21 +360,45 @@ export function RewardWheel({
                   <Stop offset="100%" stopColor={end} />
                 </SvgLinearGradient>
               ))}
+              {/* Ultra-rare (<5 %): metallic gold base + a static specular
+                  gloss sweep. Static by design — premium without motion, so
+                  reduced-motion needs no special case and nothing loops. */}
+              <SvgLinearGradient id="reward-segment-ultra" x1="0%" y1="0%" x2="100%" y2="100%">
+                <Stop offset="0%" stopColor="#F9E7A0" />
+                <Stop offset="35%" stopColor="#E8C55C" />
+                <Stop offset="70%" stopColor="#C9992E" />
+                <Stop offset="100%" stopColor="#8F6B1D" />
+              </SvgLinearGradient>
+              <SvgLinearGradient id="reward-segment-ultra-gloss" x1="0%" y1="0%" x2="0%" y2="100%">
+                <Stop offset="0%" stopColor="rgba(255,255,255,0.9)" />
+                <Stop offset="45%" stopColor="rgba(255,255,255,0.16)" />
+                <Stop offset="100%" stopColor="rgba(255,255,255,0)" />
+              </SvgLinearGradient>
             </Defs>
             <G opacity={active || spinning || celebrating ? 1 : 0.62}>
-              {slices.map((slice, index) => (
-                <Path
-                  key={slice.segment.id}
-                  d={
-                    slices.length === 1
-                      ? `M ${center} ${center} m 0 ${-radius} a ${radius} ${radius} 0 1 1 0 ${2 * radius} a ${radius} ${radius} 0 1 1 0 ${-2 * radius}`
-                      : arcPath(slice.startDeg, slice.sweepDeg, radius, center)
-                  }
-                  fill={`url(#reward-segment-${index % SEGMENT_GRADIENTS.length})`}
-                  stroke="rgba(255,255,255,0.22)"
-                  strokeWidth={1.2}
-                />
-              ))}
+              {slices.map((slice, index) => {
+                const d =
+                  slices.length === 1
+                    ? `M ${center} ${center} m 0 ${-radius} a ${radius} ${radius} 0 1 1 0 ${2 * radius} a ${radius} ${radius} 0 1 1 0 ${-2 * radius}`
+                    : arcPath(slice.startDeg, slice.sweepDeg, radius, center);
+                return (
+                  <G key={slice.segment.id}>
+                    <Path
+                      d={d}
+                      fill={
+                        slice.ultraRare
+                          ? "url(#reward-segment-ultra)"
+                          : `url(#reward-segment-${index % SEGMENT_GRADIENTS.length})`
+                      }
+                      stroke={slice.ultraRare ? "rgba(255,240,190,0.9)" : "rgba(255,255,255,0.22)"}
+                      strokeWidth={slice.ultraRare ? 1.8 : 1.2}
+                    />
+                    {slice.ultraRare && (
+                      <Path d={d} fill="url(#reward-segment-ultra-gloss)" opacity={0.55} />
+                    )}
+                  </G>
+                );
+              })}
 
               {celebrating && winningSlice ? (
                 <Path
@@ -379,6 +414,10 @@ export function RewardWheel({
               ) : null}
 
               {slices.map((slice, index) => {
+                // Ultra-rare previews are completely content-free: no icon,
+                // no star, no title, no dot, no placeholder — the gold slice
+                // itself is the presentation.
+                if (slice.ultraRare) return null;
                 const mid = slice.startDeg + slice.sweepDeg / 2;
                 const iconPos = polar(mid, radius * 0.56, center);
                 if (!slice.segment.icon && !slice.segment.title) {

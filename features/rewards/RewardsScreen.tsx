@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { ArrowLeft, CalendarClock, ChevronRight, Gift, Sparkles, Star } from "lucide-react-native";
+import { ArrowLeft, CalendarClock, ChevronRight, Gift, Sparkles, Star, Vote } from "lucide-react-native";
 import Animated, {
   FadeInDown,
   useAnimatedStyle,
@@ -28,8 +28,11 @@ import {
 } from "@/services/api/rewards";
 import type { ApiError } from "@/types/api";
 import { rewardsCopy as copy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
+import { useActiveRegularDropQuery } from "@/services/api/regularDrops";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { RewardWheel } from "./RewardWheel";
+import { RegularDropSheet } from "./RegularDropSheet";
 import { SpinResultModal } from "./SpinResultModal";
 import { countdownParts, REWARD_STATUS_COLORS, rewardMetaLine } from "./rewardFormat";
 
@@ -311,6 +314,15 @@ export function RewardsScreen() {
     }
   }, [invalidateRewardData]);
 
+  // Regular Drop entry (moved here from Home): shared user-scoped query —
+  // the sheet reuses the same cache row, so nothing fetches twice.
+  const { t } = useTranslation();
+  const dropQuery = useActiveRegularDropQuery();
+  const [dropSheetOpen, setDropSheetOpen] = useState(false);
+  const dropPoll = dropQuery.data?.poll ?? null;
+  const showDropAction = dropPoll !== null;
+  const showDropBadge = !!dropPoll && dropPoll.isActive && !dropPoll.hasVoted;
+
   const closeModal = () => setModalResult(null);
   const showMyRewards = () => {
     setModalResult(null);
@@ -336,7 +348,20 @@ export function RewardsScreen() {
           <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
         </Pressable>
         <ThemedText style={styles.headerTitle}>{copy.screenTitle}</ThemedText>
-        <View style={styles.backButton} />
+        {showDropAction ? (
+          <Pressable
+            onPress={() => setDropSheetOpen(true)}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel={t("regularDrops.title")}
+            hitSlop={8}
+          >
+            <Vote size={17} color={colors.textPrimary} strokeWidth={2} />
+            {showDropBadge && <View style={styles.dropBadge} />}
+          </Pressable>
+        ) : (
+          <View style={styles.backButton} />
+        )}
       </View>
 
       {authLoading ? (
@@ -470,6 +495,10 @@ export function RewardsScreen() {
       ) : null}
 
       <SpinResultModal result={modalResult} onClose={closeModal} onShowRewards={showMyRewards} />
+
+      {/* Regular Drop poll sheet — conditional mount keeps every opening
+          fresh; never auto-opened by navigation. */}
+      {dropSheetOpen && <RegularDropSheet onClose={() => setDropSheetOpen(false)} />}
     </Screen>
   );
 }
@@ -496,6 +525,15 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(255,255,255,0.06)",
   },
   backButton: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  dropBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accent,
+  },
   headerTitle: {
     fontSize: 15,
     fontFamily: fontFamily.bodyBold,
