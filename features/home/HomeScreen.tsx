@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/services/auth/AuthProvider";
+import { useActiveRegularDropQuery } from "@/services/api/regularDrops";
+import { RegularDropBanner } from "@/features/rewards/RegularDropBanner";
+import { RegularDropSheet } from "@/features/rewards/RegularDropSheet";
 import { colors, spacing } from "@/theme";
 
 import { GreetingHeader } from "./GreetingHeader";
@@ -29,6 +33,11 @@ import { LoggedOutHome } from "./LoggedOutHome";
  */
 export function HomeScreen() {
   const { user, loading } = useAuth();
+  // Regular Drop banner — same user-scoped query the sheet uses, so
+  // nothing fetches twice. No banner without a relevant poll.
+  const dropQuery = useActiveRegularDropQuery();
+  const dropPoll = dropQuery.data?.poll ?? null;
+  const [dropSheetOpen, setDropSheetOpen] = useState(false);
 
   // Same gate pattern as app/(tabs)/konto.tsx — blank Screen while the
   // Supabase session restores, so the wrong view never flashes.
@@ -70,6 +79,10 @@ export function HomeScreen() {
 
         {user ? (
           <View style={styles.sections}>
+            {/* This week's question — directly under the greeting. */}
+            {dropPoll && (
+              <RegularDropBanner poll={dropPoll} onPress={() => setDropSheetOpen(true)} />
+            )}
             <DailyTargetsCard />
             <TodayOrderStatusCard />
             <RewardsSummaryCard />
@@ -79,6 +92,9 @@ export function HomeScreen() {
           <LoggedOutHome />
         )}
       </ScrollView>
+
+      {/* Shared Regular Drop sheet — same component and cache as before. */}
+      {dropSheetOpen && <RegularDropSheet onClose={() => setDropSheetOpen(false)} />}
     </Screen>
   );
 }

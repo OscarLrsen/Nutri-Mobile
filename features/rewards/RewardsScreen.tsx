@@ -28,11 +28,8 @@ import {
 } from "@/services/api/rewards";
 import type { ApiError } from "@/types/api";
 import { rewardsCopy as copy } from "@/constants/copy";
-import { useActiveRegularDropQuery } from "@/services/api/regularDrops";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { RewardWheel } from "./RewardWheel";
-import { RegularDropSheet } from "./RegularDropSheet";
-import { RegularDropBanner } from "./RegularDropBanner";
 import { SpinResultModal } from "./SpinResultModal";
 import { countdownParts, REWARD_STATUS_COLORS, rewardMetaLine } from "./rewardFormat";
 
@@ -314,12 +311,6 @@ export function RewardsScreen() {
     }
   }, [invalidateRewardData]);
 
-  // Regular Drop entry (moved here from Home): shared user-scoped query —
-  // the sheet reuses the same cache row, so nothing fetches twice.
-  const dropQuery = useActiveRegularDropQuery();
-  const [dropSheetOpen, setDropSheetOpen] = useState(false);
-  const dropPoll = dropQuery.data?.poll ?? null;
-
   const closeModal = () => setModalResult(null);
   const showMyRewards = () => {
     setModalResult(null);
@@ -396,12 +387,6 @@ export function RewardsScreen() {
           <Animated.View entering={entering(0)} style={surroundingStyle}>
             <RewardsHero available={status.canSpin} busy={spinBusy} />
           </Animated.View>
-
-          {/* This week's question — compact vote banner (hidden without a
-              relevant poll); opens the shared RegularDropSheet. */}
-          {dropPoll && (
-            <RegularDropBanner poll={dropPoll} onPress={() => setDropSheetOpen(true)} />
-          )}
 
           {/* ── Weekly reward ── */}
           <Animated.View entering={entering(1)} style={wheelStageStyle}>
@@ -485,10 +470,6 @@ export function RewardsScreen() {
       ) : null}
 
       <SpinResultModal result={modalResult} onClose={closeModal} onShowRewards={showMyRewards} />
-
-      {/* Regular Drop poll sheet — conditional mount keeps every opening
-          fresh; never auto-opened by navigation. */}
-      {dropSheetOpen && <RegularDropSheet onClose={() => setDropSheetOpen(false)} />}
     </Screen>
   );
 }
