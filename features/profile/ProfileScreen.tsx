@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Globe } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
@@ -24,6 +24,12 @@ import {
   upsertWeeklySchedule,
   type WeeklyScheduleDto,
 } from "@/services/api/weeklySchedule";
+import {
+  getMyConsents,
+  setEmailMarketingConsent,
+  type ApiConsentsResponse,
+} from "@/services/api/consents";
+import { env } from "@/lib/env";
 import { ACTIVE_ORDER_KEY } from "@/utils/activeOrder";
 import { deriveDisplayName, deriveInitials } from "@/utils/displayName";
 import { LanguagePickerSheet } from "@/components/language/LanguagePickerSheet";
@@ -350,6 +356,29 @@ export function ProfileScreen() {
     );
   };
 
+  // ── Newsletter consent — REAL backend state (GET /api/consents/me), not
+  // local state or legacy Supabase metadata. The toggle writes through the
+  // backend (source of truth) and re-caches the returned state; on failure
+  // the cache is invalidated so the switch snaps back to the truth.
+  const consentsQuery = useQuery({
+    queryKey: ["consents", "me"],
+    queryFn: getMyConsents,
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const [consentSaveError, setConsentSaveError] = useState(false);
+  const marketingMutation = useMutation({
+    mutationFn: setEmailMarketingConsent,
+    onSuccess: (data: ApiConsentsResponse) => {
+      setConsentSaveError(false);
+      queryClient.setQueryData(["consents", "me"], data);
+    },
+    onError: () => {
+      setConsentSaveError(true);
+      void queryClient.invalidateQueries({ queryKey: ["consents", "me"] });
+    },
+  });
+
   // ── Onboarding-modal actions (approved V1 adaptation: in-app grunddata) ──
   const handleOnboardingNow = async () => {
     setShowOnboardingModal(false);
@@ -657,6 +686,47 @@ export function ProfileScreen() {
         </Pressable>
       </View>
 
+      {/* ── 4c. Nyhetsbrev & villkor — real backend consent state ── */}
+      <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
+        {t("consents.sectionTitle").toUpperCase()}
+      </ThemedText>
+      <View style={styles.accountCard}>
+        <View style={[styles.accountRow, styles.accountRowBorder]}>
+          <View style={{ flex: 1, paddingRight: spacing[3] }}>
+            <ThemedText style={styles.accountRowText}>{t("consents.newsletterLabel")}</ThemedText>
+            <ThemedText
+              style={[styles.consentRowHint, consentSaveError ? styles.consentRowHintError : null]}
+            >
+              {consentSaveError ? t("consents.updateError") : t("consents.newsletterHint")}
+            </ThemedText>
+          </View>
+          <Switch
+            value={consentsQuery.data?.emailMarketingActive ?? false}
+            disabled={consentsQuery.isPending || marketingMutation.isPending}
+            onValueChange={(next) => marketingMutation.mutate(next)}
+            trackColor={{ false: "rgba(255,255,255,0.12)", true: colors.accent }}
+            thumbColor="#fff"
+            accessibilityLabel={t("consents.newsletterLabel")}
+          />
+        </View>
+        <Pressable
+          onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/kopvillkor`)}
+          style={[styles.accountRow, styles.accountRowBorder]}
+          accessibilityRole="link"
+        >
+          <ThemedText style={styles.accountRowText}>{t("consents.termsRow")}</ThemedText>
+          <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
+        </Pressable>
+        <Pressable
+          onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/integritet`)}
+          style={styles.accountRow}
+          accessibilityRole="link"
+        >
+          <ThemedText style={styles.accountRowText}>{t("consents.privacyRow")}</ThemedText>
+          <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
+        </Pressable>
+      </View>
+
       {/* ── 5. Footer (logout only — no account deletion in V1) ── */}
       <View style={styles.footer}>
         <Pressable onPress={handleLogout} accessibilityRole="button" style={{ padding: spacing[2] }}>
@@ -918,6 +988,8 @@ const styles = StyleSheet.create({
   },
   accountRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.borderSoft },
   accountRowText: { fontSize: 14, fontFamily: fontFamily.bodyMedium, letterSpacing: -0.1, color: colors.textPrimary },
+  consentRowHint: { marginTop: 2, fontSize: 11.5, lineHeight: 15, color: colors.textSecondary },
+  consentRowHintError: { color: "#F87171" },
   languageValue: { fontSize: 13, color: colors.textSecondary, letterSpacing: -0.1 },
 
   footer: { marginTop: spacing[5], alignItems: "center" },

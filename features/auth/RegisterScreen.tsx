@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -15,6 +16,7 @@ import { Screen } from "@/components/ui/Screen";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { AuthTextField } from "@/components/auth/AuthTextField";
 import { supabase } from "@/services/auth/supabase";
+import { submitRegistrationConsents } from "@/services/api/consents";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { env } from "@/lib/env";
 import { useTranslation } from "@/i18n";
@@ -54,18 +56,44 @@ export function RegisterScreen() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Both consent boxes start UNCHECKED — terms/privacy is mandatory and
+  // blocks submit; marketing is optional and never blocks anything.
+  const [acceptsTerms, setAcceptsTerms] = useState(false);
   const [acceptsMarketing, setAcceptsMarketing] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{
     firstName?: string;
     email?: string;
     password?: string;
+    terms?: string;
   }>({});
   const [loading, setLoading] = useState(false);
   const [isDuplicateEmail, setIsDuplicateEmail] = useState(false);
   const [sent, setSent] = useState(false);
   const [checking, setChecking] = useState(false);
   const [sessionError, setSessionError] = useState(false);
+
+  // The backend consent record can only be written once a session exists,
+  // which happens on THREE paths (instant session, the 4s poll, the "I have
+  // verified" button) — this ref makes sure exactly one request wins, and a
+  // failed attempt re-arms so the next path retries. Best-effort by design:
+  // the user HAS ticked the mandatory box (signup was blocked otherwise),
+  // so a dropped call must never dead-end the flow — the backend endpoint
+  // is idempotent and the profile screen reads real backend state later.
+  const consentsSubmittedRef = useRef(false);
+  const submitConsentsOnce = async () => {
+    if (consentsSubmittedRef.current) return;
+    consentsSubmittedRef.current = true;
+    try {
+      await submitRegistrationConsents({
+        acceptTerms: true,
+        acceptPrivacy: true,
+        emailMarketing: acceptsMarketing,
+      });
+    } catch {
+      consentsSubmittedRef.current = false;
+    }
+  };
 
   const goNext = () => {
     if (next && next.startsWith("/")) {
@@ -122,6 +150,9 @@ export function RegisterScreen() {
     const nextErrors: typeof fieldErrors = {};
     if (!password) nextErrors.password = t("auth.registerPasswordRequired");
     else if (password.length < 6) nextErrors.password = t("auth.passwordTooShort");
+    // Mandatory: terms of service + privacy policy. The backend rejects the
+    // consent registration without them too — this is just the friendly gate.
+    if (!acceptsTerms) nextErrors.terms = t("auth.termsRequired");
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -173,6 +204,7 @@ export function RegisterScreen() {
 
     // Session returned = "confirm email" disabled — already logged in.
     if (signUpData?.session) {
+      await submitConsentsOnce();
       goNext();
       return;
     }
@@ -198,6 +230,7 @@ export function RegisterScreen() {
       const { data } = await supabase.auth.getSession();
       if (active && data.session) {
         clearInterval(interval);
+        await submitConsentsOnce();
         goNext();
       }
     }, 4000);
@@ -213,6 +246,7 @@ export function RegisterScreen() {
     setSessionError(false);
     const { data } = await supabase.auth.getSession();
     if (data.session) {
+      await submitConsentsOnce();
       goNext();
     } else {
       setSessionError(true);
@@ -435,6 +469,58 @@ export function RegisterScreen() {
                 </View>
               </View>
 
+              {/* Terms + privacy — MANDATORY, never pre-checked. Blocks
+                  submit locally, and the backend consent registration
+                  rejects calls without it (source of truth). The links
+                  open the existing web pages. */}
+              <Pressable
+                onPress={() => {
+                  setAcceptsTerms((v) => !v);
+                  if (fieldErrors.terms) setFieldErrors((p) => ({ ...p, terms: undefined }));
+                }}
+                style={styles.consentRow}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: acceptsTerms }}
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+                    acceptsTerms && styles.checkboxChecked,
+                    fieldErrors.terms && !acceptsTerms ? styles.checkboxErrorBorder : null,
+                  ]}
+                >
+                  {acceptsTerms ? (
+                    <Check size={12} color={colors.textPrimary} strokeWidth={2.5} />
+                  ) : null}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.consentLabel}>
+                    {t("auth.termsAcceptPrefix")}
+                    <ThemedText
+                      style={[styles.consentLabel, styles.consentLink]}
+                      onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/kopvillkor`)}
+                      accessibilityRole="link"
+                    >
+                      {t("auth.termsLinkText")}
+                    </ThemedText>
+                    {t("auth.termsAnd")}
+                    <ThemedText
+                      style={[styles.consentLabel, styles.consentLink]}
+                      onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/integritet`)}
+                      accessibilityRole="link"
+                    >
+                      {t("auth.privacyLinkText")}
+                    </ThemedText>
+                    .
+                  </ThemedText>
+                </View>
+              </Pressable>
+              {fieldErrors.terms ? (
+                <ThemedText style={[styles.error, styles.consentError]}>
+                  {fieldErrors.terms}
+                </ThemedText>
+              ) : null}
+
               {/* Marketing consent — never pre-checked, never required */}
               <Pressable
                 onPress={() => setAcceptsMarketing((v) => !v)}
@@ -484,11 +570,6 @@ export function RegisterScreen() {
                   {loading ? `${t("auth.registerTitle")}…` : t("auth.registerTitle")}
                 </ThemedText>
               </Pressable>
-
-              <ThemedText style={styles.terms}>
-                {t("auth.termsPrefix")}
-                {t("auth.termsPrivacy")}.
-              </ThemedText>
 
               {loginRow}
             </>
@@ -573,6 +654,13 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.72)",
   },
   consentHint: { marginTop: 2, fontSize: 11, lineHeight: 14, color: "rgba(255,255,255,0.4)" },
+  consentLink: {
+    color: colors.accent,
+    fontFamily: fontFamily.bodySemibold,
+    textDecorationLine: "underline",
+  },
+  consentError: { marginTop: -spacing[2] },
+  checkboxErrorBorder: { borderColor: "#F87171" },
   error: { fontSize: 13, lineHeight: 18, color: "#F87171" },
   errorLink: { textDecorationLine: "underline", fontFamily: fontFamily.bodySemibold },
   cta: {
@@ -583,13 +671,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ctaText: { fontSize: 15, fontFamily: fontFamily.bodyBold, color: colors.textPrimary },
-  terms: {
-    textAlign: "center",
-    fontSize: 11.5,
-    lineHeight: 17,
-    color: "rgba(255,255,255,0.45)",
-    paddingHorizontal: spacing[2],
-  },
   promptRow: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: spacing[1] },
   promptText: { fontSize: 13, color: "rgba(255,255,255,0.6)" },
   promptLink: { fontSize: 13, fontFamily: fontFamily.bodyBold, color: colors.accent },

@@ -212,7 +212,12 @@
     "noSession": "Vi hittar ingen verifierad session ännu. Kontrollera länken i mailet och försök igen.",
     "noMail": "Inget mail?",
     "retry": "Försök igen",
-    "guest": "Gäst"
+    "guest": "Gäst",
+    "termsAcceptPrefix": "Jag godkänner Nutris ",
+    "termsLinkText": "användarvillkor",
+    "termsAnd": " och ",
+    "privacyLinkText": "integritetspolicy",
+    "termsRequired": "Du måste godkänna användarvillkoren och integritetspolicyn för att skapa ett konto."
   },
   "orderStatus": {
     "notFoundTitle": "Order hittades inte",
@@ -763,6 +768,17 @@
     "changeLanguage": "Byt språk",
     "current": "Aktuellt språk",
     "close": "Stäng"
+  },
+  "consents": {
+    "sectionTitle": "Nyhetsbrev & villkor",
+    "newsletterLabel": "Nyhetsbrev via e-post",
+    "newsletterHint": "Erbjudanden och nyheter från Nutri. Du kan stänga av när som helst.",
+    "updateError": "Kunde inte spara ändringen. Försök igen.",
+    "termsRow": "Användarvillkor",
+    "privacyRow": "Integritetspolicy",
+    "gateTitle": "Godkänn villkoren för att fortsätta",
+    "gateBody": "För att använda Nutri behöver du godkänna användarvillkoren och integritetspolicyn.",
+    "gateContinue": "Godkänn och fortsätt"
   },
   "locationStatus": {
     "loading": "Laddar",

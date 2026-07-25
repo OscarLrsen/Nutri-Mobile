@@ -212,7 +212,12 @@
     "noSession": "Vi kan endnu ikke finde en bekræftet session. Tjek linket i mailen, og prøv igen.",
     "noMail": "Ingen mail?",
     "retry": "Prøv igen",
-    "guest": "Gæst"
+    "guest": "Gæst",
+    "termsAcceptPrefix": "Jeg accepterer Nutris ",
+    "termsLinkText": "brugervilkår",
+    "termsAnd": " og ",
+    "privacyLinkText": "privatlivspolitik",
+    "termsRequired": "Du skal acceptere brugervilkårene og privatlivspolitikken for at oprette en konto."
   },
   "orderStatus": {
     "notFoundTitle": "Ordren blev ikke fundet",
@@ -763,6 +768,17 @@
     "changeLanguage": "Skift sprog",
     "current": "Nuværende sprog",
     "close": "Luk"
+  },
+  "consents": {
+    "sectionTitle": "Nyhedsbrev & vilkår",
+    "newsletterLabel": "Nyhedsbrev via e-mail",
+    "newsletterHint": "Tilbud og nyheder fra Nutri. Du kan slå det fra når som helst.",
+    "updateError": "Ændringen kunne ikke gemmes. Prøv igen.",
+    "termsRow": "Brugervilkår",
+    "privacyRow": "Privatlivspolitik",
+    "gateTitle": "Accepter vilkårene for at fortsætte",
+    "gateBody": "For at bruge Nutri skal du acceptere brugervilkårene og privatlivspolitikken.",
+    "gateContinue": "Accepter og fortsæt"
   },
   "locationStatus": {
     "loading": "Indlæser",

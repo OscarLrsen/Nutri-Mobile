@@ -2,6 +2,7 @@ import axios, { AxiosError, type AxiosRequestConfig, type InternalAxiosRequestCo
 
 import i18n from "@/i18n/config";
 import { env } from "@/lib/env";
+import { queryClient } from "@/lib/queryClient";
 import { getAccessToken } from "@/services/auth/getAccessToken";
 import type { ApiError } from "@/types/api";
 
@@ -62,6 +63,15 @@ export function requireAuth(config: AxiosRequestConfig = {}): AxiosRequestConfig
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
+    // Consent gate (patch 1.1): the backend 403s every customer endpoint
+    // for accounts that must (re-)accept the terms. Refetching the consent
+    // state here makes the app-wide gate modal appear promptly even when
+    // the requirement arose mid-session (e.g. a consent-version bump) —
+    // without this, the user would just see failing requests.
+    const data = error.response?.data as { code?: string } | undefined;
+    if (error.response?.status === 403 && data?.code === "consent_required") {
+      void queryClient.invalidateQueries({ queryKey: ["consents", "me"] });
+    }
     const normalized: ApiError = error.response
       ? {
           status: error.response.status,

@@ -212,7 +212,12 @@
     "noSession": "We can't find a verified session yet. Check the link in the email and try again.",
     "noMail": "No email?",
     "retry": "Try again",
-    "guest": "Guest"
+    "guest": "Guest",
+    "termsAcceptPrefix": "I agree to Nutri's ",
+    "termsLinkText": "terms of service",
+    "termsAnd": " and ",
+    "privacyLinkText": "privacy policy",
+    "termsRequired": "You need to accept the terms of service and privacy policy to create an account."
   },
   "orderStatus": {
     "notFoundTitle": "Order not found",
@@ -763,6 +768,17 @@
     "changeLanguage": "Change language",
     "current": "Current language",
     "close": "Close"
+  },
+  "consents": {
+    "sectionTitle": "Newsletter & terms",
+    "newsletterLabel": "Email newsletter",
+    "newsletterHint": "Offers and news from Nutri. You can turn this off at any time.",
+    "updateError": "Could not save the change. Please try again.",
+    "termsRow": "Terms of service",
+    "privacyRow": "Privacy policy",
+    "gateTitle": "Accept the terms to continue",
+    "gateBody": "To use Nutri you need to accept the terms of service and the privacy policy.",
+    "gateContinue": "Accept and continue"
   },
   "locationStatus": {
     "loading": "Loading",

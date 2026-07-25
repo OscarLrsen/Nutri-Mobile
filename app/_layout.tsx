@@ -17,6 +17,7 @@ import { CartProvider } from "@/context/CartContext";
 import { CouponProvider } from "@/context/CouponContext";
 import { WelcomeCouponModal } from "@/features/coupons/WelcomeCouponModal";
 import { SpinNudgeSheet } from "@/features/rewards/SpinNudgeSheet";
+import { ConsentGateModal } from "@/features/consents/ConsentGateModal";
 import { ErrorBoundary } from "@/components/feedback/ErrorBoundary";
 import { NutriSplashScreen } from "@/components/launch/NutriSplashScreen";
 import { colors } from "@/theme";
@@ -90,6 +91,11 @@ export default function RootLayout() {
                           {/* App-wide overlay: weekly-spin nudge, once per launch
                               (defers to the welcome prompt on first login). */}
                           <SpinNudgeSheet />
+                          {/* App-wide BLOCKING overlay (patch 1.1): mandatory
+                              terms/privacy acceptance for accounts the backend
+                              flags — mounted last so it stacks above the two
+                              nudges whenever both would show. */}
+                          <ConsentGateModal />
                         </>
                       )}
                       {/* Animated startup screen on top of the booting app. */}
