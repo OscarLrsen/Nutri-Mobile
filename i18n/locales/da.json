@@ -760,7 +760,10 @@
     "reasonIcons": {
       "OrderEarned": "🛍️",
       "WeeklyRewardEarned": "🎁"
-    }
+    },
+    "useTitle": "Brug dine point",
+    "useBadge": "Kommer snart",
+    "useBody": "Snart kan du indløse dine Nutri Points til eksklusive belønninger."
   },
   "language": {
     "title": "Sprog",

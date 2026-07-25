@@ -760,7 +760,10 @@
     "reasonIcons": {
       "OrderEarned": "🛍️",
       "WeeklyRewardEarned": "🎁"
-    }
+    },
+    "useTitle": "Use your points",
+    "useBadge": "Coming soon",
+    "useBody": "Soon you’ll be able to exchange your Nutri Points for exclusive rewards."
   },
   "language": {
     "title": "Language",

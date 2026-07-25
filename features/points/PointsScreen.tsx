@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Star } from "lucide-react-native";
+import { ArrowLeft, Gift, Star } from "lucide-react-native";
 
 import { Screen } from "@/components/ui/Screen";
 import { ThemedText } from "@/components/ui/ThemedText";
@@ -118,6 +118,34 @@ export function PointsScreen() {
             </View>
           )}
 
+          {/* ── Use your points — COMING SOON (patch 2) ──────────────────
+              Honest teaser only: no catalog, no example rewards, no
+              redeem path exists yet (V1 has no spend endpoint). Static
+              card by design — nothing here is pressable, and the badge is
+              a plain status pill, never a disabled button. The whole card
+              reads as ONE accessibility element (title, status, body) so
+              screen readers announce it as information, not a control. */}
+          <View
+            style={styles.comingSoonCard}
+            accessible
+            accessibilityLabel={`${t("points.useTitle")}. ${t("points.useBadge")}. ${t("points.useBody")}`}
+          >
+            <View style={styles.comingSoonIconWrap}>
+              <Gift size={18} color={colors.textTertiary} strokeWidth={1.75} />
+            </View>
+            <View style={styles.comingSoonCopy}>
+              <View style={styles.comingSoonTopRow}>
+                <ThemedText style={styles.comingSoonTitle}>{t("points.useTitle")}</ThemedText>
+                <View style={styles.comingSoonBadge}>
+                  <ThemedText style={styles.comingSoonBadgeText}>
+                    {t("points.useBadge").toUpperCase()}
+                  </ThemedText>
+                </View>
+              </View>
+              <ThemedText style={styles.comingSoonBody}>{t("points.useBody")}</ThemedText>
+            </View>
+          </View>
+
           {/* ── Ledger ── */}
           <ThemedText style={styles.sectionHead}>{t("points.historyHead")}</ThemedText>
           {txQuery.isLoading ? (
@@ -210,6 +238,56 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   balanceUnit: { fontSize: 13, fontFamily: fontFamily.bodyMedium, color: colors.textTertiary },
+
+  comingSoonCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing[3],
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    padding: spacing[4],
+  },
+  comingSoonIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.btn,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.cardAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  comingSoonCopy: { flex: 1, minWidth: 0, gap: spacing[1] },
+  comingSoonTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[2],
+    flexWrap: "wrap",
+  },
+  comingSoonTitle: {
+    flexShrink: 1,
+    fontSize: 13.5,
+    fontFamily: fontFamily.bodySemibold,
+    color: colors.textPrimary,
+  },
+  comingSoonBadge: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardAlt,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 3,
+  },
+  comingSoonBadgeText: {
+    fontSize: 9.5,
+    fontFamily: fontFamily.bodySemibold,
+    letterSpacing: 1,
+    color: colors.textSecondary,
+  },
+  comingSoonBody: { fontSize: 12.5, lineHeight: 18, color: colors.textSecondary },
 
   sectionHead: {
     fontSize: 11,
