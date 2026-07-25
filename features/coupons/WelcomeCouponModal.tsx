@@ -15,6 +15,7 @@ import {
   isCouponUsable,
   WELCOME_COUPON_SOURCE,
 } from "@/services/api/coupons";
+import { setNudgeOverlayActive } from "@/features/overlays/overlayActivity";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
@@ -54,6 +55,14 @@ export function WelcomeCouponModal() {
   const [visible, setVisible] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState(false);
+
+  // Additive (patch 4 overlay control): report visibility so the
+  // onboarding survey never shows while this modal is up. No show/defer
+  // logic changed.
+  useEffect(() => {
+    setNudgeOverlayActive("welcomeCoupon", visible);
+    return () => setNudgeOverlayActive("welcomeCoupon", false);
+  }, [visible]);
 
   const userId = user?.id ?? null;
 

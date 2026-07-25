@@ -19,6 +19,7 @@ import { WelcomeCouponModal } from "@/features/coupons/WelcomeCouponModal";
 import { SpinNudgeSheet } from "@/features/rewards/SpinNudgeSheet";
 import { ConsentGateModal } from "@/features/consents/ConsentGateModal";
 import { FirstRunOnboardingGate } from "@/features/onboarding/FirstRunOnboardingGate";
+import { OnboardingSurveyOverlay } from "@/features/survey/OnboardingSurveyOverlay";
 import { ErrorBoundary } from "@/components/feedback/ErrorBoundary";
 import { NutriSplashScreen } from "@/components/launch/NutriSplashScreen";
 import { colors } from "@/theme";
@@ -97,6 +98,12 @@ export default function RootLayout() {
                               flags — mounted last so it stacks above the two
                               nudges whenever both would show. */}
                           <ConsentGateModal />
+                          {/* Onboarding survey (patch 4) — a plain View
+                              overlay, deliberately NOT an RN Modal: the
+                              consent gate and the welcome/spin modals
+                              above always render on top of it, and the
+                              first-run gate (mounted below) covers it. */}
+                          <OnboardingSurveyOverlay />
                         </>
                       )}
                       {/* First-run intro (patch 3) — opaque from the first

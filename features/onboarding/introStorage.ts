@@ -15,14 +15,43 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
  */
 export const INTRO_SEEN_KEY = "nutri_intro_seen_v1";
 
+// In-memory mirror + subscription (additive, patch 4): other app-level
+// overlays (the onboarding survey) must never show WHILE the first-run
+// intro is up, so they subscribe here instead of polling AsyncStorage.
+// null = not read yet this session. The first-run decision logic above is
+// untouched — this only broadcasts what it already reads/writes.
+let cachedSeen: boolean | null = null;
+const listeners = new Set<() => void>();
+function notify() {
+  listeners.forEach((listener) => listener());
+}
+
+export function getIntroSeenCached(): boolean | null {
+  return cachedSeen;
+}
+
+export function subscribeIntroSeen(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 export async function loadIntroSeen(): Promise<boolean> {
   try {
-    return (await AsyncStorage.getItem(INTRO_SEEN_KEY)) === "1";
+    const seen = (await AsyncStorage.getItem(INTRO_SEEN_KEY)) === "1";
+    cachedSeen = seen;
+    notify();
+    return seen;
   } catch {
+    cachedSeen = true;
+    notify();
     return true;
   }
 }
 
 export async function markIntroSeen(): Promise<void> {
+  cachedSeen = true;
+  notify();
   await AsyncStorage.setItem(INTRO_SEEN_KEY, "1").catch(() => {});
 }

@@ -798,6 +798,35 @@
     "profileSection": "Om appen",
     "profileRow": "Sådan fungerer Nutri"
   },
+  "survey": {
+    "progress": "Spørgsmål {{current}} af {{total}}",
+    "q1Title": "Hvordan fandt du Nutri?",
+    "q1Hint": "Vælg én mulighed.",
+    "q2Title": "Hvad fik dig til at vælge Nutri?",
+    "q2Hint": "Vælg en eller flere muligheder.",
+    "q1": {
+      "instagram": "Instagram",
+      "tiktok": "TikTok",
+      "google": "Google",
+      "friend_family": "Ven eller familie",
+      "food_truck": "Så foodtrucken",
+      "gym_club": "Fitnesscenter eller sportsklub",
+      "other": "Andet"
+    },
+    "q2": {
+      "healthy_food": "Sund mad",
+      "high_protein": "Proteinrige måltider",
+      "reach_goals": "Hjælp til at nå mine mål",
+      "convenience": "Nemt og bekvemt",
+      "menu_looked_good": "Menuen så lækker ud",
+      "recommendation": "Anbefaling",
+      "other": "Andet"
+    },
+    "skip": "Spring over",
+    "next": "Næste",
+    "submit": "Send",
+    "error": "Kunne ikke sende. Prøv igen."
+  },
   "locationStatus": {
     "loading": "Indlæser",
     "noLocation": "Kommer snart",

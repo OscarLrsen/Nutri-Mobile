@@ -798,6 +798,35 @@
     "profileSection": "About the app",
     "profileRow": "How Nutri works"
   },
+  "survey": {
+    "progress": "Question {{current}} of {{total}}",
+    "q1Title": "How did you find Nutri?",
+    "q1Hint": "Choose one option.",
+    "q2Title": "What made you choose Nutri?",
+    "q2Hint": "Choose one or more options.",
+    "q1": {
+      "instagram": "Instagram",
+      "tiktok": "TikTok",
+      "google": "Google",
+      "friend_family": "Friend or family",
+      "food_truck": "Saw the food truck",
+      "gym_club": "Gym or sports club",
+      "other": "Other"
+    },
+    "q2": {
+      "healthy_food": "Healthy food",
+      "high_protein": "High-protein meals",
+      "reach_goals": "Help reaching my goals",
+      "convenience": "Convenience",
+      "menu_looked_good": "The menu looked good",
+      "recommendation": "Recommendation",
+      "other": "Other"
+    },
+    "skip": "Skip",
+    "next": "Next",
+    "submit": "Submit",
+    "error": "Could not send. Please try again."
+  },
   "locationStatus": {
     "loading": "Loading",
     "noLocation": "Coming soon",
