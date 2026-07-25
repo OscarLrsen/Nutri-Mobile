@@ -1,35 +1,36 @@
 import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { useActiveRegularDropQuery } from "@/services/api/regularDrops";
-import { RegularDropBanner } from "@/features/rewards/RegularDropBanner";
 import { RegularDropSheet } from "@/features/rewards/RegularDropSheet";
-import { colors, spacing } from "@/theme";
+import { colors, radius, spacing } from "@/theme";
 
 import { GreetingHeader } from "./GreetingHeader";
-import { RewardsBell } from "./RewardsBell";
 import { DailyTargetsCard } from "./DailyTargetsCard";
 import { TodayOrderStatusCard } from "./TodayOrderStatusCard";
-import { RewardsSummaryCard } from "./RewardsSummaryCard";
+import { NutriFamilySection } from "./NutriFamilySection";
 import { LoggedOutHome } from "./LoggedOutHome";
 
 /**
- * Hem — personal nutrition dashboard (Patch 1 IA).
+ * Hem — personal nutrition dashboard (Patch 1 IA, patch 5 visual cleanup).
  *
- * Signed in: greeting → today's targets → today's order status → points.
- * Quick actions (Snabbval) was removed from Hem so the whole dashboard fits
- * a normal phone screen without scrolling; its destinations remain reachable
- * elsewhere (Meny and Mina sidor via the tab bar, Nutri Anpassar via its
- * entry card on Meny).
- * Each remaining section is its own component owning its own query via the
- * shared auth-gated hooks (services/api/nutritionQueries, rewards status) —
- * no store status here anymore: the 30s ["store","status"] poll moved to
- * Meny together with all ordering-related content (the old sales hero, "Se
- * menyn" main CTA, FullDayMealCard, FindUs/About/Footer).
+ * Signed in: greeting → today's targets → today's order status → the Nutri
+ * Family segment (Weekly Reward spin + Nutri points + Regular Drop vote —
+ * the three membership features gathered under one heading; identical
+ * destinations, conditions and query caches as before, see
+ * NutriFamilySection).
+ * Each section is its own component owning its own query via the shared
+ * auth-gated hooks — no store status here: the 30s ["store","status"] poll
+ * lives on Meny together with all ordering-related content.
+ *
+ * Patch 5: the header card is now a flat token card (colors.card +
+ * colors.border + radius.card) like every card on Meny — the gradient and
+ * glow that made Home feel like a different product are gone, and the old
+ * gradient points hero + header gift button are replaced by the segment's
+ * rows.
  *
  * Signed out: a static entry point that fetches nothing (every dashboard
  * endpoint requires auth).
@@ -54,41 +55,30 @@ export function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.hero, !user && styles.heroLoggedOut]}>
-          <LinearGradient
-            pointerEvents="none"
-            colors={["rgba(232,101,10,0.13)", "rgba(28,28,30,0.82)", "rgba(17,17,17,0.2)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View pointerEvents="none" style={styles.heroGlow} />
+          {/* Just the centered logo — the weekly-reward entry lives in the
+              Nutri Family segment below (patch 5), so the header carries
+              no buttons and needs no slot layout. */}
           <View style={styles.logoRow}>
-            <View style={styles.headerSlot}>
-              <RewardsBell />
-            </View>
             <Image
               source={require("@/assets/nutri-logo.png")}
               style={styles.logo}
               contentFit="contain"
               accessibilityLabel="Nutri"
             />
-            {/* Reserved balance slot. No notification route exists, so this
-                intentionally stays non-interactive instead of becoming a
-                misleading bell button. */}
-            <View style={styles.headerSlot} />
           </View>
           {user ? <GreetingHeader /> : null}
         </View>
 
         {user ? (
           <View style={styles.sections}>
-            {/* This week's question — directly under the greeting. */}
-            {dropPoll && (
-              <RegularDropBanner poll={dropPoll} onPress={() => setDropSheetOpen(true)} />
-            )}
             <DailyTargetsCard />
             <TodayOrderStatusCard />
-            <RewardsSummaryCard />
+            {/* The membership features — spin, points and this week's
+                vote — gathered under one heading. */}
+            <NutriFamilySection
+              dropPoll={dropPoll}
+              onVotePress={() => setDropSheetOpen(true)}
+            />
           </View>
         ) : (
           <LoggedOutHome />
@@ -114,11 +104,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   hero: {
-    overflow: "hidden",
     gap: spacing[3],
-    borderRadius: 20,
+    borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.07)",
+    borderColor: colors.border,
     backgroundColor: colors.card,
     paddingHorizontal: spacing[4],
     paddingTop: spacing[2],
@@ -128,23 +117,7 @@ const styles = StyleSheet.create({
   heroLoggedOut: {
     paddingBottom: spacing[3],
   },
-  heroGlow: {
-    position: "absolute",
-    top: -76,
-    right: -42,
-    width: 170,
-    height: 170,
-    borderRadius: 85,
-    backgroundColor: "rgba(232,101,10,0.08)",
-  },
   logoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headerSlot: {
-    width: 40,
-    height: 40,
     alignItems: "center",
     justifyContent: "center",
   },

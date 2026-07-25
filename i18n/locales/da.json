@@ -64,7 +64,10 @@
     "actionAccountSub": "Mål, historik og indstillinger",
     "actionMenuSub": "Bestil dagens måltider",
     "actionAnpassarSub": "Lad Nutri sætte din bestilling sammen",
-    "pointsSubtitle": "Saldo og transaktioner"
+    "pointsSubtitle": "Saldo og transaktioner",
+    "familyTitle": "Du er en del af Nutri-familien",
+    "familyBody": "Optjen point, drej ugens hjul, og vær med til at forme, hvad der kommer næst.",
+    "familySpinHint": "Drej ugens hjul"
   },
   "menu": {
     "categories": {

@@ -64,7 +64,10 @@
     "actionAccountSub": "Goals, history and settings",
     "actionMenuSub": "Order today's meals",
     "actionAnpassarSub": "Let Nutri put your order together",
-    "pointsSubtitle": "Balance and transactions"
+    "pointsSubtitle": "Balance and transactions",
+    "familyTitle": "You’re part of the Nutri family",
+    "familyBody": "Earn points, spin for weekly rewards and help shape what comes next.",
+    "familySpinHint": "Spin the weekly wheel"
   },
   "menu": {
     "categories": {
