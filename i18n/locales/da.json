@@ -783,6 +783,21 @@
     "gateBody": "For at bruge Nutri skal du acceptere brugervilkårene og privatlivspolitikken.",
     "gateContinue": "Accepter og fortsæt"
   },
+  "onboarding": {
+    "s1Title": "Mad tilpasset dine mål",
+    "s1Body": "Vælg måltider, der passer til dit kaloriebehov, proteinmål og din livsstil.",
+    "s2Title": "Bestil med få tryk",
+    "s2Body": "Vælg dit måltid, tilpas det og bestil direkte i appen.",
+    "s3Title": "Hent og fortsæt dagen",
+    "s3Body": "Vi forbereder maden. Du henter den, når den er klar, og fortsætter med din dag.",
+    "skip": "Spring over",
+    "next": "Næste",
+    "explore": "Udforsk uden konto",
+    "done": "Færdig",
+    "pageIndicator": "Side {{current}} af {{total}}",
+    "profileSection": "Om appen",
+    "profileRow": "Sådan fungerer Nutri"
+  },
   "locationStatus": {
     "loading": "Indlæser",
     "noLocation": "Kommer snart",

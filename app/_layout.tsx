@@ -18,6 +18,7 @@ import { CouponProvider } from "@/context/CouponContext";
 import { WelcomeCouponModal } from "@/features/coupons/WelcomeCouponModal";
 import { SpinNudgeSheet } from "@/features/rewards/SpinNudgeSheet";
 import { ConsentGateModal } from "@/features/consents/ConsentGateModal";
+import { FirstRunOnboardingGate } from "@/features/onboarding/FirstRunOnboardingGate";
 import { ErrorBoundary } from "@/components/feedback/ErrorBoundary";
 import { NutriSplashScreen } from "@/components/launch/NutriSplashScreen";
 import { colors } from "@/theme";
@@ -98,6 +99,10 @@ export default function RootLayout() {
                           <ConsentGateModal />
                         </>
                       )}
+                      {/* First-run intro (patch 3) — opaque from the first
+                          frame while the flag loads, so the splash below
+                          fades into the intro (not Home) on first launch. */}
+                      <FirstRunOnboardingGate />
                       {/* Animated startup screen on top of the booting app. */}
                       {!splashDone && (
                         <NutriSplashScreen

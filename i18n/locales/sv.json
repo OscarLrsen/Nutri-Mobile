@@ -783,6 +783,21 @@
     "gateBody": "För att använda Nutri behöver du godkänna användarvillkoren och integritetspolicyn.",
     "gateContinue": "Godkänn och fortsätt"
   },
+  "onboarding": {
+    "s1Title": "Mat anpassad efter dina mål",
+    "s1Body": "Välj måltider som passar ditt kaloribehov, proteinmål och din livsstil.",
+    "s2Title": "Beställ med några få tryck",
+    "s2Body": "Välj din måltid, anpassa den och beställ direkt i appen.",
+    "s3Title": "Hämta och fortsätt dagen",
+    "s3Body": "Vi förbereder maten. Du hämtar den när den är klar och fortsätter med din dag.",
+    "skip": "Hoppa över",
+    "next": "Nästa",
+    "explore": "Utforska utan konto",
+    "done": "Klar",
+    "pageIndicator": "Sida {{current}} av {{total}}",
+    "profileSection": "Om appen",
+    "profileRow": "Så fungerar Nutri"
+  },
   "locationStatus": {
     "loading": "Laddar",
     "noLocation": "Kommer snart",

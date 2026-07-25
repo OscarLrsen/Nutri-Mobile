@@ -686,7 +686,25 @@ export function ProfileScreen() {
         </Pressable>
       </View>
 
-      {/* ── 4c. Nyhetsbrev & villkor — real backend consent state ── */}
+      {/* ── 4c. Om appen — replay the first-run intro (patch 3). Never
+          touches the first-run flag or auth; the route navigates back
+          here when done. ── */}
+      <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
+        {t("onboarding.profileSection").toUpperCase()}
+      </ThemedText>
+      <View style={styles.accountCard}>
+        <Pressable
+          onPress={() => router.push("/om-nutri")}
+          style={styles.accountRow}
+          accessibilityRole="button"
+          accessibilityLabel={t("onboarding.profileRow")}
+        >
+          <ThemedText style={styles.accountRowText}>{t("onboarding.profileRow")}</ThemedText>
+          <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
+        </Pressable>
+      </View>
+
+      {/* ── 4d. Nyhetsbrev & villkor — real backend consent state ── */}
       <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
         {t("consents.sectionTitle").toUpperCase()}
       </ThemedText>

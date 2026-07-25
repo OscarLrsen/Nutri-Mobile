@@ -783,6 +783,21 @@
     "gateBody": "To use Nutri you need to accept the terms of service and the privacy policy.",
     "gateContinue": "Accept and continue"
   },
+  "onboarding": {
+    "s1Title": "Food tailored to your goals",
+    "s1Body": "Choose meals that fit your calories, protein needs and lifestyle.",
+    "s2Title": "Order in a few taps",
+    "s2Body": "Choose your meal, customise it and place your order directly in the app.",
+    "s3Title": "Pick up and move on",
+    "s3Body": "We prepare your food. You pick it up when it is ready and continue with your day.",
+    "skip": "Skip",
+    "next": "Next",
+    "explore": "Explore without an account",
+    "done": "Done",
+    "pageIndicator": "Page {{current}} of {{total}}",
+    "profileSection": "About the app",
+    "profileRow": "How Nutri works"
+  },
   "locationStatus": {
     "loading": "Loading",
     "noLocation": "Coming soon",
