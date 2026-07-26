@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type PropsWithChildren 
 import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "./supabase";
+import { deactivateCurrentDevicePush } from "@/services/push/pushNotifications";
 
 /**
  * Session/user auth state only — mirrors the *auth* half of Nutri-Frontend's
@@ -41,6 +42,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   const signOut = async () => {
+    // Deactivate this device's push token BEFORE the session dies (the API
+    // call needs it) — best-effort and non-blocking-on-failure, so a shared
+    // device stops getting the previous user's order pushes.
+    await deactivateCurrentDevicePush();
     await supabase.auth.signOut();
   };
 

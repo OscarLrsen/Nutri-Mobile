@@ -860,6 +860,30 @@
     "doneBugBody": "Vi har modtaget problemet og vil kigge på det.",
     "doneClose": "Færdig"
   },
+  "push": {
+    "preprompt": {
+      "title": "Få besked, når maden er klar",
+      "body": "Tillad notifikationer, så giver vi dig besked, når din bestilling er klar til afhentning.",
+      "enable": "Aktivér notifikationer",
+      "later": "Ikke nu"
+    },
+    "profile": {
+      "sectionTitle": "Notifikationer",
+      "osDenied": "Notifikationer er slået fra i systemindstillingerne. Åbn indstillingerne for at slå dem til igen.",
+      "osUndetermined": "Du har endnu ikke taget stilling til notifikationer på denne enhed.",
+      "openSettings": "Åbn indstillinger",
+      "enable": "Aktivér notifikationer",
+      "loading": "Henter notifikationsindstillinger …",
+      "deviceMissing": "Denne enhed er endnu ikke registreret til notifikationer. Den registreres automatisk, næste gang appen starter.",
+      "toggleOrders": "Ordreopdateringer",
+      "toggleOrdersHint": "En notifikation, når din bestilling er klar til afhentning.",
+      "toggleWeekly": "Ugens belønninger",
+      "toggleWeeklyHint": "En påmindelse, når ugens hjul åbner.",
+      "toggleProfile": "Profilpåmindelser",
+      "toggleProfileHint": "Lejlighedsvise påmindelser om at færdiggøre din profil.",
+      "updateError": "Kunne ikke gemme. Prøv igen."
+    }
+  },
   "locationStatus": {
     "loading": "Indlæser",
     "noLocation": "Kommer snart",

@@ -41,6 +41,7 @@ import {
 import { EditSectionModal, type EditSection, type ProfileFormState } from "./EditSectionModal";
 import { TrainingScheduleSheet } from "./TrainingScheduleSheet";
 import { OrderHistory } from "./OrderHistory";
+import { PushNotificationsSection } from "@/features/push/PushNotificationsSection";
 
 /**
  * Profile — port of the web's app/profil/page.tsx with the approved V1
@@ -734,7 +735,11 @@ export function ProfileScreen() {
         </Pressable>
       </View>
 
-      {/* ── 4e. Nyhetsbrev & villkor — real backend consent state ── */}
+      {/* ── 4e. Notiser (patch 10) — OS status + per-device category
+          toggles; hides itself on simulators where push can't work. ── */}
+      <PushNotificationsSection />
+
+      {/* ── 4f. Nyhetsbrev & villkor — real backend consent state ── */}
       <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
         {t("consents.sectionTitle").toUpperCase()}
       </ThemedText>

@@ -47,6 +47,7 @@ import {
   isStockOutError,
 } from "@/utils/orderErrors";
 import { setActiveOrderId, getActiveOrderId, setPendingStripeClear } from "@/utils/activeOrder";
+import { markOrderSuccessForPushPreprompt } from "@/features/push/orderSuccessSignal";
 import type { TFunction } from "i18next";
 
 import { env } from "@/lib/env";
@@ -213,6 +214,10 @@ export function CartScreen() {
           };
         }),
       });
+
+      // Order exists — stamp the push pre-prompt's one-shot signal (patch
+      // 10). Fire-and-forget: payment/navigation below is unchanged.
+      markOrderSuccessForPushPreprompt(order.id);
 
       // The coupon was consumed server-side in the same transaction that
       // created the order (even for Stripe, where payment comes later) —

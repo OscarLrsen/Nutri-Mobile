@@ -860,6 +860,30 @@
     "doneBugBody": "We have received the problem and will look into it.",
     "doneClose": "Done"
   },
+  "push": {
+    "preprompt": {
+      "title": "Know when your food is ready",
+      "body": "Allow notifications and we'll let you know when your order is ready for pickup.",
+      "enable": "Enable notifications",
+      "later": "Not now"
+    },
+    "profile": {
+      "sectionTitle": "Notifications",
+      "osDenied": "Notifications are turned off in your system settings. Open settings to turn them back on.",
+      "osUndetermined": "You haven't decided about notifications on this device yet.",
+      "openSettings": "Open settings",
+      "enable": "Enable notifications",
+      "loading": "Loading notification settings…",
+      "deviceMissing": "This device isn't registered for notifications yet. It will register automatically the next time the app starts.",
+      "toggleOrders": "Order updates",
+      "toggleOrdersHint": "A notification when your order is ready for pickup.",
+      "toggleWeekly": "Weekly rewards",
+      "toggleWeeklyHint": "A reminder when the weekly spin opens.",
+      "toggleProfile": "Profile reminders",
+      "toggleProfileHint": "Occasional reminders to complete your profile.",
+      "updateError": "Couldn't save. Please try again."
+    }
+  },
   "locationStatus": {
     "loading": "Loading",
     "noLocation": "Coming soon",

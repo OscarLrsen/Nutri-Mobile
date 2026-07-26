@@ -860,6 +860,30 @@
     "doneBugBody": "Vi har tagit emot problemet och kommer att granska det.",
     "doneClose": "Klar"
   },
+  "push": {
+    "preprompt": {
+      "title": "Få veta när maten är klar",
+      "body": "Tillåt notiser så meddelar vi dig när din beställning är redo att hämtas.",
+      "enable": "Aktivera notiser",
+      "later": "Inte nu"
+    },
+    "profile": {
+      "sectionTitle": "Notiser",
+      "osDenied": "Notiser är avstängda i systeminställningarna. Öppna inställningarna för att slå på dem igen.",
+      "osUndetermined": "Du har inte tagit ställning till notiser på den här enheten ännu.",
+      "openSettings": "Öppna inställningar",
+      "enable": "Aktivera notiser",
+      "loading": "Hämtar notisinställningar …",
+      "deviceMissing": "Den här enheten är inte registrerad för notiser ännu. Den registreras automatiskt nästa gång appen startar.",
+      "toggleOrders": "Orderuppdateringar",
+      "toggleOrdersHint": "Notis när din beställning är redo att hämtas.",
+      "toggleWeekly": "Veckans belöningar",
+      "toggleWeeklyHint": "Påminnelse när veckans snurr öppnar.",
+      "toggleProfile": "Profilpåminnelser",
+      "toggleProfileHint": "Enstaka påminnelser om att göra klart din profil.",
+      "updateError": "Kunde inte spara. Försök igen."
+    }
+  },
   "locationStatus": {
     "loading": "Laddar",
     "noLocation": "Kommer snart",

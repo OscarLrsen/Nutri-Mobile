@@ -25,6 +25,7 @@ import {
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
+import { PushPrePromptCard } from "@/features/push/PushPrePromptCard";
 import { useCart } from "@/context/CartContext";
 import { getOrderById, type ApiOrder } from "@/services/api/orders";
 import type { ApiError } from "@/types/api";
@@ -505,6 +506,12 @@ function OrderActiveView({ order, fetchError }: { order: ApiOrder; fetchError: b
               <ProgressSteps labels={stepLabels} curStep={curStep} />
             </View>
           </View>
+
+          {/* Push pre-prompt (patch 10) — one-shot, only on the order the
+              cart just placed (order-success signal) and only while the OS
+              permission is still undetermined; the card sits right under
+              the live status it offers to notify about. */}
+          <PushPrePromptCard orderId={order.id} />
 
           {/* Order summary */}
           <SectionHead>{t("orderStatus.sectionOrderSummary").toUpperCase()}</SectionHead>

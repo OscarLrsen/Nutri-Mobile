@@ -20,6 +20,8 @@ import { SpinNudgeSheet } from "@/features/rewards/SpinNudgeSheet";
 import { ConsentGateModal } from "@/features/consents/ConsentGateModal";
 import { FirstRunOnboardingGate } from "@/features/onboarding/FirstRunOnboardingGate";
 import { OnboardingSurveyOverlay } from "@/features/survey/OnboardingSurveyOverlay";
+import { PushNotificationResponder } from "@/features/push/PushNotificationResponder";
+import { PushTokenSync } from "@/features/push/PushTokenSync";
 import { ErrorBoundary } from "@/components/feedback/ErrorBoundary";
 import { NutriSplashScreen } from "@/components/launch/NutriSplashScreen";
 import { colors } from "@/theme";
@@ -76,6 +78,11 @@ export default function RootLayout() {
                 <CartProvider>
                   <CouponProvider>
                     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+                      {/* Push plumbing (patch 10) — render nothing. Deep
+                          links navigate the Stack below the overlays, so
+                          the consent gate/intro/survey still cover them. */}
+                      <PushNotificationResponder />
+                      <PushTokenSync />
                       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
                         <Stack.Screen name="(tabs)" />
                         {/* Title is set inside the screen itself (needs i18n,
