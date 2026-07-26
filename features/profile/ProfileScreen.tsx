@@ -704,7 +704,37 @@ export function ProfileScreen() {
         </Pressable>
       </View>
 
-      {/* ── 4d. Nyhetsbrev & villkor — real backend consent state ── */}
+      {/* ── 4d. Feedback och support — feedback + problem report forms
+          (patch 6). Plain navigation rows; the forms own all state. ── */}
+      <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
+        {t("appFeedback.profileSection").toUpperCase()}
+      </ThemedText>
+      <View style={styles.accountCard}>
+        <Pressable
+          onPress={() => router.push("/feedback")}
+          style={[styles.accountRow, styles.accountRowBorder]}
+          accessibilityRole="button"
+          accessibilityLabel={t("appFeedback.profileFeedbackRow")}
+        >
+          <ThemedText style={styles.accountRowText}>
+            {t("appFeedback.profileFeedbackRow")}
+          </ThemedText>
+          <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
+        </Pressable>
+        <Pressable
+          onPress={() => router.push("/rapportera-problem")}
+          style={styles.accountRow}
+          accessibilityRole="button"
+          accessibilityLabel={t("appFeedback.profileBugRow")}
+        >
+          <ThemedText style={styles.accountRowText}>
+            {t("appFeedback.profileBugRow")}
+          </ThemedText>
+          <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
+        </Pressable>
+      </View>
+
+      {/* ── 4e. Nyhetsbrev & villkor — real backend consent state ── */}
       <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
         {t("consents.sectionTitle").toUpperCase()}
       </ThemedText>
