@@ -2,6 +2,7 @@ import { Tabs } from "expo-router";
 import { House, UtensilsCrossed, ShoppingCart, User } from "lucide-react-native";
 
 import { useCart } from "@/context/CartContext";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily } from "@/theme";
 
 /**
@@ -17,6 +18,7 @@ import { colors, fontFamily } from "@/theme";
  * totalItems the web CartContext exposes — updates instantly on add/remove.
  */
 export default function TabsLayout() {
+  const { t } = useTranslation();
   const { totalItems } = useCart();
 
   return (
@@ -35,21 +37,21 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Hem",
+          title: t("common.tabHome"),
           tabBarIcon: ({ color, size }) => <House color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="meny"
         options={{
-          title: "Meny",
+          title: t("common.tabMenu"),
           tabBarIcon: ({ color, size }) => <UtensilsCrossed color={color} size={size} />,
         }}
       />
       <Tabs.Screen
         name="varukorg"
         options={{
-          title: "Varukorg",
+          title: t("common.tabCart"),
           tabBarIcon: ({ color, size }) => <ShoppingCart color={color} size={size} />,
           tabBarBadge: totalItems > 0 ? totalItems : undefined,
           tabBarBadgeStyle: {
@@ -63,7 +65,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="konto"
         options={{
-          title: "Mina sidor",
+          title: t("common.tabAccount"),
           tabBarIcon: ({ color, size }) => <User color={color} size={size} />,
         }}
       />

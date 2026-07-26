@@ -15,7 +15,8 @@ import {
   isCouponUsable,
   WELCOME_COUPON_SOURCE,
 } from "@/services/api/coupons";
-import { couponCopy as copy } from "@/constants/copy";
+import { setNudgeOverlayActive } from "@/features/overlays/overlayActivity";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -43,6 +44,7 @@ const PROMPTED_KEY_PREFIX = WELCOME_PROMPTED_KEY_PREFIX;
 
 export function WelcomeCouponModal() {
   const router = useRouter();
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { user, loading: authLoading } = useAuth();
   const { items } = useCart();
@@ -53,6 +55,14 @@ export function WelcomeCouponModal() {
   const [visible, setVisible] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState(false);
+
+  // Additive (patch 4 overlay control): report visibility so the
+  // onboarding survey never shows while this modal is up. No show/defer
+  // logic changed.
+  useEffect(() => {
+    setNudgeOverlayActive("welcomeCoupon", visible);
+    return () => setNudgeOverlayActive("welcomeCoupon", false);
+  }, [visible]);
 
   const userId = user?.id ?? null;
 
@@ -155,7 +165,7 @@ export function WelcomeCouponModal() {
             onPress={handleDismiss}
             style={styles.closeButton}
             accessibilityRole="button"
-            accessibilityLabel={copy.welcomeDismiss}
+            accessibilityLabel={t("coupon.welcomeDismiss")}
             hitSlop={8}
           >
             <X size={16} color="rgba(255,255,255,0.4)" />
@@ -165,11 +175,11 @@ export function WelcomeCouponModal() {
             <BadgePercent size={26} color={colors.accent} strokeWidth={1.75} />
           </View>
 
-          <ThemedText style={styles.title}>{copy.welcomeTitle}</ThemedText>
-          <ThemedText style={styles.body}>{copy.welcomeBody}</ThemedText>
+          <ThemedText style={styles.title}>{t("coupon.welcomeTitle")}</ThemedText>
+          <ThemedText style={styles.body}>{t("coupon.welcomeBody")}</ThemedText>
 
           {claimError ? (
-            <ThemedText style={styles.errorText}>{copy.welcomeClaimError}</ThemedText>
+            <ThemedText style={styles.errorText}>{t("coupon.welcomeClaimError")}</ThemedText>
           ) : null}
 
           <Pressable
@@ -182,7 +192,7 @@ export function WelcomeCouponModal() {
             ]}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.primaryButtonText}>{copy.welcomeUseNow}</ThemedText>
+            <ThemedText style={styles.primaryButtonText}>{t("coupon.welcomeUseNow")}</ThemedText>
           </Pressable>
           <Pressable
             onPress={handleSaveForLater}
@@ -194,7 +204,9 @@ export function WelcomeCouponModal() {
             ]}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.secondaryButtonText}>{copy.welcomeSaveForLater}</ThemedText>
+            <ThemedText style={styles.secondaryButtonText}>
+              {t("coupon.welcomeSaveForLater")}
+            </ThemedText>
           </Pressable>
         </View>
       </View>

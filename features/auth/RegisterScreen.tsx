@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -10,13 +11,15 @@ import {
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
 import { ArrowLeft, Check, Info, Lock, Mail, User } from "lucide-react-native";
 
+import { LanguageButton } from "@/components/language/LanguageButton";
 import { Screen } from "@/components/ui/Screen";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { AuthTextField } from "@/components/auth/AuthTextField";
 import { supabase } from "@/services/auth/supabase";
+import { submitRegistrationConsents } from "@/services/api/consents";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { env } from "@/lib/env";
-import { authCopy as copy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 
 /**
@@ -43,6 +46,7 @@ import { colors, fontFamily, spacing } from "@/theme";
  * sessionStorage "nutri_welcome" flag is web-only and not ported.
  */
 export function RegisterScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { next } = useLocalSearchParams<{ next?: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -52,18 +56,44 @@ export function RegisterScreen() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Both consent boxes start UNCHECKED — terms/privacy is mandatory and
+  // blocks submit; marketing is optional and never blocks anything.
+  const [acceptsTerms, setAcceptsTerms] = useState(false);
   const [acceptsMarketing, setAcceptsMarketing] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{
     firstName?: string;
     email?: string;
     password?: string;
+    terms?: string;
   }>({});
   const [loading, setLoading] = useState(false);
   const [isDuplicateEmail, setIsDuplicateEmail] = useState(false);
   const [sent, setSent] = useState(false);
   const [checking, setChecking] = useState(false);
   const [sessionError, setSessionError] = useState(false);
+
+  // The backend consent record can only be written once a session exists,
+  // which happens on THREE paths (instant session, the 4s poll, the "I have
+  // verified" button) — this ref makes sure exactly one request wins, and a
+  // failed attempt re-arms so the next path retries. Best-effort by design:
+  // the user HAS ticked the mandatory box (signup was blocked otherwise),
+  // so a dropped call must never dead-end the flow — the backend endpoint
+  // is idempotent and the profile screen reads real backend state later.
+  const consentsSubmittedRef = useRef(false);
+  const submitConsentsOnce = async () => {
+    if (consentsSubmittedRef.current) return;
+    consentsSubmittedRef.current = true;
+    try {
+      await submitRegistrationConsents({
+        acceptTerms: true,
+        acceptPrivacy: true,
+        emailMarketing: acceptsMarketing,
+      });
+    } catch {
+      consentsSubmittedRef.current = false;
+    }
+  };
 
   const goNext = () => {
     if (next && next.startsWith("/")) {
@@ -91,7 +121,7 @@ export function RegisterScreen() {
     if (/[^A-Za-z0-9]/.test(password)) s++;
     return s;
   })();
-  const strengthLabel = copy.strength[strength];
+  const strengthLabel = t("auth.strength", { returnObjects: true })[strength];
   const strengthColor = ["rgba(255,255,255,0.18)", "#FF8A3A", "#FFB05A", "#9CD66F", "#9CD66F"][
     strength
   ];
@@ -104,9 +134,9 @@ export function RegisterScreen() {
     const trimmedEmail = email.trim();
     const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
     const nextErrors: typeof fieldErrors = {};
-    if (!trimmedFirst) nextErrors.firstName = copy.firstNameRequired;
-    if (!trimmedEmail) nextErrors.email = copy.emailRequired;
-    else if (!emailLooksValid) nextErrors.email = copy.emailInvalid;
+    if (!trimmedFirst) nextErrors.firstName = t("auth.firstNameRequired");
+    if (!trimmedEmail) nextErrors.email = t("auth.emailRequired");
+    else if (!emailLooksValid) nextErrors.email = t("auth.emailInvalid");
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
     setFormStep(2);
@@ -118,8 +148,11 @@ export function RegisterScreen() {
     setIsDuplicateEmail(false);
 
     const nextErrors: typeof fieldErrors = {};
-    if (!password) nextErrors.password = copy.registerPasswordRequired;
-    else if (password.length < 6) nextErrors.password = copy.passwordTooShort;
+    if (!password) nextErrors.password = t("auth.registerPasswordRequired");
+    else if (password.length < 6) nextErrors.password = t("auth.passwordTooShort");
+    // Mandatory: terms of service + privacy policy. The backend rejects the
+    // consent registration without them too — this is just the friendly gate.
+    if (!acceptsTerms) nextErrors.terms = t("auth.termsRequired");
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -159,11 +192,11 @@ export function RegisterScreen() {
         errMsg.includes("too many") ||
         signUpError.status === 429
       ) {
-        setError(copy.errorRateLimit);
+        setError(t("auth.errorRateLimit"));
       } else if (errMsg.includes("invalid email")) {
-        setError(copy.errorInvalidEmail);
+        setError(t("auth.errorInvalidEmail"));
       } else {
-        setError(signUpError.message || copy.errorGeneric);
+        setError(signUpError.message || t("auth.errorGeneric"));
       }
       setLoading(false);
       return;
@@ -171,6 +204,7 @@ export function RegisterScreen() {
 
     // Session returned = "confirm email" disabled — already logged in.
     if (signUpData?.session) {
+      await submitConsentsOnce();
       goNext();
       return;
     }
@@ -196,6 +230,7 @@ export function RegisterScreen() {
       const { data } = await supabase.auth.getSession();
       if (active && data.session) {
         clearInterval(interval);
+        await submitConsentsOnce();
         goNext();
       }
     }, 4000);
@@ -211,6 +246,7 @@ export function RegisterScreen() {
     setSessionError(false);
     const { data } = await supabase.auth.getSession();
     if (data.session) {
+      await submitConsentsOnce();
       goNext();
     } else {
       setSessionError(true);
@@ -226,11 +262,11 @@ export function RegisterScreen() {
           <View style={styles.inboxIcon}>
             <Mail size={28} color={colors.accent} strokeWidth={1.6} />
           </View>
-          <ThemedText style={styles.inboxHeading}>{copy.inboxHeading}</ThemedText>
+          <ThemedText style={styles.inboxHeading}>{t("auth.inboxHeading")}</ThemedText>
           <ThemedText style={styles.inboxText}>
-            {copy.inboxPrefix}
+            {t("auth.inboxPrefix")}
             <ThemedText style={styles.inboxEmail}>{email}</ThemedText>
-            {copy.inboxSuffix}
+            {t("auth.inboxSuffix")}
           </ThemedText>
           <Pressable
             onPress={handleCheckVerification}
@@ -244,16 +280,16 @@ export function RegisterScreen() {
             accessibilityRole="button"
           >
             <ThemedText style={styles.ctaText}>
-              {checking ? copy.checking : copy.verified}
+              {checking ? t("auth.checking") : t("auth.verified")}
             </ThemedText>
           </Pressable>
           {sessionError ? (
-            <ThemedText style={styles.inboxHint}>{copy.noSession}</ThemedText>
+            <ThemedText style={styles.inboxHint}>{t("auth.noSession")}</ThemedText>
           ) : null}
           <View style={styles.promptRow}>
-            <ThemedText style={styles.promptText}>{copy.noMail}</ThemedText>
+            <ThemedText style={styles.promptText}>{t("auth.noMail")}</ThemedText>
             <Pressable onPress={() => setSent(false)} accessibilityRole="button">
-              <ThemedText style={styles.promptLink}>{copy.retry}</ThemedText>
+              <ThemedText style={styles.promptLink}>{t("auth.retry")}</ThemedText>
             </Pressable>
           </View>
         </View>
@@ -263,14 +299,14 @@ export function RegisterScreen() {
 
   const loginRow = (
     <View style={styles.promptRow}>
-      <ThemedText style={styles.promptText}>{copy.haveAccount}</ThemedText>
+      <ThemedText style={styles.promptText}>{t("auth.haveAccount")}</ThemedText>
       <Pressable
         onPress={() =>
           router.replace(next ? { pathname: "/logga-in", params: { next } } : "/logga-in")
         }
         accessibilityRole="link"
       >
-        <ThemedText style={styles.promptLink}>{copy.navLogin}</ThemedText>
+        <ThemedText style={styles.promptLink}>{t("auth.navLogin")}</ThemedText>
       </Pressable>
     </View>
   );
@@ -282,32 +318,35 @@ export function RegisterScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Pressable
-            onPress={() =>
-              formStep === 2
-                ? setFormStep(1)
-                : router.canGoBack()
-                  ? router.back()
-                  : router.replace("/(tabs)")
-            }
-            style={styles.backButton}
-            accessibilityRole="button"
-            accessibilityLabel="Tillbaka"
-          >
-            <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
-          </Pressable>
+          <View style={styles.topRow}>
+            <Pressable
+              onPress={() =>
+                formStep === 2
+                  ? setFormStep(1)
+                  : router.canGoBack()
+                    ? router.back()
+                    : router.replace("/(tabs)")
+              }
+              style={styles.backButton}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.back")}
+            >
+              <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
+            </Pressable>
+            <LanguageButton />
+          </View>
 
           <ThemedText style={styles.wordmark}>NUTRI</ThemedText>
-          <ThemedText style={styles.title}>{copy.registerTitle}</ThemedText>
+          <ThemedText style={styles.title}>{t("auth.registerTitle")}</ThemedText>
 
           {formStep === 1 ? (
             /* ── Step 1: identity (name + email) ── */
             <>
-              <ThemedText style={styles.subtitle}>{copy.registerSubtitle}</ThemedText>
+              <ThemedText style={styles.subtitle}>{t("auth.registerSubtitle")}</ThemedText>
 
               <View style={styles.fields}>
                 <AuthTextField
-                  label={copy.firstName}
+                  label={t("auth.firstName")}
                   icon={<User size={16} color="rgba(255,255,255,0.4)" strokeWidth={1.6} />}
                   error={fieldErrors.firstName}
                   value={firstName}
@@ -316,25 +355,25 @@ export function RegisterScreen() {
                     if (fieldErrors.firstName)
                       setFieldErrors((p) => ({ ...p, firstName: undefined }));
                   }}
-                  placeholder={copy.firstNamePlaceholder}
+                  placeholder={t("auth.firstNamePlaceholder")}
                   autoComplete="given-name"
                   maxLength={60}
                 />
                 <AuthTextField
-                  label={copy.lastName}
+                  label={t("auth.lastName")}
                   optional
                   value={lastName}
                   onChangeText={setLastName}
-                  placeholder={copy.lastNamePlaceholder}
+                  placeholder={t("auth.lastNamePlaceholder")}
                   autoComplete="family-name"
                   maxLength={60}
                 />
                 <View style={styles.helperRow}>
                   <Info size={11} color="rgba(255,255,255,0.42)" strokeWidth={1.6} />
-                  <ThemedText style={styles.helperText}>{copy.nameHelper}</ThemedText>
+                  <ThemedText style={styles.helperText}>{t("auth.nameHelper")}</ThemedText>
                 </View>
                 <AuthTextField
-                  label={copy.email}
+                  label={t("auth.email")}
                   icon={<Mail size={16} color="rgba(255,255,255,0.4)" strokeWidth={1.6} />}
                   error={fieldErrors.email}
                   value={email}
@@ -342,7 +381,7 @@ export function RegisterScreen() {
                     setEmail(v);
                     if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined }));
                   }}
-                  placeholder={copy.emailPlaceholder}
+                  placeholder={t("auth.emailPlaceholder")}
                   autoCapitalize="none"
                   autoComplete="email"
                   keyboardType="email-address"
@@ -357,7 +396,7 @@ export function RegisterScreen() {
                 ]}
                 accessibilityRole="button"
               >
-                <ThemedText style={styles.ctaText}>{copy.continue}</ThemedText>
+                <ThemedText style={styles.ctaText}>{t("auth.continue")}</ThemedText>
               </Pressable>
 
               {loginRow}
@@ -379,13 +418,13 @@ export function RegisterScreen() {
                   }}
                   accessibilityRole="button"
                 >
-                  <ThemedText style={styles.promptLink}>{copy.changeEmail}</ThemedText>
+                  <ThemedText style={styles.promptLink}>{t("auth.changeEmail")}</ThemedText>
                 </Pressable>
               </View>
 
               <View style={styles.fields}>
                 <AuthTextField
-                  label={copy.password}
+                  label={t("auth.password")}
                   icon={<Lock size={16} color="rgba(255,255,255,0.4)" strokeWidth={1.6} />}
                   error={fieldErrors.password}
                   isPassword
@@ -395,7 +434,7 @@ export function RegisterScreen() {
                     if (fieldErrors.password)
                       setFieldErrors((p) => ({ ...p, password: undefined }));
                   }}
-                  placeholder={copy.passwordTooShort}
+                  placeholder={t("auth.passwordTooShort")}
                   autoCapitalize="none"
                   autoComplete="new-password"
                 />
@@ -430,6 +469,58 @@ export function RegisterScreen() {
                 </View>
               </View>
 
+              {/* Terms + privacy — MANDATORY, never pre-checked. Blocks
+                  submit locally, and the backend consent registration
+                  rejects calls without it (source of truth). The links
+                  open the existing web pages. */}
+              <Pressable
+                onPress={() => {
+                  setAcceptsTerms((v) => !v);
+                  if (fieldErrors.terms) setFieldErrors((p) => ({ ...p, terms: undefined }));
+                }}
+                style={styles.consentRow}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: acceptsTerms }}
+              >
+                <View
+                  style={[
+                    styles.checkbox,
+                    acceptsTerms && styles.checkboxChecked,
+                    fieldErrors.terms && !acceptsTerms ? styles.checkboxErrorBorder : null,
+                  ]}
+                >
+                  {acceptsTerms ? (
+                    <Check size={12} color={colors.textPrimary} strokeWidth={2.5} />
+                  ) : null}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.consentLabel}>
+                    {t("auth.termsAcceptPrefix")}
+                    <ThemedText
+                      style={[styles.consentLabel, styles.consentLink]}
+                      onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/kopvillkor`)}
+                      accessibilityRole="link"
+                    >
+                      {t("auth.termsLinkText")}
+                    </ThemedText>
+                    {t("auth.termsAnd")}
+                    <ThemedText
+                      style={[styles.consentLabel, styles.consentLink]}
+                      onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/integritet`)}
+                      accessibilityRole="link"
+                    >
+                      {t("auth.privacyLinkText")}
+                    </ThemedText>
+                    .
+                  </ThemedText>
+                </View>
+              </Pressable>
+              {fieldErrors.terms ? (
+                <ThemedText style={[styles.error, styles.consentError]}>
+                  {fieldErrors.terms}
+                </ThemedText>
+              ) : null}
+
               {/* Marketing consent — never pre-checked, never required */}
               <Pressable
                 onPress={() => setAcceptsMarketing((v) => !v)}
@@ -443,21 +534,21 @@ export function RegisterScreen() {
                   ) : null}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.consentLabel}>{copy.marketingLabel}</ThemedText>
-                  <ThemedText style={styles.consentHint}>{copy.marketingHint}</ThemedText>
+                  <ThemedText style={styles.consentLabel}>{t("auth.marketingLabel")}</ThemedText>
+                  <ThemedText style={styles.consentHint}>{t("auth.marketingHint")}</ThemedText>
                 </View>
               </Pressable>
 
               {isDuplicateEmail ? (
                 <ThemedText style={styles.error}>
-                  {copy.duplicatePrefix}
+                  {t("auth.duplicatePrefix")}
                   <ThemedText
                     style={[styles.error, styles.errorLink]}
                     onPress={() =>
                       router.replace(next ? { pathname: "/logga-in", params: { next } } : "/logga-in")
                     }
                   >
-                    {copy.duplicateLogin}
+                    {t("auth.duplicateLogin")}
                   </ThemedText>
                   .
                 </ThemedText>
@@ -476,14 +567,9 @@ export function RegisterScreen() {
                 accessibilityRole="button"
               >
                 <ThemedText style={styles.ctaText}>
-                  {loading ? `${copy.registerTitle}…` : copy.registerTitle}
+                  {loading ? `${t("auth.registerTitle")}…` : t("auth.registerTitle")}
                 </ThemedText>
               </Pressable>
-
-              <ThemedText style={styles.terms}>
-                {copy.termsPrefix}
-                {copy.termsPrivacy}.
-              </ThemedText>
 
               {loginRow}
             </>
@@ -496,6 +582,11 @@ export function RegisterScreen() {
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingHorizontal: spacing[5], paddingTop: spacing[3], gap: spacing[4] },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   backButton: {
     width: 36,
     height: 36,
@@ -563,6 +654,13 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.72)",
   },
   consentHint: { marginTop: 2, fontSize: 11, lineHeight: 14, color: "rgba(255,255,255,0.4)" },
+  consentLink: {
+    color: colors.accent,
+    fontFamily: fontFamily.bodySemibold,
+    textDecorationLine: "underline",
+  },
+  consentError: { marginTop: -spacing[2] },
+  checkboxErrorBorder: { borderColor: "#F87171" },
   error: { fontSize: 13, lineHeight: 18, color: "#F87171" },
   errorLink: { textDecorationLine: "underline", fontFamily: fontFamily.bodySemibold },
   cta: {
@@ -573,13 +671,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ctaText: { fontSize: 15, fontFamily: fontFamily.bodyBold, color: colors.textPrimary },
-  terms: {
-    textAlign: "center",
-    fontSize: 11.5,
-    lineHeight: 17,
-    color: "rgba(255,255,255,0.45)",
-    paddingHorizontal: spacing[2],
-  },
   promptRow: { flexDirection: "row", justifyContent: "center", gap: 6, marginTop: spacing[1] },
   promptText: { fontSize: 13, color: "rgba(255,255,255,0.6)" },
   promptLink: { fontSize: 13, fontFamily: fontFamily.bodyBold, color: colors.accent },

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from "rea
 import { Eye, EyeOff } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
-import { authCopy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 
 interface AuthTextFieldProps extends TextInputProps {
@@ -36,6 +36,7 @@ export function AuthTextField({
   style,
   ...inputProps
 }: AuthTextFieldProps) {
+  const { t } = useTranslation();
   const [showPw, setShowPw] = useState(false);
 
   return (
@@ -43,7 +44,7 @@ export function AuthTextField({
       <View style={styles.labelRow}>
         <ThemedText style={styles.label}>
           {label}
-          {optional ? <ThemedText style={styles.optional}> {authCopy.optional}</ThemedText> : null}
+          {optional ? <ThemedText style={styles.optional}> {t("auth.optional")}</ThemedText> : null}
         </ThemedText>
         {trailing}
       </View>
@@ -60,7 +61,7 @@ export function AuthTextField({
             onPress={() => setShowPw((v) => !v)}
             style={styles.eyeButton}
             accessibilityRole="button"
-            accessibilityLabel={showPw ? authCopy.hidePassword : authCopy.showPassword}
+            accessibilityLabel={showPw ? t("auth.hidePassword") : t("auth.showPassword")}
           >
             {showPw ? (
               <EyeOff size={16} color="rgba(255,255,255,0.4)" strokeWidth={1.6} />

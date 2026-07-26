@@ -16,7 +16,7 @@ import {
   WELCOME_COUPON_SOURCE,
   type ApiCoupon,
 } from "@/services/api/coupons";
-import { couponCopy as copy } from "@/constants/copy";
+import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { COUPON_STATUS_COLORS, couponMetaLine } from "./couponFormat";
 
@@ -29,8 +29,9 @@ import { COUPON_STATUS_COLORS, couponMetaLine } from "./couponFormat";
  */
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const cfg = COUPON_STATUS_COLORS[status] ?? COUPON_STATUS_COLORS.Used;
-  const label = copy.statusNames[status] ?? status;
+  const label = t(`coupon.statusNames.${status}`, { defaultValue: status });
   return (
     <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
       <ThemedText style={[styles.statusBadgeText, { color: cfg.color }]}>{label}</ThemedText>
@@ -39,6 +40,8 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function CouponCard({ coupon, isSelected }: { coupon: ApiCoupon; isSelected: boolean }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const router = useRouter();
   const inactive = coupon.status !== "Active";
   return (
@@ -50,7 +53,7 @@ function CouponCard({ coupon, isSelected }: { coupon: ApiCoupon; isSelected: boo
         pressed && { backgroundColor: colors.cardAlt },
       ]}
       accessibilityRole="button"
-      accessibilityLabel={`${coupon.code}, ${copy.percentOff(coupon.percentage)}`}
+      accessibilityLabel={`${coupon.code}, ${t("coupon.percentOff", { pct: coupon.percentage })}`}
     >
       <View style={styles.cardIcon}>
         <BadgePercent size={20} color={colors.accent} strokeWidth={1.75} />
@@ -61,8 +64,8 @@ function CouponCard({ coupon, isSelected }: { coupon: ApiCoupon; isSelected: boo
           <StatusBadge status={coupon.status} />
           {isSelected ? <CheckCircle2 size={14} color="#4ade80" /> : null}
         </View>
-        <ThemedText style={styles.cardPercent}>{copy.percentOff(coupon.percentage)}</ThemedText>
-        <ThemedText style={styles.cardMeta}>{couponMetaLine(coupon)}</ThemedText>
+        <ThemedText style={styles.cardPercent}>{t("coupon.percentOff", { pct: coupon.percentage })}</ThemedText>
+        <ThemedText style={styles.cardMeta}>{couponMetaLine(coupon, t, language)}</ThemedText>
       </View>
       <ChevronRight size={15} color="rgba(255,255,255,0.3)" />
     </Pressable>
@@ -70,6 +73,7 @@ function CouponCard({ coupon, isSelected }: { coupon: ApiCoupon; isSelected: boo
 }
 
 function ClaimWelcomeCard() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState(false);
@@ -93,9 +97,9 @@ function ClaimWelcomeCard() {
       <View style={styles.claimIconWrap}>
         <Gift size={20} color={colors.accent} strokeWidth={1.75} />
       </View>
-      <ThemedText style={styles.claimTitle}>{copy.claimCardTitle}</ThemedText>
-      <ThemedText style={styles.claimBody}>{copy.claimCardBody}</ThemedText>
-      {error ? <ThemedText style={styles.errorText}>{copy.claimCardError}</ThemedText> : null}
+      <ThemedText style={styles.claimTitle}>{t("coupon.claimCardTitle")}</ThemedText>
+      <ThemedText style={styles.claimBody}>{t("coupon.claimCardBody")}</ThemedText>
+      {error ? <ThemedText style={styles.errorText}>{t("coupon.claimCardError")}</ThemedText> : null}
       <Pressable
         onPress={handleClaim}
         disabled={claiming}
@@ -106,13 +110,14 @@ function ClaimWelcomeCard() {
         ]}
         accessibilityRole="button"
       >
-        <ThemedText style={styles.claimButtonText}>{copy.claimCardCta}</ThemedText>
+        <ThemedText style={styles.claimButtonText}>{t("coupon.claimCardCta")}</ThemedText>
       </Pressable>
     </View>
   );
 }
 
 export function CouponListScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { selectedCoupon } = useCoupon();
@@ -134,12 +139,12 @@ export function CouponListScreen() {
           onPress={() => (router.canGoBack() ? router.back() : router.navigate("/(tabs)"))}
           style={styles.backButton}
           accessibilityRole="button"
-          accessibilityLabel="Tillbaka"
+          accessibilityLabel={t("common.back")}
           hitSlop={8}
         >
           <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
         </Pressable>
-        <ThemedText style={styles.headerTitle}>{copy.listTitle}</ThemedText>
+        <ThemedText style={styles.headerTitle}>{t("coupon.listTitle")}</ThemedText>
         <View style={styles.backButton} />
       </View>
 
@@ -149,7 +154,7 @@ export function CouponListScreen() {
         </View>
       ) : !user ? (
         <View style={styles.center}>
-          <ThemedText style={styles.loginText}>{copy.loginRequired}</ThemedText>
+          <ThemedText style={styles.loginText}>{t("coupon.loginRequired")}</ThemedText>
           <Pressable
             onPress={() => router.push({ pathname: "/logga-in", params: { next: "/kuponger" } })}
             style={({ pressed }) => [
@@ -159,7 +164,7 @@ export function CouponListScreen() {
             ]}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.claimButtonText}>{copy.loginCta}</ThemedText>
+            <ThemedText style={styles.claimButtonText}>{t("coupon.loginCta")}</ThemedText>
           </Pressable>
         </View>
       ) : couponsQuery.isLoading ? (
@@ -168,13 +173,13 @@ export function CouponListScreen() {
         </View>
       ) : couponsQuery.isError ? (
         <View style={styles.center}>
-          <ThemedText style={styles.errorText}>{copy.listFetchError}</ThemedText>
+          <ThemedText style={styles.errorText}>{t("coupon.listFetchError")}</ThemedText>
           <Pressable
             onPress={() => couponsQuery.refetch()}
             style={styles.retryButton}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.retryText}>{copy.retry}</ThemedText>
+            <ThemedText style={styles.retryText}>{t("coupon.retry")}</ThemedText>
           </Pressable>
         </View>
       ) : (
@@ -191,7 +196,7 @@ export function CouponListScreen() {
               ))}
             </View>
           ) : hasWelcomeCoupon ? (
-            <EmptyState message={copy.listEmpty} />
+            <EmptyState message={t("coupon.listEmpty")} />
           ) : null}
         </ScrollView>
       )}

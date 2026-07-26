@@ -8,7 +8,8 @@ import type { ApiIngredient } from "@/services/api/ingredients";
 import type { ApiContainerType } from "@/services/api/containerTypes";
 import { calculateCustomMeal, type CustomMealCalculateResponse } from "@/services/api/customMeal";
 import { getIngredientStock } from "@/services/api/ingredientStock";
-import { nutriAnpassarCopy as copy } from "@/constants/copy";
+import { formatNumber, useLanguage, useTranslation } from "@/i18n";
+import type { TFunction } from "i18next";
 import { colors, fontFamily, spacing } from "@/theme";
 import type { OptIngredient } from "./optimizer";
 
@@ -71,11 +72,11 @@ function pickContainer(
   return (sorted.find((c) => c.maxWeightGrams >= totalWeight) ?? sorted[sorted.length - 1]).id;
 }
 
-function slotWord(tags: string[]): string {
-  if (tags.includes("Lunch")) return copy.slotWordLunch;
-  if (tags.includes("Dinner")) return copy.slotWordDinner;
-  if (tags.includes("Breakfast")) return copy.slotWordBreakfast;
-  return copy.slotWordDay;
+function slotWord(tags: string[], t: TFunction): string {
+  if (tags.includes("Lunch")) return t("nutriAnpassar.slotWordLunch");
+  if (tags.includes("Dinner")) return t("nutriAnpassar.slotWordDinner");
+  if (tags.includes("Breakfast")) return t("nutriAnpassar.slotWordBreakfast");
+  return t("nutriAnpassar.slotWordDay");
 }
 
 interface Props {
@@ -107,6 +108,8 @@ export function StepAdjust({
   onConfirm,
   onBack,
 }: Props) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const [ingredients, setIngredients] = useState<AdjustIngredient[]>(
     initialIngredients as AdjustIngredient[]
   );
@@ -172,7 +175,7 @@ export function StepAdjust({
       }
     } catch {
       if (reqId === requestIdRef.current) {
-        setCalcError(copy.adjustCalcError);
+        setCalcError(t("nutriAnpassar.adjustCalcError"));
         setDirty(false);
       }
     } finally {
@@ -180,7 +183,7 @@ export function StepAdjust({
         setCalcLoading(false);
       }
     }
-  }, []);
+  }, [t]);
 
   function scheduleCalculate(ings: OptIngredient[], ctId: string) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -294,7 +297,9 @@ export function StepAdjust({
   const displayCalories = calcResult ? Math.round(calcResult.totalKcal) : null;
   const displayCarbs = calcResult ? Math.round(calcResult.totalCarbsG) : null;
   const displayFat = calcResult ? Math.round(calcResult.totalFatG) : null;
-  const displayPrice = calcResult ? Math.round(calcResult.totalPriceOre / 100) : null;
+  const displayPrice = calcResult
+    ? formatNumber(Math.round(calcResult.totalPriceOre / 100), language)
+    : null;
   const proteinDelta =
     displayProtein != null && baselineProtein.current != null
       ? Math.round(displayProtein - baselineProtein.current)
@@ -335,19 +340,19 @@ export function StepAdjust({
       {/* Change-meal link */}
       <Pressable onPress={onBack} style={styles.backLink} accessibilityRole="button">
         <ArrowLeft size={12} color="rgba(255,255,255,0.45)" strokeWidth={2} />
-        <ThemedText style={styles.backLinkText}>{copy.adjustChooseAnotherMeal}</ThemedText>
+        <ThemedText style={styles.backLinkText}>{t("nutriAnpassar.adjustChooseAnotherMeal")}</ThemedText>
       </Pressable>
 
       {/* Hero */}
       <View style={styles.hero}>
         <View style={styles.stepRow}>
-          <ThemedText style={styles.stepAccent}>{copy.step2.toUpperCase()}</ThemedText>
+          <ThemedText style={styles.stepAccent}>{t("nutriAnpassar.step2").toUpperCase()}</ThemedText>
           <ThemedText style={styles.stepDot}>·</ThemedText>
-          <ThemedText style={styles.stepMuted}>{copy.adjustLabel.toUpperCase()}</ThemedText>
+          <ThemedText style={styles.stepMuted}>{t("nutriAnpassar.adjustLabel").toUpperCase()}</ThemedText>
         </View>
         <ThemedText style={styles.heroTitle}>{meal.name}</ThemedText>
         <View style={styles.targetRow}>
-          <ThemedText style={styles.targetLabel}>{copy.adjustMealTarget}</ThemedText>
+          <ThemedText style={styles.targetLabel}>{t("nutriAnpassar.adjustMealTarget")}</ThemedText>
           <ThemedText style={styles.targetValue}>{slotTargetCalories} kcal</ThemedText>
           <View style={styles.dot} />
           <ThemedText style={styles.targetValue}>{slotTargetProtein}g protein</ThemedText>
@@ -357,13 +362,13 @@ export function StepAdjust({
       {/* Summary card */}
       <View style={styles.summaryCard}>
         {calcLoading && !calcResult ? (
-          <ThemedText style={styles.calcLoadingText}>{copy.adjustCalculating}</ThemedText>
+          <ThemedText style={styles.calcLoadingText}>{t("nutriAnpassar.adjustCalculating")}</ThemedText>
         ) : calcResult ? (
           <View>
             <View style={styles.summaryTopRow}>
               <View style={styles.summaryProteinRow}>
                 <ThemedText style={styles.summaryProtein}>
-                  {displayProtein}g {copy.protein.toLowerCase()}
+                  {displayProtein}g {t("nutriAnpassar.protein").toLowerCase()}
                 </ThemedText>
                 {proteinDelta != null && proteinDelta > 0 && (
                   <View style={styles.deltaPill}>
@@ -386,11 +391,11 @@ export function StepAdjust({
               </ThemedText>
               <View style={styles.dot} />
               <ThemedText style={styles.summaryMacro}>
-                {displayCarbs}g<ThemedText style={styles.summaryMacroUnit}> {copy.carbsShort}</ThemedText>
+                {displayCarbs}g<ThemedText style={styles.summaryMacroUnit}> {t("nutriAnpassar.carbsShort")}</ThemedText>
               </ThemedText>
               <View style={styles.dot} />
               <ThemedText style={styles.summaryMacro}>
-                {displayFat}g<ThemedText style={styles.summaryMacroUnit}> {copy.fatShort}</ThemedText>
+                {displayFat}g<ThemedText style={styles.summaryMacroUnit}> {t("nutriAnpassar.fatShort")}</ThemedText>
               </ThemedText>
             </View>
 
@@ -401,7 +406,7 @@ export function StepAdjust({
                   <View style={[styles.goalRailFill, { width: `${goalFill}%` }]} />
                 </View>
                 <View style={styles.goalRailLabels}>
-                  <ThemedText style={styles.goalRailLabel}>{copy.adjustProteinProgress}</ThemedText>
+                  <ThemedText style={styles.goalRailLabel}>{t("nutriAnpassar.adjustProteinProgress")}</ThemedText>
                   <ThemedText style={styles.goalRailLabel}>
                     <ThemedText style={styles.goalRailStrong}>{displayProtein}g</ThemedText> /{" "}
                     {slotTargetProtein}g
@@ -418,19 +423,19 @@ export function StepAdjust({
       {/* Why-line */}
       {calcResult && proteinDelta != null && proteinDelta > 0 && (
         <View style={styles.whyRow}>
-          <ThemedText style={styles.whyText}>{copy.adjustWhy(slotWord(meal.mealTimeTags))}</ThemedText>
+          <ThemedText style={styles.whyText}>{t("nutriAnpassar.adjustWhy", { slotWord: slotWord(meal.mealTimeTags, t) })}</ThemedText>
         </View>
       )}
 
       {/* Ingredients head + macro toggle */}
       <View style={styles.sectionHeadRow}>
-        <ThemedText style={styles.sectionHead}>{copy.adjustIngredients.toUpperCase()}</ThemedText>
+        <ThemedText style={styles.sectionHead}>{t("nutriAnpassar.adjustIngredients").toUpperCase()}</ThemedText>
         <Pressable
           onPress={() => setShowIngredientMacros((v) => !v)}
           style={[styles.macroToggle, showIngredientMacros && { backgroundColor: "rgba(232,101,10,0.12)" }]}
           accessibilityRole="button"
         >
-          <ThemedText style={styles.macroToggleText}>{copy.adjustMacrosKcal}</ThemedText>
+          <ThemedText style={styles.macroToggleText}>{t("nutriAnpassar.adjustMacrosKcal")}</ThemedText>
           {showIngredientMacros ? (
             <ChevronUp size={9} color={colors.accent} strokeWidth={1.4} />
           ) : (
@@ -447,7 +452,9 @@ export function StepAdjust({
           const maxG = lib?.maxAmountG != null ? Number(lib.maxAmountG) : 999;
           const isExtra = extraIds.has(ing.ingredientId);
           const isLast = flatIdx === orderedIngredients.length - 1;
-          const categoryLabelText = lib ? (copy.categoryNames[lib.category] ?? lib.category) : "";
+          const categoryLabelText = lib
+            ? t(`nutriAnpassar.categoryNames.${lib.category}`, { defaultValue: lib.category })
+            : "";
           const ingKcal = lib ? Math.round((ing.amountG / 100) * lib.calories100g) : null;
           const ingProtein = lib ? Math.round((ing.amountG / 100) * lib.proteinG100g) : null;
           const isLastIngredient = ingredients.length <= 1;
@@ -462,7 +469,7 @@ export function StepAdjust({
                   ]}
                 >
                   <ThemedText style={styles.groupHeadText}>
-                    {(copy.groupNames[group] ?? group).toUpperCase()}
+                    {t(`nutriAnpassar.groupNames.${group}`, { defaultValue: group }).toUpperCase()}
                   </ThemedText>
                 </View>
               )}
@@ -477,13 +484,13 @@ export function StepAdjust({
                   <ThemedText style={styles.ingMeta} numberOfLines={1}>
                     {isExtra ? (
                       <ThemedText style={[styles.ingMeta, styles.ingMetaAdded]}>
-                        {copy.adjustAdded} ·{" "}
+                        {t("nutriAnpassar.adjustAdded")} ·{" "}
                       </ThemedText>
                     ) : null}
                     {categoryLabelText} · {ing.amountG}g
                     {showIngredientMacros && ingKcal != null ? ` · ${ingKcal} kcal` : ""}
                     {showIngredientMacros && ingProtein != null
-                      ? ` · ${ingProtein}g ${copy.adjustProteinShort}`
+                      ? ` · ${ingProtein}g ${t("nutriAnpassar.adjustProteinShort")}`
                       : ""}
                   </ThemedText>
                 </View>
@@ -495,7 +502,7 @@ export function StepAdjust({
                     disabled={ing.amountG <= minG}
                     style={styles.stepperButton}
                     accessibilityRole="button"
-                    accessibilityLabel={copy.adjustDecrease}
+                    accessibilityLabel={t("nutriAnpassar.adjustDecrease")}
                   >
                     <Minus
                       size={12}
@@ -509,7 +516,7 @@ export function StepAdjust({
                     disabled={ing.amountG >= maxG}
                     style={styles.stepperButton}
                     accessibilityRole="button"
-                    accessibilityLabel={copy.adjustIncrease}
+                    accessibilityLabel={t("nutriAnpassar.adjustIncrease")}
                   >
                     <Plus
                       size={12}
@@ -530,8 +537,8 @@ export function StepAdjust({
                   accessibilityRole="button"
                   accessibilityLabel={
                     isLastIngredient
-                      ? copy.adjustMinIngredientRequired
-                      : copy.adjustRemoveIngredient(ing.name)
+                      ? t("nutriAnpassar.adjustMinIngredientRequired")
+                      : t("nutriAnpassar.adjustRemoveIngredient", { name: ing.name })
                   }
                 >
                   <X
@@ -550,9 +557,9 @@ export function StepAdjust({
         <>
           <View style={styles.sectionHeadRow}>
             <ThemedText style={styles.sectionHead}>
-              {copy.adjustAddIngredient.toUpperCase()}
+              {t("nutriAnpassar.adjustAddIngredient").toUpperCase()}
             </ThemedText>
-            <ThemedText style={styles.optionalText}>{copy.adjustOptional}</ThemedText>
+            <ThemedText style={styles.optionalText}>{t("nutriAnpassar.adjustOptional")}</ThemedText>
           </View>
           <View style={styles.extrasWrap}>
             {availableExtras.map((lib) => {
@@ -570,12 +577,12 @@ export function StepAdjust({
                     pressed && { backgroundColor: "rgba(232,101,10,0.14)", borderColor: "rgba(232,101,10,0.55)" },
                   ]}
                   accessibilityRole="button"
-                  accessibilityLabel={copy.adjustAddIngredientAria(lib.name)}
+                  accessibilityLabel={t("nutriAnpassar.adjustAddIngredientAria", { name: lib.name })}
                 >
                   <Plus size={11} color={colors.accent} strokeWidth={2.25} />
                   <ThemedText style={styles.extraChipText}>{lib.name}</ThemedText>
                   {priceDelta != null && priceDelta > 0 && (
-                    <ThemedText style={styles.extraChipPrice}>+{priceDelta} kr</ThemedText>
+                    <ThemedText style={styles.extraChipPrice}>+{formatNumber(priceDelta, language)} kr</ThemedText>
                   )}
                 </Pressable>
               );
@@ -600,7 +607,7 @@ export function StepAdjust({
           accessibilityRole="button"
         >
           <ThemedText style={[styles.ctaText, isClosed && { color: "rgba(255,255,255,0.35)" }]}>
-            {isClosed ? copy.mealsOrderingClosed : copy.mealsAddToCart}
+            {isClosed ? t("nutriAnpassar.mealsOrderingClosed") : t("nutriAnpassar.mealsAddToCart")}
           </ThemedText>
           {displayPrice != null && !isClosed && (
             <ThemedText style={styles.ctaPrice}>{displayPrice} kr</ThemedText>

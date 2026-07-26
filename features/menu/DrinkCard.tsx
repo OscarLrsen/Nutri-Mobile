@@ -6,7 +6,7 @@ import { Check, CupSoda, Plus } from "lucide-react-native";
 import { ThemedText } from "@/components/ui/ThemedText";
 import type { ApiDrink } from "@/services/api/drinks";
 import { useCart } from "@/context/CartContext";
-import { mealDetailCopy, menuCopy } from "@/constants/copy";
+import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -32,6 +32,8 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  * says otherwise. Preliminary design decision.
  */
 export function DrinkCard({ drink }: { drink: ApiDrink }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const { addDrinkItem } = useCart();
   const [imageFailed, setImageFailed] = useState(false);
   const [added, setAdded] = useState(false);
@@ -62,13 +64,13 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
     if ((drink.showProtein ?? true) && (drink.proteinG ?? 0) > 0)
       metadata.push(`${drink.proteinG}g protein`);
     if ((drink.showCarbs ?? false) && (drink.carbsG ?? 0) > 0)
-      metadata.push(`${drink.carbsG}g ${menuCopy.carbsShort}`);
+      metadata.push(`${drink.carbsG}g ${t("menu.carbsShort")}`);
     if ((drink.showFat ?? false) && (drink.fatG ?? 0) > 0)
-      metadata.push(`${drink.fatG}g ${menuCopy.fatShort}`);
+      metadata.push(`${drink.fatG}g ${t("menu.fatShort")}`);
     if ((drink.showFiber ?? false) && (drink.fiberG ?? 0) > 0)
       metadata.push(`${drink.fiberG}g fiber`);
     if ((drink.showCaffeine ?? true) && (drink.caffeineMg ?? 0) > 0)
-      metadata.push(`${drink.caffeineMg} mg ${menuCopy.caffeineShort}`);
+      metadata.push(`${drink.caffeineMg} mg ${t("menu.caffeineShort")}`);
   }
 
   return (
@@ -95,7 +97,7 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
           <ThemedText variant="bodyMedium" style={styles.title} numberOfLines={2}>
             {drink.name}
           </ThemedText>
-          <ThemedText style={styles.price}>{priceKr} kr</ThemedText>
+          <ThemedText style={styles.price}>{formatNumber(priceKr, language)} kr</ThemedText>
         </View>
 
         {drink.description ? (
@@ -123,22 +125,22 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
           accessibilityRole="button"
           accessibilityState={{ disabled: outOfStock || added }}
           accessibilityLabel={
-            outOfStock ? menuCopy.soldOutToday : added ? menuCopy.added : mealDetailCopy.add
+            outOfStock ? t("menu.soldOutToday") : added ? t("menu.added") : t("mealDetail.add")
           }
         >
           {outOfStock ? (
-            <ThemedText style={styles.addLabelLocked}>{menuCopy.soldOutToday}</ThemedText>
+            <ThemedText style={styles.addLabelLocked}>{t("menu.soldOutToday")}</ThemedText>
           ) : added ? (
             <>
               <Check size={12} color={colors.accent} strokeWidth={2.5} />
               <ThemedText style={[styles.addLabel, { color: colors.accent }]}>
-                {menuCopy.added}
+                {t("menu.added")}
               </ThemedText>
             </>
           ) : (
             <>
               <Plus size={12} color={colors.textPrimary} strokeWidth={2.5} />
-              <ThemedText style={styles.addLabel}>{mealDetailCopy.add}</ThemedText>
+              <ThemedText style={styles.addLabel}>{t("mealDetail.add")}</ThemedText>
             </>
           )}
         </Pressable>

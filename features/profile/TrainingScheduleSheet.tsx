@@ -3,7 +3,7 @@ import { Activity, Dumbbell, Minus, Star, X } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import type { WeeklyScheduleDto } from "@/services/api/weeklySchedule";
-import { profileCopy as copy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 import { sortScheduleMonFirst } from "./profileOptions";
 
@@ -75,6 +75,7 @@ export function TrainingScheduleSheet({
   onSave: () => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const sorted = schedule ? sortScheduleMonFirst(schedule) : [];
   const trainingDays = sorted.filter(
     (d) => d.dayType === "Training" || d.dayType === "HeavyTraining"
@@ -100,14 +101,14 @@ export function TrainingScheduleSheet({
           <View style={styles.header}>
             <View style={{ flex: 1, gap: 4 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: spacing[2] }}>
-                <ThemedText style={styles.title}>{copy.trainingSheetTitle}</ThemedText>
+                <ThemedText style={styles.title}>{t("profile.trainingSheetTitle")}</ThemedText>
                 <View style={styles.optionalPill}>
                   <ThemedText style={styles.optionalPillText}>
-                    {copy.trainingSheetOptional.toUpperCase()}
+                    {t("profile.trainingSheetOptional").toUpperCase()}
                   </ThemedText>
                 </View>
               </View>
-              <ThemedText style={styles.subtitle}>{copy.trainingSheetBody}</ThemedText>
+              <ThemedText style={styles.subtitle}>{t("profile.trainingSheetBody")}</ThemedText>
             </View>
             <Pressable onPress={onClose} style={styles.closeButton} accessibilityRole="button">
               <X size={13} color={colors.accent} strokeWidth={1.7} />
@@ -116,17 +117,17 @@ export function TrainingScheduleSheet({
 
           <ScrollView contentContainerStyle={styles.content}>
             {loading || !schedule ? (
-              <ThemedText style={styles.loadingText}>{copy.trainingSheetLoading}</ThemedText>
+              <ThemedText style={styles.loadingText}>{t("profile.trainingSheetLoading")}</ThemedText>
             ) : (
               <>
                 {/* Weekly overview grid */}
                 <View style={styles.sectionHeadRow}>
-                  <ThemedText style={styles.sectionHead}>{copy.weeklyOverview}</ThemedText>
+                  <ThemedText style={styles.sectionHead}>{t("profile.weeklyOverview")}</ThemedText>
                   <ThemedText style={styles.sectionHeadRight}>
-                    {copy.trainingDaysCount(trainingDays.length)}
+                    {t("profile.trainingDaysCount", { count: trainingDays.length })}
                   </ThemedText>
                 </View>
-                <ThemedText style={styles.helpText}>{copy.trainingScheduleHelp}</ThemedText>
+                <ThemedText style={styles.helpText}>{t("profile.trainingScheduleHelp")}</ThemedText>
 
                 <View style={styles.grid}>
                   {sorted.map((day) => {
@@ -149,13 +150,15 @@ export function TrainingScheduleSheet({
                         accessibilityRole="button"
                       >
                         <ThemedText style={[styles.dayAbbr, { color: nameColor }]}>
-                          {copy.dayAbbr[day.dayOfWeek].toUpperCase()}
+                          {t("profile.dayAbbr", { returnObjects: true })[day.dayOfWeek].toUpperCase()}
                         </ThemedText>
                         <View style={[styles.dayMarker, { borderColor: c.border }]}>
                           <DayIcon dayType={day.dayType} color={c.marker} />
                         </View>
                         <ThemedText style={[styles.dayStatus, { color: c.text }]}>
-                          {copy.dayTypeNames[day.dayType] ?? copy.dayTypeNames.Rest}
+                          {t(`profile.dayTypeNames.${day.dayType}`, {
+                            defaultValue: t("profile.dayTypeNames.Rest"),
+                          })}
                         </ThemedText>
                       </Pressable>
                     );
@@ -165,10 +168,10 @@ export function TrainingScheduleSheet({
                 {/* Legend */}
                 <View style={styles.legend}>
                   {[
-                    { label: copy.dayTypeNames.Rest, color: "rgba(255,255,255,0.22)" },
-                    { label: copy.dayTypeNames.Cardio, color: "#6FB6EC" },
-                    { label: copy.dayTypeNames.Training, color: colors.accent },
-                    { label: copy.dayTypeNames.HeavyTraining, color: "#FF5028" },
+                    { label: t("profile.dayTypeNames.Rest"), color: "rgba(255,255,255,0.22)" },
+                    { label: t("profile.dayTypeNames.Cardio"), color: "#6FB6EC" },
+                    { label: t("profile.dayTypeNames.Training"), color: colors.accent },
+                    { label: t("profile.dayTypeNames.HeavyTraining"), color: "#FF5028" },
                   ].map((l) => (
                     <View key={l.label} style={styles.legendItem}>
                       <View style={[styles.legendDot, { backgroundColor: l.color }]} />
@@ -179,9 +182,9 @@ export function TrainingScheduleSheet({
 
                 {/* Training time */}
                 <ThemedText style={[styles.sectionHead, { marginTop: spacing[4] }]}>
-                  {copy.trainingTime}
+                  {t("profile.trainingTime")}
                 </ThemedText>
-                <ThemedText style={styles.helpText}>{copy.trainingTimeHelp}</ThemedText>
+                <ThemedText style={styles.helpText}>{t("profile.trainingTimeHelp")}</ThemedText>
                 <View style={[styles.timeRow, trainingDays.length === 0 && { opacity: 0.5 }]}>
                   {TIME_OPTIONS.map((tv) => {
                     const active = trainingTime === tv;
@@ -197,7 +200,7 @@ export function TrainingScheduleSheet({
                         <ThemedText
                           style={[styles.timeButtonText, active && { color: colors.accent }]}
                         >
-                          {copy.workoutTimeNames[tv]}
+                          {t(`profile.workoutTimeNames.${tv}`)}
                         </ThemedText>
                       </Pressable>
                     );
@@ -206,7 +209,7 @@ export function TrainingScheduleSheet({
 
                 {/* Skip */}
                 <Pressable onPress={onClose} style={styles.skipButton} accessibilityRole="button">
-                  <ThemedText style={styles.skipText}>{copy.skip}</ThemedText>
+                  <ThemedText style={styles.skipText}>{t("profile.skip")}</ThemedText>
                 </Pressable>
               </>
             )}
@@ -225,7 +228,7 @@ export function TrainingScheduleSheet({
                 accessibilityRole="button"
               >
                 <ThemedText style={styles.saveButtonText}>
-                  {saving ? copy.saving : copy.saveSchedule}
+                  {saving ? t("profile.saving") : t("profile.saveSchedule")}
                 </ThemedText>
               </Pressable>
             </View>
