@@ -90,7 +90,14 @@
     "caffeineShort": "caffeine",
     "added": "Added",
     "openMealDetailsHint": "Opens the meal's details",
-    "loadError": "Couldn’t load the menu."
+    "loadError": "Couldn’t load the menu.",
+    "gowell": {
+      "subtitle": "Functional soda – pick your flavour",
+      "counter": "{{current}} of {{total}}",
+      "previousFlavor": "Previous flavour",
+      "nextFlavor": "Next flavour",
+      "addFlavor": "Add {{flavor}} to cart"
+    }
   },
   "cart": {
     "title": "Cart",

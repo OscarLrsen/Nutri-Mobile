@@ -21,6 +21,8 @@ import { MealCard } from "./MealCard";
 import { DrinkCard } from "./DrinkCard";
 import { FullDayMealCard } from "./FullDayMealCard";
 import { AnpassarEntryCard } from "./AnpassarEntryCard";
+import { GoWellFlavorCarousel } from "./GoWellFlavorCarousel";
+import { isGoWellDrink } from "./goWellFlavors";
 
 /**
  * Meny — mobile port of the web /meny page's category/grouping logic
@@ -79,30 +81,44 @@ export function MenuScreen() {
     return map;
   }, [availabilityQuery.data]);
 
-  const groups = useMemo(() => {
+  const { groups, goWellDrinks } = useMemo(() => {
     const meals = mealsQuery.data ?? [];
     const drinks = (drinksQuery.data ?? []).filter((d) => (d.stockQuantity ?? 0) > 0);
     const isBreakfast = (m: ApiMeal) => m.mealTimeTags?.includes(BREAKFAST_TAG) ?? false;
+    // GoWell (patch 11): the family renders as ONE carousel at the top of
+    // Dryck; its flavours are excluded from the regular card list so a
+    // flavour never appears twice. Water (LOKA) and any other drink keep
+    // the standard DrinkCard below the carousel.
+    const nonShakeDrinks = drinks.filter((d) => d.category !== "Shakes");
+    const goWell = nonShakeDrinks.filter(isGoWellDrink);
     return {
-      frukost: meals.filter(isBreakfast).map((meal): MenuItem => ({ kind: "meal", meal })),
-      huvudmaltider: meals
-        .filter((m) => m.category !== "Mellanmål" && !isBreakfast(m))
-        .map((meal): MenuItem => ({ kind: "meal", meal })),
-      mellanmal: meals
-        .filter((m) => m.category === "Mellanmål")
-        .map((meal): MenuItem => ({ kind: "meal", meal })),
-      shakes: drinks
-        .filter((d) => d.category === "Shakes")
-        .map((drink): MenuItem => ({ kind: "drink", drink })),
-      dryck: drinks
-        .filter((d) => d.category !== "Shakes")
-        .map((drink): MenuItem => ({ kind: "drink", drink })),
-    } satisfies Record<CategoryId, MenuItem[]>;
+      goWellDrinks: goWell,
+      groups: {
+        frukost: meals.filter(isBreakfast).map((meal): MenuItem => ({ kind: "meal", meal })),
+        huvudmaltider: meals
+          .filter((m) => m.category !== "Mellanmål" && !isBreakfast(m))
+          .map((meal): MenuItem => ({ kind: "meal", meal })),
+        mellanmal: meals
+          .filter((m) => m.category === "Mellanmål")
+          .map((meal): MenuItem => ({ kind: "meal", meal })),
+        shakes: drinks
+          .filter((d) => d.category === "Shakes")
+          .map((drink): MenuItem => ({ kind: "drink", drink })),
+        dryck: nonShakeDrinks
+          .filter((d) => !isGoWellDrink(d))
+          .map((drink): MenuItem => ({ kind: "drink", drink })),
+      } satisfies Record<CategoryId, MenuItem[]>,
+    };
   }, [mealsQuery.data, drinksQuery.data]);
 
   const availableCategories = useMemo(
-    () => CATEGORY_IDS.filter((id) => groups[id].length > 0),
-    [groups]
+    // Dryck stays available when the GoWell carousel alone has content
+    // (e.g. every non-shake drink is a GoWell flavour).
+    () =>
+      CATEGORY_IDS.filter(
+        (id) => groups[id].length > 0 || (id === "dryck" && goWellDrinks.length > 0)
+      ),
+    [groups, goWellDrinks]
   );
 
   const [activeCategory, setActiveCategory] = useState<CategoryId>("huvudmaltider");
@@ -249,9 +265,17 @@ export function MenuScreen() {
                     <FullDayMealCard />
                   </View>
                 ) : null}
+                {/* GoWell family (patch 11) — one swipeable component at
+                    the top of Dryck; water/other drinks follow as
+                    standard cards in the list below. */}
+                {activeId === "dryck" && goWellDrinks.length > 0 ? (
+                  <GoWellFlavorCarousel drinks={goWellDrinks} />
+                ) : null}
                 <ThemedText style={styles.sectionLabel}>
                   {t(`menu.categories.${activeId}`).toUpperCase()} ·{" "}
-                  {t("menu.itemCount", { count: activeItems.length }).toUpperCase()}
+                  {t("menu.itemCount", {
+                    count: activeItems.length + (activeId === "dryck" ? goWellDrinks.length : 0),
+                  }).toUpperCase()}
                 </ThemedText>
                 {activeId === "frukost" ? (
                   <View style={styles.breakfastBanner}>

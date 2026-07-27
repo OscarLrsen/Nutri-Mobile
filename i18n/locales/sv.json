@@ -90,7 +90,14 @@
     "caffeineShort": "koffein",
     "added": "Tillagd",
     "openMealDetailsHint": "Öppnar måltidens detaljer",
-    "loadError": "Kunde inte ladda menyn."
+    "loadError": "Kunde inte ladda menyn.",
+    "gowell": {
+      "subtitle": "Funktionsdryck – välj din smak",
+      "counter": "{{current}} av {{total}}",
+      "previousFlavor": "Föregående smak",
+      "nextFlavor": "Nästa smak",
+      "addFlavor": "Lägg till {{flavor}} i varukorgen"
+    }
   },
   "cart": {
     "title": "Varukorg",

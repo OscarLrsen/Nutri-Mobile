@@ -90,7 +90,14 @@
     "caffeineShort": "koffein",
     "added": "Tilføjet",
     "openMealDetailsHint": "Åbner måltidets detaljer",
-    "loadError": "Kunne ikke indlæse menuen."
+    "loadError": "Kunne ikke indlæse menuen.",
+    "gowell": {
+      "subtitle": "Funktionel sodavand – vælg din smag",
+      "counter": "{{current}} af {{total}}",
+      "previousFlavor": "Forrige smag",
+      "nextFlavor": "Næste smag",
+      "addFlavor": "Læg {{flavor}} i kurven"
+    }
   },
   "cart": {
     "title": "Kurv",
