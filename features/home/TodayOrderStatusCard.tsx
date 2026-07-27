@@ -1,4 +1,5 @@
 import { StyleSheet, View } from "react-native";
+import { ShoppingBag, Target } from "lucide-react-native";
 
 import { Card } from "@/components/ui/Card";
 import { ThemedText } from "@/components/ui/ThemedText";
@@ -6,6 +7,7 @@ import { Skeleton } from "@/components/feedback/Skeleton";
 import { isProfileGapError, useRemainingTodayQuery } from "@/services/api/nutritionQueries";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
+import { homeAccents } from "./homeAccents";
 
 /**
  * "Dagens status" — /api/nutrition-profile/remaining-today.
@@ -43,12 +45,20 @@ export function TodayOrderStatusCard() {
     <Card style={styles.card} accessibilityLabel={t("home.statusHead")}>
       <ThemedText style={styles.sectionLabel}>{t("home.statusHead").toUpperCase()}</ThemedText>
 
+      {/* Patch 11 visual pass: the two figures get icon badges in the
+          card's established accent pair (ordered = accent, remaining =
+          success) — data, labels and semantics untouched. */}
       <View style={styles.columns}>
         <View style={styles.column}>
-          <ThemedText variant="caption" style={styles.columnLabel}>
-            {t("home.orderedToday")}
-          </ThemedText>
-          <ThemedText variant="monoLarge" style={styles.columnValue}>
+          <View style={styles.columnHead}>
+            <View style={[styles.iconBadge, { backgroundColor: homeAccents.protein.soft }]}>
+              <ShoppingBag size={12} color={homeAccents.protein.value} strokeWidth={2.25} />
+            </View>
+            <ThemedText variant="caption" style={styles.columnLabel}>
+              {t("home.orderedToday")}
+            </ThemedText>
+          </View>
+          <ThemedText variant="monoLarge" style={[styles.columnValue, { color: homeAccents.protein.value }]}>
             {consumedToday.calories}
             <ThemedText variant="caption" style={styles.columnUnit}>
               {" "}
@@ -64,10 +74,15 @@ export function TodayOrderStatusCard() {
         <View style={styles.divider} />
 
         <View style={styles.column}>
-          <ThemedText variant="caption" style={styles.columnLabel}>
-            {t("home.remainingToday")}
-          </ThemedText>
-          <ThemedText variant="monoLarge" style={styles.columnValue}>
+          <View style={styles.columnHead}>
+            <View style={[styles.iconBadge, { backgroundColor: homeAccents.carbs.soft }]}>
+              <Target size={12} color={homeAccents.carbs.value} strokeWidth={2.25} />
+            </View>
+            <ThemedText variant="caption" style={styles.columnLabel}>
+              {t("home.remainingToday")}
+            </ThemedText>
+          </View>
+          <ThemedText variant="monoLarge" style={[styles.columnValue, { color: homeAccents.carbs.value }]}>
             {remainingToday.calories}
             <ThemedText variant="caption" style={styles.columnUnit}>
               {" "}
@@ -108,6 +123,19 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  columnHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+    marginBottom: 2,
+  },
+  iconBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.btn,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   divider: {
     width: 1,
     backgroundColor: colors.border,
@@ -118,7 +146,6 @@ const styles = StyleSheet.create({
   },
   columnValue: {
     fontSize: 22,
-    color: colors.textPrimary,
   },
   columnUnit: {
     color: colors.textTertiary,

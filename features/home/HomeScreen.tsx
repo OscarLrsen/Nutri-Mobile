@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/services/auth/AuthProvider";
@@ -13,6 +14,7 @@ import { DailyTargetsCard } from "./DailyTargetsCard";
 import { TodayOrderStatusCard } from "./TodayOrderStatusCard";
 import { NutriFamilySection } from "./NutriFamilySection";
 import { LoggedOutHome } from "./LoggedOutHome";
+import { heroGradient } from "./homeAccents";
 
 /**
  * Hem — personal nutrition dashboard (Patch 1 IA, patch 5 visual cleanup).
@@ -54,20 +56,29 @@ export function HomeScreen() {
         contentContainerStyle={[styles.content, !user && styles.contentLoggedOut]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.hero, !user && styles.heroLoggedOut]}>
-          {/* Just the centered logo — the weekly-reward entry lives in the
-              Nutri Family segment below (patch 5), so the header carries
-              no buttons and needs no slot layout. */}
+        {/* Header — same content as before (logo + greeting), now on the
+            soft accent wash Rewards/Heldag already use (patch 11 visual
+            pass) instead of a flat card, so Home opens with the same
+            colour presence as the rest of the app. Text sits on the dark
+            end of the gradient — contrast unchanged. */}
+        <LinearGradient
+          colors={[...heroGradient]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.85, y: 1 }}
+          style={[styles.hero, !user && styles.heroLoggedOut]}
+        >
           <View style={styles.logoRow}>
-            <Image
-              source={require("@/assets/nutri-logo.png")}
-              style={styles.logo}
-              contentFit="contain"
-              accessibilityLabel="Nutri"
-            />
+            <View style={styles.logoBadge}>
+              <Image
+                source={require("@/assets/nutri-logo.png")}
+                style={styles.logo}
+                contentFit="contain"
+                accessibilityLabel="Nutri"
+              />
+            </View>
           </View>
           {user ? <GreetingHeader /> : null}
-        </View>
+        </LinearGradient>
 
         {user ? (
           <View style={styles.sections}>
@@ -107,10 +118,10 @@ const styles = StyleSheet.create({
     gap: spacing[3],
     borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
+    borderColor: colors.accentBorder,
+    overflow: "hidden",
     paddingHorizontal: spacing[4],
-    paddingTop: spacing[2],
+    paddingTop: spacing[3],
     paddingBottom: spacing[3],
     marginBottom: spacing[3],
   },
@@ -121,9 +132,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  logoBadge: {
+    width: 62,
+    height: 62,
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(232,101,10,0.14)",
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+  },
   logo: {
-    width: 46,
-    height: 46,
+    width: 42,
+    height: 42,
   },
   sections: {
     gap: spacing[2],

@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/feedback/Skeleton";
 import { isProfileGapError, useTodayNutritionQuery } from "@/services/api/nutritionQueries";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
+import { homeAccents } from "./homeAccents";
 
 /**
  * "Dagens plan" — today's carb-cycled targets from
@@ -102,10 +103,14 @@ export function DailyTargetsCard() {
         </ThemedText>
       </View>
 
+      {/* Patch 11 visual pass: each macro cell carries its own accent
+          (soft fill + top edge + coloured value) so the card reads with
+          the same colour hierarchy as Meny. Labels stay — colour is never
+          the only carrier. */}
       <View style={styles.macroRow}>
-        <Macro label={t("home.macroProtein")} grams={target.proteinG} highlight />
-        <Macro label={t("home.macroCarbs")} grams={target.carbsG} />
-        <Macro label={t("home.macroFat")} grams={target.fatG} />
+        <Macro label={t("home.macroProtein")} grams={target.proteinG} accent={homeAccents.protein} />
+        <Macro label={t("home.macroCarbs")} grams={target.carbsG} accent={homeAccents.carbs} />
+        <Macro label={t("home.macroFat")} grams={target.fatG} accent={homeAccents.fat} />
       </View>
 
       {!today.dayType ? (
@@ -122,11 +127,20 @@ function SectionLabel() {
   return <ThemedText style={styles.sectionLabel}>{t("home.planHead").toUpperCase()}</ThemedText>;
 }
 
-function Macro({ label, grams, highlight = false }: { label: string; grams: number; highlight?: boolean }) {
+function Macro({
+  label,
+  grams,
+  accent,
+}: {
+  label: string;
+  grams: number;
+  accent: { value: string; soft: string; border: string };
+}) {
   const { t } = useTranslation();
   return (
-    <View style={styles.macro}>
-      <ThemedText variant="monoLarge" style={[styles.macroValue, highlight && styles.macroValueHighlight]}>
+    <View style={[styles.macro, { backgroundColor: accent.soft, borderColor: accent.border }]}>
+      <View style={[styles.macroEdge, { backgroundColor: accent.value }]} />
+      <ThemedText variant="monoLarge" style={[styles.macroValue, { color: accent.value }]}>
         {grams}
         <ThemedText variant="caption" style={styles.macroUnit}>
           {t("home.gramUnit")}
@@ -189,23 +203,26 @@ const styles = StyleSheet.create({
     gap: 2,
     borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: colors.borderSoft,
-    backgroundColor: colors.cardAlt,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
+    overflow: "hidden",
+  },
+  macroEdge: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2.5,
+    opacity: 0.85,
   },
   macroValue: {
     fontSize: 18,
-    color: colors.textPrimary,
-  },
-  macroValueHighlight: {
-    color: colors.accent,
   },
   macroUnit: {
     color: colors.textTertiary,
   },
   macroLabel: {
-    color: colors.textTertiary,
+    color: colors.textSecondary,
     fontSize: 11,
   },
   noSchedule: {
