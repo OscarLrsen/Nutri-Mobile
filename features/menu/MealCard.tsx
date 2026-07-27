@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Image } from "expo-image";
-import { Check, Plus, UtensilsCrossed } from "lucide-react-native";
+import { Check, Plus, Sparkles, UtensilsCrossed } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { useCart } from "@/context/CartContext";
@@ -11,6 +11,7 @@ import { apiMealToMeal, CUSTOMER_SIZE_OPTIONS, previewMealPriceOre } from "@/uti
 import { formatPriceKr } from "@/utils/money";
 import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
+import type { MealRecommendation } from "./mealRecommendation";
 
 /**
  * Meal card — mobile port of the web /meny page's MealCard. Logic (per-size
@@ -18,6 +19,18 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  * scaling) is ported 1:1; layout is adapted for a native card list. The
  * footer adds the displayed size through the same CartContext mapping used
  * by MealDetailScreen, while the image/body still opens that detail route.
+ *
+ * Personal recommendation (patch 12): when the parent passes a
+ * recommendation (derived once per menu from the shared backend
+ * /nutrition-profile/today query — never a per-card call), the card:
+ * - preselects the recommended size (unless sold out — stock always wins),
+ * - marks that size button with a badge + a11y label,
+ * - shows the personal kcal/protein/carbs/fat for the SELECTED size (the
+ *   established backend size contract, same numbers the cart will carry),
+ * - explains the pick, and honestly flags when the user's manual size
+ *   deviates from the recommendation — other sizes are never blocked.
+ * No recommendation (loading/error/profile gap/fixed portion) → the card
+ * renders exactly as before and ordering always works.
  *
  * Mirrors the web POS/dashboard low-stock threshold.
  */
@@ -29,15 +42,27 @@ interface MealCardProps {
    * size as available; backend stock validation at order time is the safety
    * net. Same fallback contract as the web. */
   availability: ApiMealAvailability | null;
+  /** Personal size recommendation (patch 12) — null when unavailable. */
+  recommendation?: MealRecommendation | null;
 }
 
-export function MealCard({ meal, availability }: MealCardProps) {
+export function MealCard({ meal, availability, recommendation = null }: MealCardProps) {
   const { t } = useTranslation();
   const { language } = useLanguage();
   const router = useRouter();
   const { addItem } = useCart();
   const isFixed = meal.portionMode === "fixed";
   const [selectedSize, setSelectedSize] = useState<string>("medium");
+
+  // Preselect the recommended size once it arrives — but never steal an
+  // explicit user choice (only applies while the untouched default is
+  // active) and never select a sold-out size.
+  const userTouchedSizeRef = useRef(false);
+  const recSizeId = recommendation?.sizeId ?? null;
+  useEffect(() => {
+    if (isFixed || !recSizeId || userTouchedSizeRef.current) return;
+    setSelectedSize((current) => (current === recSizeId ? current : recSizeId));
+  }, [recSizeId, isFixed]);
   const [imageFailed, setImageFailed] = useState(false);
   const [added, setAdded] = useState(false);
   const addLockedRef = useRef(false);
@@ -78,7 +103,14 @@ export function MealCard({ meal, availability }: MealCardProps) {
   const size = CUSTOMER_SIZE_OPTIONS.find((s) => s.id === effectiveSize) ?? CUSTOMER_SIZE_OPTIONS[0];
   const calories = Math.round(meal.macros.calories * size.macroMultiplier);
   const proteinG = Math.round(meal.macros.proteinG * size.macroMultiplier);
+  const carbsG = Math.round(meal.macros.carbsG * size.macroMultiplier);
+  const fatG = Math.round(meal.macros.fatG * size.macroMultiplier);
   const priceOre = previewMealPriceOre(meal.basePrice, size.priceMultiplier);
+
+  const hasRecommendation = !isFixed && recSizeId !== null;
+  const recSizeLabel =
+    CUSTOMER_SIZE_OPTIONS.find((s) => s.id === recSizeId)?.label ?? recSizeId ?? "";
+  const isRecommendedSelected = hasRecommendation && effectiveSize === recSizeId;
 
   const selected = stockBySize[effectiveSize as "medium" | "large"];
   const stockLocked = allSoldOut || selected.soldOut;
@@ -151,12 +183,50 @@ export function MealCard({ meal, availability }: MealCardProps) {
           </ThemedText>
         ) : null}
 
-        {/* Compact nutrition row: kcal · protein */}
+        {/* Personal recommendation (patch 12) — calm badge + explanation.
+            Text carries the meaning; the accent tint is reinforcement. */}
+        {hasRecommendation ? (
+          <View
+            style={styles.recRow}
+            accessibilityLabel={t("menu.rec.badgeAria", { size: recSizeLabel })}
+          >
+            <Sparkles size={11} color={colors.accent} strokeWidth={2.25} />
+            <ThemedText style={styles.recBadgeText}>
+              {t("menu.rec.badge", { size: recSizeLabel }).toUpperCase()}
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {/* Nutrition row for the SELECTED size: personal cards show all
+            four macros; without a recommendation the original compact
+            kcal · protein row is unchanged. */}
         <View style={styles.macroRow}>
           <ThemedText style={styles.macroText}>{calories} kcal</ThemedText>
           <ThemedText style={styles.macroDot}>·</ThemedText>
           <ThemedText style={[styles.macroText, styles.macroAccent]}>{proteinG}g protein</ThemedText>
+          {hasRecommendation ? (
+            <>
+              <ThemedText style={styles.macroDot}>·</ThemedText>
+              <ThemedText style={styles.macroText}>
+                {carbsG}g {t("menu.carbsShort")}
+              </ThemedText>
+              <ThemedText style={styles.macroDot}>·</ThemedText>
+              <ThemedText style={styles.macroText}>
+                {fatG}g {t("menu.fatShort")}
+              </ThemedText>
+            </>
+          ) : null}
         </View>
+
+        {/* Honest context line: why this pick / that the manual size
+            deviates from it. */}
+        {hasRecommendation ? (
+          <ThemedText variant="caption" style={styles.recHint} numberOfLines={2}>
+            {isRecommendedSelected
+              ? t("menu.rec.explanation")
+              : t("menu.rec.deviates", { size: recSizeLabel })}
+          </ThemedText>
+        ) : null}
 
         {/* Stock badges */}
         {(allSoldOut || showLowStock) && (
@@ -186,15 +256,29 @@ export function MealCard({ meal, availability }: MealCardProps) {
             {CUSTOMER_SIZE_OPTIONS.map((s) => {
               const isSelected = selectedSize === s.id;
               const sSoldOut = stockBySize[s.id as "medium" | "large"].soldOut;
+              const isRec = hasRecommendation && s.id === recSizeId;
               return (
                 <Pressable
                   key={s.id}
                   disabled={sSoldOut}
-                  onPress={() => setSelectedSize(s.id)}
-                  style={[styles.sizeButton, isSelected && !sSoldOut && styles.sizeButtonSelected]}
+                  onPress={() => {
+                    userTouchedSizeRef.current = true;
+                    setSelectedSize(s.id);
+                  }}
+                  style={[
+                    styles.sizeButton,
+                    isSelected && !sSoldOut && styles.sizeButtonSelected,
+                    isRec && !isSelected && !sSoldOut && styles.sizeButtonRecommended,
+                  ]}
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected, disabled: sSoldOut }}
-                  accessibilityLabel={sSoldOut ? t("menu.sizeSoldOut", { size: s.label }) : s.label}
+                  accessibilityLabel={
+                    sSoldOut
+                      ? t("menu.sizeSoldOut", { size: s.label })
+                      : isRec
+                        ? t("menu.rec.sizeAria", { size: s.label })
+                        : s.label
+                  }
                 >
                   <ThemedText
                     style={[
@@ -205,6 +289,8 @@ export function MealCard({ meal, availability }: MealCardProps) {
                   >
                     {s.label}
                   </ThemedText>
+                  {/* Non-colour marker for the recommended size. */}
+                  {isRec && !sSoldOut ? <View style={styles.sizeRecDot} /> : null}
                 </Pressable>
               );
             })}
@@ -240,7 +326,9 @@ export function MealCard({ meal, availability }: MealCardProps) {
           ) : (
             <>
               <Plus size={12} color={colors.textPrimary} strokeWidth={2.5} />
-              <ThemedText style={styles.addLabel}>{t("mealDetail.add")}</ThemedText>
+              <ThemedText style={styles.addLabel}>
+                {isRecommendedSelected ? t("menu.rec.cta") : t("mealDetail.add")}
+              </ThemedText>
             </>
           )}
         </Pressable>
@@ -325,6 +413,36 @@ const styles = StyleSheet.create({
   },
   macroAccent: {
     color: colors.accent,
+  },
+  recRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 2,
+  },
+  recBadgeText: {
+    fontSize: 9.5,
+    fontFamily: fontFamily.bodyBold,
+    letterSpacing: 1,
+    color: colors.accent,
+  },
+  recHint: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  sizeButtonRecommended: {
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+  },
+  sizeRecDot: {
+    position: "absolute",
+    top: 3,
+    right: 3,
+    width: 4,
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.accent,
   },
   stockRow: {
     flexDirection: "row",

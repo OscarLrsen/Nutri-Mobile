@@ -85,6 +85,7 @@ function RootNavigator() {
         <Stack.Screen name="nutri-anpassar" />
         <Stack.Screen name="om-nutri" />
         <Stack.Screen name="order/[id]" />
+        <Stack.Screen name="planera-dagen" />
         <Stack.Screen name="poang" />
         <Stack.Screen name="rapportera-problem" />
         {/* Title is set inside the screen itself (needs i18n, which isn't

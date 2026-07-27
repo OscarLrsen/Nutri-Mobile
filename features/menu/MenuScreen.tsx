@@ -15,14 +15,19 @@ import {
   getLocationStatusLabel,
   STATUS_COLORS,
 } from "@/utils/locationStatus";
-import { useTranslation } from "@/i18n";
+import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { MealCard } from "./MealCard";
 import { DrinkCard } from "./DrinkCard";
-import { FullDayMealCard } from "./FullDayMealCard";
-import { AnpassarEntryCard } from "./AnpassarEntryCard";
+import { PersonalMenuSection } from "./PersonalMenuSection";
 import { GoWellFlavorCarousel } from "./GoWellFlavorCarousel";
 import { isGoWellDrink } from "./goWellFlavors";
+import { recommendSize, slotForCategory, slotTarget } from "./mealRecommendation";
+import {
+  isProfileGapError,
+  useTodayDayPlanQuery,
+  useTodayNutritionQuery,
+} from "@/services/api/nutritionQueries";
 
 /**
  * Meny — mobile port of the web /meny page's category/grouping logic
@@ -66,6 +71,17 @@ export function MenuScreen() {
 
   const mealsQuery = useQuery({ queryKey: ["meals"], queryFn: getMeals });
   const drinksQuery = useQuery({ queryKey: ["drinks"], queryFn: getDrinks });
+  // Personal portion recommendations (patch 12): ONE shared nutrition
+  // query for the whole menu — the same ["nutrition","today"] cache row
+  // Home uses, so this usually costs zero extra network calls and NEVER
+  // one per card. 404/422 = profile gap (honest CTA, no fake recs);
+  // any other error = null targets → cards render without recs.
+  const todayQuery = useTodayNutritionQuery();
+  const profileGap = todayQuery.isError && isProfileGapError(todayQuery.error);
+  // The user's SAVED day plan (one shared query, invalidated by the day
+  // planner on save) — its slot targets take priority over the automatic
+  // distribution, so "your goal and today's plan" is honest copy.
+  const dayPlanQuery = useTodayDayPlanQuery();
   // Availability failing must never block the menu — treat as unknown and
   // let backend order-time validation be the safety net (web parity).
   const availabilityQuery = useQuery({
@@ -128,12 +144,20 @@ export function MenuScreen() {
     "huvudmaltider";
   const activeItems = groups[activeId];
 
-  // The Anpassar/Heldag entry points are alternative MAIN-MEAL flows — they
-  // only render under Huvudmåltider so Shakes/Dryck browsing isn't pushed
-  // below the fold by planning cards. (If huvudmaltider is empty it is
-  // hidden from the chips and the cards simply don't appear — acceptable,
-  // the flows remain reachable from Hem's quick actions.)
+  // "Din personliga meny" (patch 12) renders only under Huvudmåltider so
+  // Shakes/Dryck browsing isn't pushed below the fold by planning cards.
   const showOrderingEntries = activeId === "huvudmaltider";
+
+  // Slot target for the ACTIVE category — pure presentation of the
+  // backend's per-slot distribution (see mealRecommendation.ts).
+  const { language } = useLanguage();
+  const activeSlot =
+    activeId === "frukost" || activeId === "huvudmaltider" || activeId === "mellanmal"
+      ? slotForCategory(activeId, language)
+      : null;
+  const activeSlotTarget = activeSlot
+    ? slotTarget(todayQuery.data, dayPlanQuery.data ?? null, activeSlot)
+    : null;
 
   // Header height differs per category now — reset scroll on chip switch so
   // the list never lands mid-content under a differently-sized header.
@@ -254,16 +278,15 @@ export function MenuScreen() {
             contentContainerStyle={styles.list}
             ListHeaderComponent={
               <View style={styles.listHeader}>
-                {/* Ordering entry points moved from Hem (Patch 1 IA):
+                {/* "Din personliga meny" (patch 12): plan-your-day +
+                    customise-a-meal as the two clear entry points; the
+                    Heldag package is offered INSIDE the day planner
+                    (Alternativ B), so the menu top stays two cards.
                     FlatList-correct header content — never a ScrollView
-                    around the list. Auth gate + /heldag login-return live
-                    inside FullDayMealCard, unchanged by the move. Rendered
-                    only under Huvudmåltider (see showOrderingEntries). */}
+                    around the list. Rendered only under Huvudmåltider
+                    (see showOrderingEntries). */}
                 {showOrderingEntries ? (
-                  <View style={styles.planRow}>
-                    <AnpassarEntryCard />
-                    <FullDayMealCard />
-                  </View>
+                  <PersonalMenuSection profileGap={profileGap} />
                 ) : null}
                 {/* GoWell family (patch 11) — one swipeable component at
                     the top of Dryck; water/other drinks follow as
@@ -288,7 +311,13 @@ export function MenuScreen() {
             }
             renderItem={({ item }) =>
               item.kind === "meal" ? (
-                <MealCard meal={item.meal} availability={availabilityById?.get(item.meal.id) ?? null} />
+                <MealCard
+                  meal={item.meal}
+                  availability={availabilityById?.get(item.meal.id) ?? null}
+                  recommendation={
+                    activeSlot ? recommendSize(item.meal, activeSlotTarget, activeSlot) : null
+                  }
+                />
               ) : (
                 <DrinkCard drink={item.drink} />
               )
@@ -363,16 +392,6 @@ const styles = StyleSheet.create({
     gap: spacing[2],
     paddingBottom: spacing[2],
     paddingHorizontal: spacing[1],
-  },
-  // Two full-width main-meal entry cards stacked vertically. Column stretch
-  // makes each card (MenuPlanCard) fill the available width on its own row;
-  // the gap gives consistent vertical spacing between them.
-  planRow: {
-    flexDirection: "column",
-    alignItems: "stretch",
-    gap: spacing[3],
-    width: "100%",
-    minWidth: 0,
   },
   sectionLabel: {
     fontSize: 11,
