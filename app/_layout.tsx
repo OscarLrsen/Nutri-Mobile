@@ -12,7 +12,7 @@ import { DMSerifDisplay_400Regular } from "@expo-google-fonts/dm-serif-display";
 
 import { queryClient } from "@/lib/queryClient";
 import { LanguageProvider } from "@/i18n";
-import { AuthProvider } from "@/services/auth/AuthProvider";
+import { AuthProvider, useAuth } from "@/services/auth/AuthProvider";
 import { CartProvider } from "@/context/CartContext";
 import { CouponProvider } from "@/context/CouponContext";
 import { WelcomeCouponModal } from "@/features/coupons/WelcomeCouponModal";
@@ -41,6 +41,62 @@ try {
   SplashScreen.setOptions({ fade: true, duration: 150 });
 } catch {
   // Unsupported platform/runtime — a hard cut is acceptable.
+}
+
+/**
+ * Central auth gate (patch 11) — the ONLY place that decides what an
+ * unauthenticated user can see. The app is fully account-based:
+ *
+ * - While the Supabase session restores: render nothing — the native
+ *   splash / NutriSplashScreen (mounted above in RootLayout) covers the
+ *   screen, so neither Home nor the tab bar can flash before the session
+ *   state is known.
+ * - Signed OUT: only the auth screens exist. The tab navigator and every
+ *   customer screen are inside a guard and are NEVER mounted — nothing
+ *   renders "behind" login, and back navigation cannot reach the app.
+ *   Any navigation attempt to a guarded route (deep link, stale link)
+ *   lands on the first available screen: login.
+ * - Signed IN: the full app; the auth screens unmount, and a sign-out
+ *   flips the guards so the user lands on login with no back history.
+ *
+ * getSession() reads local storage (no network), so `loading` always
+ * resolves; a corrupt/failed read leaves user null → safe mode = login.
+ * Consent gate / first-run intro / survey are overlays mounted ABOVE this
+ * navigator in RootLayout; all three are session-gated, so the locked
+ * order for a fresh installation is login → (registration/verification)
+ * → session → consent → intro → survey → Home.
+ */
+function RootNavigator() {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  const signedIn = !!user;
+
+  return (
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+      <Stack.Protected guard={signedIn}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="beloningar" />
+        <Stack.Screen name="feedback" />
+        <Stack.Screen name="heldag" />
+        <Stack.Screen name="justera-makros" />
+        <Stack.Screen name="kupong/[id]" />
+        <Stack.Screen name="kuponger" />
+        <Stack.Screen name="meal/[id]" />
+        <Stack.Screen name="nutri-anpassar" />
+        <Stack.Screen name="om-nutri" />
+        <Stack.Screen name="order/[id]" />
+        <Stack.Screen name="poang" />
+        <Stack.Screen name="rapportera-problem" />
+        {/* Title is set inside the screen itself (needs i18n, which isn't
+            available at this layout level). */}
+        <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+      </Stack.Protected>
+      <Stack.Protected guard={!signedIn}>
+        <Stack.Screen name="logga-in" />
+        <Stack.Screen name="registrera" />
+      </Stack.Protected>
+    </Stack>
+  );
 }
 
 export default function RootLayout() {
@@ -83,12 +139,9 @@ export default function RootLayout() {
                           the consent gate/intro/survey still cover them. */}
                       <PushNotificationResponder />
                       <PushTokenSync />
-                      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
-                        <Stack.Screen name="(tabs)" />
-                        {/* Title is set inside the screen itself (needs i18n,
-                            which isn't available at this layout level). */}
-                        <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-                      </Stack>
+                      {/* Central auth gate (patch 11): the app is fully
+                          account-based — see RootNavigator below. */}
+                      <RootNavigator />
                       {/* App-wide modal overlays mount once the startup
                           screen is gone — RN Modals would otherwise render
                           above it. Their own show/defer logic is unchanged,
@@ -113,9 +166,12 @@ export default function RootLayout() {
                           <OnboardingSurveyOverlay />
                         </>
                       )}
-                      {/* First-run intro (patch 3) — opaque from the first
-                          frame while the flag loads, so the splash below
-                          fades into the intro (not Home) on first launch. */}
+                      {/* First-run intro (patch 3, session-gated by patch
+                          11): renders nothing without a valid session —
+                          login is always the first usable screen. For a
+                          signed-in user who hasn't completed it, it covers
+                          Home until done (consent modal still stacks
+                          above; the survey waits for the intro signal). */}
                       <FirstRunOnboardingGate />
                       {/* Animated startup screen on top of the booting app. */}
                       {!splashDone && (
