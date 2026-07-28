@@ -56,7 +56,7 @@ export interface ApiStampCardHistoryEntry {
   /** Signed: positive for earned, negative for a reversal. */
   quantity: number;
   createdAt: string;
-  orderId: string;
+  orderId: string | null;
   /** Null when the source order is no longer readable. */
   orderNumber: number | null;
   /** Stable machine code — "meal_picked_up" | "order_reversed" |
