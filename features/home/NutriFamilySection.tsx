@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/feedback/Skeleton";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { getRewardStatus } from "@/services/api/rewards";
 import { RegularDropBanner } from "@/features/rewards/RegularDropBanner";
+import { StampCardHomeCard } from "@/features/stampcard/StampCardHomeCard";
 import type { ApiRegularDropPoll } from "@/services/api/regularDrops";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
@@ -96,6 +97,11 @@ export function NutriFamilySection({
           accessibilityHint={t("home.pointsCardHint")}
         />
       </View>
+
+      {/* Stamp card (patch 16B) — a full card rather than another list row,
+          because it carries visual progress the row language cannot show.
+          Renders nothing at all if the API predates patch 16A. */}
+      <StampCardHomeCard />
 
       {/* Vote for Weekly — the existing banner, unchanged, same condition
           (only with a relevant poll) and the same sheet via the parent. */}

@@ -88,6 +88,7 @@ function RootNavigator() {
         <Stack.Screen name="planera-dagen" />
         <Stack.Screen name="poang" />
         <Stack.Screen name="rapportera-problem" />
+        <Stack.Screen name="stampkort" />
         {/* Title is set inside the screen itself (needs i18n, which isn't
             available at this layout level). */}
         <Stack.Screen name="+not-found" options={{ headerShown: true }} />

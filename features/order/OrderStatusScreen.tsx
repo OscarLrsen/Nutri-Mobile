@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -28,6 +28,7 @@ import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
 import { PushPrePromptCard } from "@/features/push/PushPrePromptCard";
 import { useCart } from "@/context/CartContext";
 import { getOrderById, type ApiOrder } from "@/services/api/orders";
+import { STAMP_CARD_QUERY_ROOT } from "@/services/api/stampCardQueries";
 import type { ApiError } from "@/types/api";
 import { consumePendingStripeClear } from "@/utils/activeOrder";
 import { formatDate, formatNumber, formatTime, useLanguage, useTranslation } from "@/i18n";
@@ -183,6 +184,7 @@ export function OrderStatusScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { clearCart } = useCart();
+  const queryClient = useQueryClient();
 
   // REST polling every 5s (web parity); stops in terminal states. A failed
   // background refetch keeps the last known order in cache — that's the
@@ -226,6 +228,18 @@ export function OrderStatusScreen() {
       if (shouldClear) clearCart();
     });
   }, [order, clearCart]);
+
+  // Stamp card (patch 16B): the poll above is the one place in the customer
+  // app that observes an order reaching Delivered, which is exactly when the
+  // backend writes the stamps. Invalidate once so the card is already correct
+  // when the customer navigates back to Home.
+  const stampedRef = useRef(false);
+  useEffect(() => {
+    if (!order || stampedRef.current) return;
+    if (toCustomerStatus(order.status) !== "completed") return;
+    stampedRef.current = true;
+    void queryClient.invalidateQueries({ queryKey: [STAMP_CARD_QUERY_ROOT] });
+  }, [order, queryClient]);
 
   if (orderQuery.isLoading) {
     return (
