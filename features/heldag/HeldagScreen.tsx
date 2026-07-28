@@ -15,6 +15,7 @@ import { getMeals, type ApiMeal } from "@/services/api/meals";
 import { getIngredients, type ApiIngredient } from "@/services/api/ingredients";
 import { getContainerTypes, type ApiContainerType } from "@/services/api/containerTypes";
 import { getTodayNutrition, type ApiMealDistribution } from "@/services/api/nutrition";
+import { getTodayDayPlan } from "@/services/api/dayPlan";
 import { SLOT_TO_MEAL_TIME_TAG, type WizardSlot } from "@/features/anpassar/optimizer";
 import { OnboardingGate } from "@/features/anpassar/NutriAnpassarScreen";
 import { apiMealToMeal } from "@/utils/pricing";
@@ -31,6 +32,7 @@ import {
   getPackageWindowState,
   getStockholmHour,
   isPackageAvailable,
+  matchSlotLabel,
   SLOT_SERVES,
   SLOTS,
   type SlotResult,
@@ -102,11 +104,12 @@ export function HeldagScreen() {
     let cancelled = false;
     async function run() {
       try {
-        const [today, meals, library, containers] = await Promise.all([
+        const [today, meals, library, containers, savedPlan] = await Promise.all([
           getTodayNutrition(),
           getMeals(),
           getIngredients(),
           getContainerTypes(),
+          getTodayDayPlan().catch(() => null),
         ]);
         if (cancelled) return;
         if (!today || !today.adjustedTarget || today.adjustedTarget.calories <= 0) {
@@ -117,7 +120,30 @@ export function HeldagScreen() {
         setLoadedMeals(meals);
         setLoadedLibrary(library);
         setLoadedContainers(containers);
+        // Patch 13: the SAVED day plan's slot targets take priority over
+        // the automatic distribution — the same priority the menu, the
+        // day planner and Nutri Anpassar use, so the package optimises
+        // against the numbers every other surface shows. Only the TARGETS
+        // change; optimizer, snack handling and the ordering window are
+        // untouched.
         const targets = deriveTargets(today);
+        if (savedPlan && savedPlan.meals.length > 0) {
+          for (const slot of SLOTS) {
+            const saved = savedPlan.meals.find(
+              (m) => m.calories > 0 && matchSlotLabel(slot, m.label)
+            );
+            if (saved) {
+              targets[slot] = {
+                label: saved.label,
+                calories: saved.calories,
+                proteinG: saved.proteinG,
+                carbsG: saved.carbsG,
+                fatG: saved.fatG,
+                timingPurpose: targets[slot]?.timingPurpose ?? "",
+              };
+            }
+          }
+        }
         setLoadedTargets(targets);
         // Run sequentially so each slot can exclude already-chosen meal IDs
         const usedMealIds = new Set<string>();

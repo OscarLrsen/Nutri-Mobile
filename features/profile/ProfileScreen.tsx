@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -29,6 +29,11 @@ import {
   setEmailMarketingConsent,
   type ApiConsentsResponse,
 } from "@/services/api/consents";
+import { useTodayDayPlanQuery, useTodayNutritionQuery } from "@/services/api/nutritionQueries";
+import {
+  deriveActiveDailyNutrition,
+  plannedDeviatesFromTarget,
+} from "@/features/nutrition/activeDailyNutrition";
 import { env } from "@/lib/env";
 import { ACTIVE_ORDER_KEY } from "@/utils/activeOrder";
 import { deriveDisplayName, deriveInitials } from "@/utils/displayName";
@@ -143,6 +148,15 @@ export function ProfileScreen() {
   const [nutriRecommendation, setNutriRecommendation] = useState<ApiNutritionResult | null>(null);
   const [nutritionLoading, setNutritionLoading] = useState(true);
 
+  // Today's ACTIVE goal + saved plan (patch 13) — the SAME shared query
+  // rows Home and the menu use, so the "Idag"-row can never disagree with
+  // them. Silent on error: the baseline card renders as before.
+  const todayQuery = useTodayNutritionQuery();
+  const dayPlanQuery = useTodayDayPlanQuery();
+  const today = todayQuery.data;
+  const activeToday = deriveActiveDailyNutrition(today, dayPlanQuery.data);
+  const plannedDeviates = activeToday !== null && plannedDeviatesFromTarget(activeToday);
+
   // ── UI state ──
   const [editing, setEditing] = useState<EditSection | null>(null);
   const [form, setForm] = useState<ProfileFormState>(EMPTY_FORM);
@@ -179,21 +193,38 @@ export function ProfileScreen() {
     [form, planFocus]
   );
 
+  // Patch 13: reloadResult is now ALSO triggered by the shared nutrition
+  // query's refetch stamp (see the sync effect below), so it can resolve
+  // after this screen is gone — a tab swap, or logout unmounting the whole
+  // signed-in stack. Guard every setState behind a mounted flag instead of
+  // leaving a second unguarded async path behind.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   // Active targets + (when overridden) Nutri's own recommendation (web parity).
   const reloadResult = useCallback(async (forProfile?: ApiNutritionProfile | null) => {
     try {
       const result = await getNutritionResult();
+      if (!mountedRef.current) return;
       setNutritionResult(result);
       if (result.mode === "Auto") {
         setNutriRecommendation(result);
       } else if (forProfile) {
         try {
-          setNutriRecommendation(await previewNutritionResult(buildDtoFromStoredProfile(forProfile)));
+          const preview = await previewNutritionResult(buildDtoFromStoredProfile(forProfile));
+          if (!mountedRef.current) return;
+          setNutriRecommendation(preview);
         } catch {
-          setNutriRecommendation(null);
+          if (mountedRef.current) setNutriRecommendation(null);
         }
       }
     } catch {
+      if (!mountedRef.current) return;
       setNutritionResult(null);
       setNutriRecommendation(null);
     }
@@ -223,6 +254,28 @@ export function ProfileScreen() {
       cancelled = true;
     };
   }, [user, reloadResult]);
+
+  // Patch 13: the baseline card (nutritionResult) is loaded imperatively
+  // outside React Query (web-parity port). Without this, a macro override
+  // saved on Justera makros — or any mutation that invalidates
+  // ["nutrition"] — would refresh Home while Profile kept rendering the
+  // OLD baseline: exactly the tab-dependent contradiction this patch
+  // removes. The shared today-query is mounted here, so its refetch stamp
+  // is the one signal that covers every such mutation. The first observed
+  // stamp is only recorded (the initial load already fetched); later
+  // changes trigger a re-read of /result.
+  const lastNutritionSyncRef = useRef(0);
+  useEffect(() => {
+    const stamp = todayQuery.dataUpdatedAt;
+    if (!stamp || nutritionProfile?.isComplete !== true) return;
+    if (lastNutritionSyncRef.current === 0) {
+      lastNutritionSyncRef.current = stamp;
+      return;
+    }
+    if (stamp === lastNutritionSyncRef.current) return;
+    lastNutritionSyncRef.current = stamp;
+    void reloadResult(nutritionProfile);
+  }, [todayQuery.dataUpdatedAt, nutritionProfile, reloadResult]);
 
   // Onboarding modal (web parity: shows when profile onboarding !== true).
   useEffect(() => {
@@ -284,6 +337,9 @@ export function ProfileScreen() {
       const updated = await upsertNutritionProfile(buildDto());
       setNutritionProfile(updated);
       setPlanFocus(mapPlanFocusBack(updated.planFocus));
+      // Patch 13: a profile change alters today's goal — refresh every
+      // shared nutrition query so Home/Meny/Planera din dag follow.
+      void queryClient.invalidateQueries({ queryKey: ["nutrition"] });
       if (updated.isComplete) {
         await reloadResult(updated);
         if (isOnboardingComplete !== true) {
@@ -324,6 +380,8 @@ export function ProfileScreen() {
       setWeeklySchedule(savedSchedule);
       setNutritionProfile(updatedProfile);
       await reloadResult(updatedProfile);
+      // Patch 13: day types drive carb cycling — refresh shared queries.
+      void queryClient.invalidateQueries({ queryKey: ["nutrition"] });
       setScheduleExpanded(false);
     } catch {
       // stay in the sheet — user can retry (web swallows too)
@@ -493,12 +551,16 @@ export function ProfileScreen() {
         </View>
       </View>
 
-      {/* ── 2. DIN AKTIVA PLAN ── */}
+      {/* ── 2. DIN AKTIVA PLAN — the BASELINE plan (/result). Patch 13:
+          the byline says "Grundplan" (it previously claimed "Idag" while
+          showing the baseline), and a separate "Idag"-row below shows the
+          day's ACTIVE goal (carb-cycled adjustedTarget) — the exact same
+          number Home's Dagens plan and Dagens status use. ── */}
       {displayResult && np ? (
         <>
           <View style={styles.sectionHeadRow}>
             <ThemedText style={styles.sectionHead}>{t("profile.sectionActivePlan").toUpperCase()}</ThemedText>
-            <ThemedText style={styles.sectionHeadRight}>{t("profile.today")}</ThemedText>
+            <ThemedText style={styles.sectionHeadRight}>{t("profile.baselineLabel")}</ThemedText>
           </View>
           <View style={styles.planCard}>
             <View style={styles.planTop}>
@@ -525,6 +587,36 @@ export function ProfileScreen() {
               <ThemedText style={styles.planMacroLabel}>{t("profile.macroFat")} </ThemedText>
               <ThemedText style={styles.planMacroValue}>{displayResult.fatG}g</ThemedText>
             </View>
+
+            {/* Today's ACTIVE goal (patch 13) — same shared query/model as
+                Home. Shown only when it differs from the baseline (a
+                day-type adjustment) so equal numbers never repeat. */}
+            {activeToday && activeToday.target.calories !== displayResult.calorieTarget ? (
+              <View style={styles.todayRow}>
+                <ThemedText style={styles.todayRowLabel}>
+                  {t("profile.todayGoalRow", {
+                    dayType: today?.dayType
+                      ? t(`profile.dayTypeNames.${today.dayType}`, {
+                          defaultValue: today.dayType,
+                        })
+                      : t("profile.todayGoalFallbackDay"),
+                  }).toUpperCase()}
+                </ThemedText>
+                <ThemedText style={styles.todayRowValue}>
+                  {formatNumber(activeToday.target.calories, language)} kcal ·{" "}
+                  {activeToday.target.proteinG}g {t("profile.macroProtein").toLowerCase()} ·{" "}
+                  {activeToday.target.carbsG}g {t("profile.macroCarbsShort").toLowerCase()} ·{" "}
+                  {activeToday.target.fatG}g {t("profile.macroFat").toLowerCase()}
+                </ThemedText>
+                {activeToday.planned && plannedDeviates ? (
+                  <ThemedText style={styles.todayRowPlanned}>
+                    {t("profile.plannedToday", {
+                      kcal: formatNumber(activeToday.planned.calories, language),
+                    })}
+                  </ThemedText>
+                ) : null}
+              </View>
+            ) : null}
             <View style={styles.planFooter}>
               <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                 {displayResult.mode === "CustomMacros" && (
@@ -995,6 +1087,25 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderSoft,
   },
+  todayRow: {
+    gap: 3,
+    marginHorizontal: spacing[5],
+    marginBottom: spacing[3],
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+    backgroundColor: colors.accentSoft,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  todayRowLabel: {
+    fontSize: 10,
+    fontFamily: fontFamily.bodyBold,
+    letterSpacing: 1.2,
+    color: colors.accent,
+  },
+  todayRowValue: { fontSize: 12.5, fontFamily: fontFamily.monoMedium, color: "rgba(255,255,255,0.92)" },
+  todayRowPlanned: { fontSize: 11, lineHeight: 14, color: "rgba(255,255,255,0.5)" },
   planNote: { fontSize: 11.5, lineHeight: 15, color: "rgba(255,255,255,0.55)" },
   planNoteDim: { fontSize: 11, lineHeight: 14, color: "rgba(255,255,255,0.36)" },
   planDeviation: { fontSize: 11, lineHeight: 14, color: "rgba(232,101,10,0.8)" },

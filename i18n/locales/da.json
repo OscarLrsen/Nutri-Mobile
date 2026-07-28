@@ -67,7 +67,10 @@
     "pointsSubtitle": "Saldo og transaktioner",
     "familyTitle": "Du er en del af Nutri-familien",
     "familyBody": "Optjen point, drej ugens hjul, og vær med til at forme, hvad der kommer næst.",
-    "familySpinHint": "Drej ugens hjul"
+    "familySpinHint": "Drej ugens hjul",
+    "plannedToday": "Planlagt i dag: {{kcal}} kcal",
+    "plannedRemaining": "{{kcal}} kcal tilbage at fordele",
+    "plannedOver": "{{kcal}} kcal over dagens mål"
   },
   "menu": {
     "categories": {
@@ -570,7 +573,11 @@
       "Sedentary": "Stillesiddende",
       "Mixed": "Aktiv hverdag",
       "Active": "Meget aktiv"
-    }
+    },
+    "baselineLabel": "Grundplan",
+    "todayGoalRow": "I dag · {{dayType}}",
+    "todayGoalFallbackDay": "Dagens mål",
+    "plannedToday": "Planlagt i dag: {{kcal}} kcal"
   },
   "orderHistory": {
     "title": "Ordrehistorik",

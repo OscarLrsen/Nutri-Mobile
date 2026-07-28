@@ -4,14 +4,27 @@ import { useRouter } from "expo-router";
 import { Card } from "@/components/ui/Card";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { Skeleton } from "@/components/feedback/Skeleton";
-import { isProfileGapError, useTodayNutritionQuery } from "@/services/api/nutritionQueries";
+import {
+  isProfileGapError,
+  useTodayDayPlanQuery,
+  useTodayNutritionQuery,
+} from "@/services/api/nutritionQueries";
+import {
+  deriveActiveDailyNutrition,
+  plannedDeviatesFromTarget,
+} from "@/features/nutrition/activeDailyNutrition";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { homeAccents } from "./homeAccents";
 
 /**
- * "Dagens plan" — today's carb-cycled targets from
- * /api/nutrition-profile/today via the shared nutrition query hooks.
+ * "Dagens plan" — today's ACTIVE DAILY GOAL (the backend's carb-cycled
+ * adjustedTarget) via the shared ActiveDailyNutrition model (patch 13).
+ * The same number Profile's "Idag" row and Dagens status use — one truth.
+ *
+ * When a SAVED day plan exists and its total deviates from the goal, the
+ * card shows the two concepts explicitly ("Planerat idag: X kcal · Y kcal
+ * kvar att fördela") instead of silently mixing plan and goal.
  *
  * States: loading skeleton; 404/422 → missing-profile CTA into the existing
  * profile/onboarding flow on Mina sidor (no new onboarding logic); other
@@ -22,6 +35,7 @@ export function DailyTargetsCard() {
   const { t } = useTranslation();
   const router = useRouter();
   const todayQuery = useTodayNutritionQuery();
+  const dayPlanQuery = useTodayDayPlanQuery();
 
   if (todayQuery.isLoading) {
     return (
@@ -78,10 +92,14 @@ export function DailyTargetsCard() {
   }
 
   const today = todayQuery.data;
-  const target = today.adjustedTarget;
+  const active = deriveActiveDailyNutrition(today, dayPlanQuery.data);
+  const target = active?.target ?? today.adjustedTarget;
   const dayTypeName = today.dayType
     ? t(`profile.dayTypeNames.${today.dayType}`, { defaultValue: today.dayType })
     : null;
+  // Two-concept mode: only when a saved plan exists AND truly deviates.
+  const showPlanned = active !== null && plannedDeviatesFromTarget(active);
+  const plannedDiff = showPlanned && active.planned ? target.calories - active.planned.calories : 0;
 
   return (
     <Card style={styles.card} accessibilityLabel={t("home.planHead")}>
@@ -112,6 +130,21 @@ export function DailyTargetsCard() {
         <Macro label={t("home.macroCarbs")} grams={target.carbsG} accent={homeAccents.carbs} />
         <Macro label={t("home.macroFat")} grams={target.fatG} accent={homeAccents.fat} />
       </View>
+
+      {/* Saved plan deviating from the goal → name both concepts (patch
+          13): the goal above stays the goal; the plan is shown AS a plan. */}
+      {showPlanned && active?.planned ? (
+        <View style={styles.plannedRow}>
+          <ThemedText variant="caption" style={styles.plannedLabel}>
+            {t("home.plannedToday", { kcal: active.planned.calories })}
+          </ThemedText>
+          <ThemedText variant="caption" style={styles.plannedDiff}>
+            {plannedDiff > 0
+              ? t("home.plannedRemaining", { kcal: plannedDiff })
+              : t("home.plannedOver", { kcal: Math.abs(plannedDiff) })}
+          </ThemedText>
+        </View>
+      ) : null}
 
       {!today.dayType ? (
         <ThemedText variant="caption" style={styles.noSchedule}>
@@ -226,6 +259,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   noSchedule: {
+    color: colors.textTertiary,
+  },
+  plannedRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[2],
+    borderRadius: radius.btn,
+    backgroundColor: colors.cardAlt,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  plannedLabel: {
+    color: colors.textSecondary,
+  },
+  plannedDiff: {
     color: colors.textTertiary,
   },
   missingTitle: {

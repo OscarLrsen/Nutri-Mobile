@@ -67,7 +67,10 @@
     "pointsSubtitle": "Balance and transactions",
     "familyTitle": "You’re part of the Nutri family",
     "familyBody": "Earn points, spin for weekly rewards and help shape what comes next.",
-    "familySpinHint": "Spin the weekly wheel"
+    "familySpinHint": "Spin the weekly wheel",
+    "plannedToday": "Planned today: {{kcal}} kcal",
+    "plannedRemaining": "{{kcal}} kcal left to distribute",
+    "plannedOver": "{{kcal}} kcal above today's goal"
   },
   "menu": {
     "categories": {
@@ -570,7 +573,11 @@
       "Sedentary": "Sedentary",
       "Mixed": "Active lifestyle",
       "Active": "Very active"
-    }
+    },
+    "baselineLabel": "Base plan",
+    "todayGoalRow": "Today · {{dayType}}",
+    "todayGoalFallbackDay": "Today's goal",
+    "plannedToday": "Planned today: {{kcal}} kcal"
   },
   "orderHistory": {
     "title": "Order history",
