@@ -48,6 +48,26 @@ export interface ApiStampCardStatus {
   /** Admin-controlled cap in öre. Display only — never hardcode it. */
   maxValueOre: number;
   lastActivityAt: string | null;
+  /** The REAL number of meals before the next reward. Diverges from
+   * stampsRemaining only while the ledger is negative. */
+  stampsUntilEligibleReward?: number;
+  /**
+   * The rewards that can actually be spent right now. THE authoritative
+   * source for redemption — the history endpoint is a log that also contains
+   * redeemed, revoked and reserved rewards, and filtering it client-side
+   * would re-derive redeemability from data kept for another purpose.
+   * `availableRewards` is this list's length.
+   */
+  availableRewardList?: ApiAvailableStampCardReward[];
+}
+
+/** A reward the customer can spend. Carries only what is needed to pick one
+ * and preview its cap — no reservation or ownership state. */
+export interface ApiAvailableStampCardReward {
+  id: string;
+  rewardOrdinal: number;
+  maxValueOre: number;
+  earnedAt: string;
 }
 
 export interface ApiStampCardHistoryEntry {

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -46,6 +47,14 @@ import {
   isCouponRejectedError,
   isStockOutError,
 } from "@/utils/orderErrors";
+import { useCheckoutDiscount } from "@/context/CheckoutDiscountContext";
+import { useStampCardStatusQuery } from "@/services/api/stampCardQueries";
+import { StampCardCheckoutCard, isQualifyingCartItem } from "./StampCardCheckoutCard";
+import {
+  isStampCardError,
+  isStampCardSelectionDead,
+  stampCardErrorMessage,
+} from "./stampCardErrors";
 import { setActiveOrderId, getActiveOrderId, setPendingStripeClear } from "@/utils/activeOrder";
 import { markOrderSuccessForPushPreprompt } from "@/features/push/orderSuccessSignal";
 import type { TFunction } from "i18next";
@@ -96,6 +105,7 @@ export function CartScreen() {
   const queryClient = useQueryClient();
   const { items, hydrated, clearCart, subtotalOre, totalOre } = useCart();
   const { selectedCoupon, clearSelectedCoupon } = useCoupon();
+  const { discount, clearStampCard } = useCheckoutDiscount();
   const { user, loading: authLoading } = useAuth();
 
   const authEmail = user?.email ?? null;
@@ -131,11 +141,65 @@ export function CartScreen() {
   // A coupon only rides along when the order will carry a JWT sub claim —
   // the backend 401s couponId without one, and ordering is login-gated anyway.
   const appliedCoupon = selectedCoupon && user && isCouponUsable(selectedCoupon) ? selectedCoupon : null;
-  const discountPreview = appliedCoupon
+
+  /* ── Stamp card (patch 16C2) ────────────────────────────────────── */
+
+  // Same query key the card itself uses, so this shares the cached row rather
+  // than fetching twice. Caps come from the reward the customer selected, not
+  // from this status-level default — see selectedRewardMaxValueOre below.
+  const stampCardStatus = useStampCardStatusQuery().data ?? null;
+
+  // Only rides along when it still points at a line that is in the cart —
+  // removing the chosen meal must not send the server a dangling line id.
+  const activeStampCard =
+    discount.type === "stamp-card" &&
+    user &&
+    items.some((i) => i.clientLineId === discount.clientLineId && isQualifyingCartItem(i))
+      ? discount
+      : null;
+
+  // Preview only. The server recomputes from its own prices and cap, and the
+  // order response is what the customer is actually charged. The cap is the
+  // SELECTED reward's own — rewards earned under different settings carry
+  // different caps, so a shared value would preview the wrong number.
+  const stampCardItem = activeStampCard
+    ? items.find((i) => i.clientLineId === activeStampCard.clientLineId) ?? null
+    : null;
+  const selectedRewardMaxValueOre =
+    stampCardStatus?.availableRewardList?.find((r) => r.id === activeStampCard?.rewardId)
+      ?.maxValueOre ?? null;
+  const stampCardPreviewOre =
+    stampCardItem && selectedRewardMaxValueOre !== null
+      ? Math.min(krToOre(stampCardItem.meal.basePrice), selectedRewardMaxValueOre)
+      : 0;
+
+  // Every precondition the request depends on, checked against the LATEST
+  // server answer rather than what was true when the customer tapped.
+  const clientLineIds = items.map((i) => i.clientLineId);
+  const allLineIdsValidAndUnique =
+    clientLineIds.every((id) => !!id) && new Set(clientLineIds).size === clientLineIds.length;
+  const canSubmitStampCard =
+    !!activeStampCard &&
+    !!stampCardItem &&
+    allLineIdsValidAndUnique &&
+    // Still offered by the server. A reward reserved on another device, or
+    // spent since the cart was opened, has left this list.
+    (stampCardStatus?.availableRewardList ?? []).some((r) => r.id === activeStampCard.rewardId);
+
+  // Both discounts active is unrepresentable in CheckoutDiscountContext, so
+  // this can only fire if that invariant is ever broken — better a refused
+  // submit than a request the backend 400s.
+  const hasDiscountConflict = !!activeStampCard && !!appliedCoupon;
+
+  const discountPreview = appliedCoupon && !activeStampCard
     ? applyDiscountPreview(subtotalOre, appliedCoupon.percentage)
     : null;
-  // Without a coupon the cart total stays exactly the pre-coupon behavior.
-  const effectiveTotalOre = discountPreview ? discountPreview.totalOre : totalOre;
+  // Without any discount the cart total stays exactly the pre-coupon behavior.
+  const effectiveTotalOre = activeStampCard
+    ? Math.max(0, totalOre - stampCardPreviewOre)
+    : discountPreview
+      ? discountPreview.totalOre
+      : totalOre;
 
   // Same 30s store-status poll as the web's StoreStatusProvider; same
   // derivation — a settled fetch with no data counts as closed.
@@ -157,6 +221,9 @@ export function CartScreen() {
   const [stockBlocked, setStockBlocked] = useState(false);
   const [activeReservationError, setActiveReservationError] = useState(false);
   const [activeOrderIdFromError, setActiveOrderIdFromError] = useState<string | null>(null);
+  // Stamp card → coupon confirmation. The reverse direction lives in
+  // StampCardCheckoutCard; both refuse to switch silently.
+  const [couponConflictOpen, setCouponConflictOpen] = useState(false);
 
   const hasUnavailableItems = items.some((item) => item.meal.available === false);
   // Drinks-only carts cannot pay online (web product gate).
@@ -188,6 +255,21 @@ export function CartScreen() {
     setStockBlocked(false);
     setActiveReservationError(false);
     setActiveOrderIdFromError(null);
+
+    // Last check before the request. No id is ever CREATED here — that would
+    // hand the backend a different line id on every retry; a cart that cannot
+    // produce valid unique ids is repaired on hydrate, not at submit time.
+    if (hasDiscountConflict) {
+      setError(t("stampCardCheckout.errorConflict"));
+      return;
+    }
+    if (activeStampCard && !canSubmitStampCard) {
+      clearStampCard();
+      queryClient.invalidateQueries({ queryKey: ["stamp-card"] }).catch(() => {});
+      setError(t("stampCardCheckout.errorLineMissing"));
+      return;
+    }
+
     setSubmitting(true);
     // Defense-in-depth: never start Stripe for a drinks-only cart (web parity).
     const effectivePaymentMethod: PaymentMethod = isDrinksOnly ? "pay_on_site" : paymentMethod;
@@ -197,12 +279,23 @@ export function CartScreen() {
         customerEmail: authEmail,
         paymentMethod: effectivePaymentMethod,
         customerNote: customerNote.trim() || undefined,
-        couponId: appliedCoupon?.id,
+        // One reward per order: the tagged union in CheckoutDiscountContext
+        // makes "both selected" unrepresentable, so this can never send a
+        // coupon and a stamp card together.
+        couponId: activeStampCard ? undefined : appliedCoupon?.id,
+        stampCardRewardId: activeStampCard?.rewardId,
+        stampCardLineId: activeStampCard?.clientLineId,
         items: items.map((item) => {
           if (item.kind === "drink" && item.drink) {
-            return { mealId: item.drink.id, size: "medium", quantity: item.quantity };
+            return {
+              clientLineId: item.clientLineId,
+              mealId: item.drink.id,
+              size: "medium",
+              quantity: item.quantity,
+            };
           }
           return {
+            clientLineId: item.clientLineId,
             mealId: item.isCustom ? null : item.meal.id,
             size: item.sizeId,
             quantity: item.quantity,
@@ -225,6 +318,16 @@ export function CartScreen() {
       if (appliedCoupon) {
         clearSelectedCoupon();
         queryClient.invalidateQueries({ queryKey: ["coupons"] }).catch(() => {});
+      }
+
+      // Same for the stamp card: the order was accepted, so the reward is now
+      // Reserved server-side and is no longer spendable. Clearing the
+      // selection and refreshing the status here is what stops the next
+      // checkout from offering a reward that would come back 409 — this is a
+      // SUCCESS path, so nothing here shows an error.
+      if (activeStampCard) {
+        clearStampCard();
+        queryClient.invalidateQueries({ queryKey: ["stamp-card"] }).catch(() => {});
       }
 
       if (effectivePaymentMethod === "stripe") {
@@ -262,6 +365,15 @@ export function CartScreen() {
       if (isActiveReservationErr(err)) {
         setActiveReservationError(true);
         setActiveOrderIdFromError(await getActiveOrderId());
+      } else if (isStampCardError(err)) {
+        // No order was created. The cart is left exactly as it was — only the
+        // stamp card selection is dropped, and only when the server says it is
+        // genuinely dead rather than merely conflicting.
+        if (isStampCardSelectionDead(err)) {
+          clearStampCard();
+          queryClient.invalidateQueries({ queryKey: ["stamp-card"] }).catch(() => {});
+        }
+        setError(stampCardErrorMessage(err, t) ?? t("checkout.errorGeneric"));
       } else if (isCouponRejectedError(err)) {
         // Backend refused the coupon (used/expired/invalid) — no order was
         // created. Deselect it, refresh the list and surface the backend's
@@ -371,6 +483,15 @@ export function CartScreen() {
               <ThemedText style={styles.noteCounter}>{customerNote.length}/100</ThemedText>
             </View>
 
+            {/* Stamp card (patch 16C2) — sits with the discount section, above
+                the coupon, and renders nothing unless a reward is available.
+                Selecting it clears any coupon after confirming. */}
+            {user ? (
+              <View style={{ marginTop: spacing[5] }}>
+                <StampCardCheckoutCard items={items} />
+              </View>
+            ) : null}
+
             {/* Coupon (only for logged-in users with something to apply) */}
             {appliedCoupon || (user && usableCoupons.length > 0) ? (
               <>
@@ -403,7 +524,13 @@ export function CartScreen() {
                   </View>
                 ) : (
                   <Pressable
-                    onPress={() => router.push("/kuponger")}
+                    onPress={() => {
+                      // The other direction of the same rule: choosing a
+                      // coupon while the stamp card is active asks first, so
+                      // neither selection is ever dropped silently.
+                      if (activeStampCard) setCouponConflictOpen(true);
+                      else router.push("/kuponger");
+                    }}
                     style={({ pressed }) => [
                       styles.couponCard,
                       pressed && { backgroundColor: colors.cardAlt },
@@ -428,9 +555,10 @@ export function CartScreen() {
 
             <SectionHead style={{ marginTop: spacing[5] }}>{t("cart.summaryHead")}</SectionHead>
             <SummaryCard
-              coupon={appliedCoupon}
+              coupon={activeStampCard ? null : appliedCoupon}
               discountAmountOre={discountPreview?.discountAmountOre ?? 0}
               effectiveTotalOre={effectiveTotalOre}
+              stampCardDiscountOre={activeStampCard ? stampCardPreviewOre : 0}
             />
 
             {/* Payment methods (web parity: pay_on_site / stripe / swish-disabled) */}
@@ -504,6 +632,19 @@ export function CartScreen() {
               </View>
             ) : null}
           </ScrollView>
+
+          {/* Stamp card → coupon: the mirror of the confirmation inside
+              StampCardCheckoutCard, so switching is explicit in both
+              directions. */}
+          <SwitchToCouponConfirm
+            visible={couponConflictOpen}
+            onKeep={() => setCouponConflictOpen(false)}
+            onSwitch={() => {
+              setCouponConflictOpen(false);
+              clearStampCard();
+              router.push("/kuponger");
+            }}
+          />
 
           {/* ── Sticky bottom CTA (web parity) ── */}
           <View style={styles.bottomBar}>
@@ -876,14 +1017,67 @@ function CartItemCard({ item }: { item: CartItem }) {
 /* ── Summary (web: Delsumma / Upphämtning Gratis / Totalt, plus the
  *    mobile coupon-preview row — backend recomputes at order time) ── */
 
+/** Stamp card → coupon confirmation. Same rule as the other direction: only
+ * one reward per order, and the customer is told before anything changes. */
+function SwitchToCouponConfirm({
+  visible,
+  onKeep,
+  onSwitch,
+}: {
+  visible: boolean;
+  onKeep: () => void;
+  onSwitch: () => void;
+}) {
+  const { t } = useTranslation();
+  if (!visible) return null;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onKeep}>
+      <View style={styles.switchBackdrop}>
+        <View style={styles.switchBox}>
+          <ThemedText accessibilityRole="header" style={styles.switchTitle}>
+            {t("stampCardCheckout.conflictTitle")}
+          </ThemedText>
+          <ThemedText style={styles.switchBody}>
+            {t("stampCardCheckout.conflictToCouponBody")}
+          </ThemedText>
+          <View style={styles.switchActions}>
+            <Pressable
+              onPress={onKeep}
+              style={({ pressed }) => [styles.switchSecondary, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button"
+            >
+              <ThemedText style={styles.switchSecondaryLabel}>
+                {t("stampCardCheckout.conflictKeepStampCard")}
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={onSwitch}
+              style={({ pressed }) => [styles.switchPrimary, pressed && { opacity: 0.85 }]}
+              accessibilityRole="button"
+            >
+              <ThemedText style={styles.switchPrimaryLabel}>
+                {t("stampCardCheckout.conflictSwitchToCoupon")}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function SummaryCard({
   coupon,
   discountAmountOre,
   effectiveTotalOre,
+  stampCardDiscountOre,
 }: {
   coupon: ApiCoupon | null;
   discountAmountOre: number;
   effectiveTotalOre: number;
+  /** Preview of the stamp card discount, 0 when unused. The server decides
+   * the real amount; this only keeps the summary honest before it answers. */
+  stampCardDiscountOre: number;
 }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
@@ -891,6 +1085,13 @@ function SummaryCard({
   return (
     <View style={styles.summaryCard}>
       <SummaryRow label={t("cart.summarySubtotal")} value={formatPriceKr(subtotalOre, language)} />
+      {stampCardDiscountOre > 0 ? (
+        <SummaryRow
+          label={t("stampCardCheckout.summaryRow")}
+          value={`−${formatPriceKr(stampCardDiscountOre, language)}`}
+          valueAccent
+        />
+      ) : null}
       {coupon ? (
         <SummaryRow
           label={t("coupon.cartDiscountRow", { code: coupon.code, pct: coupon.percentage })}
@@ -1192,6 +1393,37 @@ const styles = StyleSheet.create({
   },
 
   /* Summary */
+  switchBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
+  switchBox: {
+    margin: spacing[4],
+    marginBottom: spacing[8],
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    padding: spacing[4],
+    gap: spacing[2],
+  },
+  switchTitle: { fontSize: 16, fontFamily: fontFamily.headlineSemibold, color: colors.textPrimary },
+  switchBody: { fontSize: 12.5, lineHeight: 17.5, color: colors.textSecondary },
+  switchActions: { flexDirection: "row", gap: spacing[2], marginTop: spacing[2] },
+  switchSecondary: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.btn,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  switchSecondaryLabel: { fontSize: 13, fontFamily: fontFamily.headlineSemibold, color: colors.textPrimary },
+  switchPrimary: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.btn,
+    backgroundColor: colors.accent,
+  },
+  switchPrimaryLabel: { fontSize: 13, fontFamily: fontFamily.headlineSemibold, color: colors.bg },
   summaryCard: {
     backgroundColor: colors.card,
     borderRadius: radius.card,

@@ -376,6 +376,10 @@ function ProgressSteps({ labels, curStep }: { labels: string[]; curStep: number 
 function OrderLinesCard({ order }: { order: ApiOrder }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
+  // The line the stamp card reward covered, resolved from the id the server
+  // returned rather than by matching prices or names.
+  const stampCardMealName =
+    order.lines.find((l) => l.id === order.stampCardOrderLineId)?.titleSnapshot ?? null;
   const paymentMethodLabel =
     order.paymentMethod === "stripe"
       ? t("checkout.payOnline")
@@ -421,20 +425,41 @@ function OrderLinesCard({ order }: { order: ApiOrder }) {
           </View>
           <View style={styles.lineRow}>
             <ThemedText style={styles.paymentMethodLabel}>
-              {order.discountPercent
-                ? t("coupon.orderDiscountRowPct", { pct: order.discountPercent })
-                : t("coupon.orderDiscountRowPlain")}
+              {/* A stamp card discount is a fixed amount, never a percentage —
+                  labelling it with one would print a rate nobody agreed to. */}
+              {(order.stampCardDiscountOre ?? 0) > 0
+                ? t("stampCardCheckout.orderDiscountRow")
+                : order.discountPercent
+                  ? t("coupon.orderDiscountRowPct", { pct: order.discountPercent })
+                  : t("coupon.orderDiscountRowPlain")}
             </ThemedText>
             <ThemedText style={styles.discountValue}>
               −{lineKr(order.discountAmountOre ?? 0, language)}
             </ThemedText>
           </View>
+          {/* Which meal the reward covered — the amount alone does not say. */}
+          {(order.stampCardDiscountOre ?? 0) > 0 && stampCardMealName ? (
+            <View style={styles.lineRow}>
+              <ThemedText style={styles.paymentMethodLabel}>{stampCardMealName}</ThemedText>
+            </View>
+          ) : null}
         </>
       ) : null}
       <View style={styles.totalRow}>
         <ThemedText style={styles.totalLabel}>{t("orderStatus.total")}</ThemedText>
         <ThemedText style={styles.totalValue}>{lineKr(order.totalOre, language)}</ThemedText>
       </View>
+
+      {/* Stamps (patch 16C2). The count is the SERVER's — a mixed order with
+          one discounted portion is exactly where a client-side guess goes
+          wrong. Before pickup it is a promise; after, a statement. */}
+      {(order.pendingStampCount ?? 0) > 0 ? (
+        <View style={styles.lineRow}>
+          <ThemedText style={styles.paymentMethodLabel}>
+            {t("stampCardCheckout.pendingStamps", { count: order.pendingStampCount ?? 0 })}
+          </ThemedText>
+        </View>
+      ) : null}
     </View>
   );
 }

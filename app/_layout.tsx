@@ -15,6 +15,7 @@ import { LanguageProvider } from "@/i18n";
 import { AuthProvider, useAuth } from "@/services/auth/AuthProvider";
 import { CartProvider } from "@/context/CartContext";
 import { CouponProvider } from "@/context/CouponContext";
+import { CheckoutDiscountProvider } from "@/context/CheckoutDiscountContext";
 import { WelcomeCouponModal } from "@/features/coupons/WelcomeCouponModal";
 import { SpinNudgeSheet } from "@/features/rewards/SpinNudgeSheet";
 import { ConsentGateModal } from "@/features/consents/ConsentGateModal";
@@ -135,6 +136,7 @@ export default function RootLayout() {
               <AuthProvider>
                 <CartProvider>
                   <CouponProvider>
+                    <CheckoutDiscountProvider>
                     <View style={{ flex: 1, backgroundColor: colors.bg }}>
                       {/* Push plumbing (patch 10) — render nothing. Deep
                           links navigate the Stack below the overlays, so
@@ -183,6 +185,7 @@ export default function RootLayout() {
                         />
                       )}
                     </View>
+                    </CheckoutDiscountProvider>
                   </CouponProvider>
                 </CartProvider>
               </AuthProvider>
