@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -8,7 +8,7 @@ import { ArrowLeft, Clock } from "lucide-react-native";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
 import { useAuth } from "@/services/auth/AuthProvider";
-import { useOnboardingStatus } from "@/services/auth/useOnboardingStatus";
+import { useNutritionProfileGate } from "@/features/onboarding/useNutritionProfileGate";
 import { useCart } from "@/context/CartContext";
 import { getMeals, type ApiMeal } from "@/services/api/meals";
 import { getIngredients, type ApiIngredient } from "@/services/api/ingredients";
@@ -25,7 +25,7 @@ import { getTodayDayPlan, type SavedDayPlanResponse } from "@/services/api/dayPl
 import type { CustomMealCalculateResponse } from "@/services/api/customMeal";
 import type { ApiError } from "@/types/api";
 import { apiMealToMeal } from "@/utils/pricing";
-import { env } from "@/lib/env";
+import { NUTRITION_ONBOARDING_ROUTE } from "@/features/onboarding/nutritionOnboardingRoute";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 import { buildNutriAdaptiveTarget } from "./buildNutriAdaptiveTarget";
@@ -82,10 +82,17 @@ export function NutriAnpassarScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, loading: authLoading } = useAuth();
-  const { loading: profileLoading, isOnboardingComplete } = useOnboardingStatus();
   const { addItem } = useCart();
 
-  const needsGate = !authLoading && !profileLoading && !!user && isOnboardingComplete !== true;
+  // Patch 15: the gate is the BACKEND's profile status, not Supabase's
+  // is_onboarding_complete — a complete profile must never be blocked by a
+  // stale flag, and an incomplete one must never slip through a true one.
+  // A network failure is NOT a profile gap and falls through to the
+  // screen's own error state.
+  const profileGate = useNutritionProfileGate();
+  const profileLoading = profileGate.isLoading;
+
+  const needsGate = !authLoading && !!user && profileGate.isProfileGap;
   const checking = authLoading || profileLoading || needsGate;
 
   // Logged out → login with return path (web reaches this page auth'd).
@@ -224,7 +231,9 @@ export function NutriAnpassarScreen() {
   if (needsGate) {
     return (
       <OnboardingGate
-        onPrimary={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/onboarding`)}
+        // Patch 15: onboarding is completed IN THE APP — this used to send
+        // the customer out to the web app mid-flow.
+        onPrimary={() => router.navigate(NUTRITION_ONBOARDING_ROUTE)}
         onSecondary={() => router.navigate("/(tabs)/meny")}
       />
     );
@@ -245,7 +254,7 @@ export function NutriAnpassarScreen() {
         title={t("nutriAnpassar.errorProfileTitle")}
         body={t("nutriAnpassar.errorProfileBody")}
         ctaLabel={t("nutriAnpassar.errorProfileCta")}
-        onCta={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/profil`)}
+        onCta={() => router.navigate(NUTRITION_ONBOARDING_ROUTE)}
         onBack={handleBack}
       />
     );

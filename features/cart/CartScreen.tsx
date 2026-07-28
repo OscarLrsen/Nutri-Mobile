@@ -899,6 +899,23 @@ function SummaryCard({
         />
       ) : null}
       <SummaryRow label={t("cart.summaryPickup")} value={t("cart.summaryFree")} valueMuted />
+      {/* Patch 15: teaser only, placed with the PICKUP information and
+          deliberately far from the payment buttons. It adds nothing to the
+          order payload, no date or service picker, and never claims this
+          order is a pre-order — see patch 14C. Not pressable. */}
+      <View style={styles.preorderTeaser} accessibilityRole="text">
+        <View style={styles.preorderBadge}>
+          <ThemedText style={styles.preorderBadgeText}>
+            {t("checkout.comingSoonBadge").toUpperCase()}
+          </ThemedText>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <ThemedText style={styles.preorderTitle}>{t("checkout.preorderTeaserTitle")}</ThemedText>
+          <ThemedText variant="caption" style={styles.preorderBody}>
+            {t("checkout.preorderTeaserBody")}
+          </ThemedText>
+        </View>
+      </View>
       <SummaryRow label={t("cart.summaryTotal")} value={formatPriceKr(effectiveTotalOre, language)} isTotal />
     </View>
   );
@@ -1182,6 +1199,37 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: "hidden",
   },
+  // Patch 15 pre-order teaser — sits with the pickup row, never near the
+  // payment controls.
+  preorderTeaser: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing[2],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+  },
+  preorderBadge: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+    backgroundColor: colors.accentSoft,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+  },
+  preorderBadgeText: {
+    fontSize: 9,
+    fontFamily: fontFamily.bodyBold,
+    letterSpacing: 0.8,
+    color: colors.accent,
+  },
+  preorderTitle: {
+    fontSize: 12.5,
+    fontFamily: fontFamily.bodySemibold,
+    color: colors.textPrimary,
+  },
+  preorderBody: { color: colors.textTertiary, lineHeight: 16, marginTop: 1 },
   summaryRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -70,7 +70,14 @@
     "familySpinHint": "Drej ugens hjul",
     "plannedToday": "Planlagt i dag: {{kcal}} kcal",
     "plannedRemaining": "{{kcal}} kcal tilbage at fordele",
-    "plannedOver": "{{kcal}} kcal over dagens mål"
+    "plannedOver": "{{kcal}} kcal over dagens mål",
+    "locationHead": "Dagens sted",
+    "locationUnknown": "Dagens sted kommer snart",
+    "locationUnavailable": "Kunne ikke hente dagens sted",
+    "locationAria": "Dagens sted: {{location}}. {{status}}",
+    "comingSoonBadge": "Kommer snart",
+    "foodLogTeaserTitle": "Registrér mad uden for Nutri",
+    "foodLogTeaserBody": "Snart kan du tilføje kalorier og makroer fra anden mad og få et komplet overblik over hele dagen."
   },
   "menu": {
     "categories": {
@@ -113,7 +120,10 @@
       "customizeBadge": "Personlig",
       "customizeHeading": "Tilpas et måltid",
       "customizeSubheading": "Byg et måltid ud fra dine mål og det du har tilbage i dag.",
-      "customizeCta": "Tilpas måltid"
+      "customizeCta": "Tilpas måltid",
+      "lockedLabel": "Kræver din Nutri-profil",
+      "lockedSubheading": "Vi mangler dine mål og basisoplysninger, før vi kan planlægge din dag.",
+      "lockedAria": "{{feature}} – låst indtil din profil er færdig"
     },
     "rec": {
       "badge": "Anbefalet til dig · {{size}}",
@@ -234,7 +244,10 @@
     "errorStripeStartFailed": "Kunne ikke starte onlinebetalingen. Prøv igen.",
     "errorJustClosed": "Vi har lige lukket eller sat på pause. Prøv igen senere.",
     "errorOutOfStockNamed": "Beklager, {{name}} blev lige udsolgt. Fjern den fra kurven, eller vælg en anden ret.",
-    "errorOutOfStockGeneric": "Beklager, en vare i din kurv blev lige udsolgt. Fjern den, eller vælg noget andet."
+    "errorOutOfStockGeneric": "Beklager, en vare i din kurv blev lige udsolgt. Fjern den, eller vælg noget andet.",
+    "comingSoonBadge": "Kommer snart",
+    "preorderTeaserTitle": "Forudbestilling kommer snart",
+    "preorderTeaserBody": "Snart kan du vælge dag, sted og afhentningstidspunkt direkte i kassen."
   },
   "auth": {
     "loginTitle": "Velkommen tilbage",

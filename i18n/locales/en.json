@@ -70,7 +70,14 @@
     "familySpinHint": "Spin the weekly wheel",
     "plannedToday": "Planned today: {{kcal}} kcal",
     "plannedRemaining": "{{kcal}} kcal left to distribute",
-    "plannedOver": "{{kcal}} kcal above today's goal"
+    "plannedOver": "{{kcal}} kcal above today's goal",
+    "locationHead": "Today's location",
+    "locationUnknown": "Today's location is coming soon",
+    "locationUnavailable": "Couldn't load today's location",
+    "locationAria": "Today's location: {{location}}. {{status}}",
+    "comingSoonBadge": "Coming soon",
+    "foodLogTeaserTitle": "Log meals outside Nutri",
+    "foodLogTeaserBody": "Soon you'll be able to add calories and macros from other food and see your complete day in one place."
   },
   "menu": {
     "categories": {
@@ -113,7 +120,10 @@
       "customizeBadge": "Personal",
       "customizeHeading": "Customise a meal",
       "customizeSubheading": "Build a meal around your goals and what you have left today.",
-      "customizeCta": "Customise meal"
+      "customizeCta": "Customise meal",
+      "lockedLabel": "Requires your Nutri profile",
+      "lockedSubheading": "We need your goals and basic details before we can plan your day.",
+      "lockedAria": "{{feature}} – locked until your profile is complete"
     },
     "rec": {
       "badge": "Recommended for you · {{size}}",
@@ -234,7 +244,10 @@
     "errorStripeStartFailed": "Couldn't start the online payment. Try again.",
     "errorJustClosed": "We just closed or paused. Try again later.",
     "errorOutOfStockNamed": "Sorry, {{name}} just sold out. Remove it from your cart or pick another meal.",
-    "errorOutOfStockGeneric": "Sorry, an item in your cart just sold out. Remove it or choose something else."
+    "errorOutOfStockGeneric": "Sorry, an item in your cart just sold out. Remove it or choose something else.",
+    "comingSoonBadge": "Coming soon",
+    "preorderTeaserTitle": "Pre-orders are coming soon",
+    "preorderTeaserBody": "Soon you'll be able to choose your day, location and pickup time directly in checkout."
   },
   "auth": {
     "loginTitle": "Welcome back",

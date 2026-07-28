@@ -151,6 +151,25 @@ export function DailyTargetsCard() {
           {t("home.noSchedule")}
         </ThemedText>
       ) : null}
+
+      {/* Patch 15: teaser only. Logging food eaten outside Nutri is not
+          built — no local logging, no backend model, and Today's status
+          still counts ORDERS exactly as before. Deliberately not a
+          Pressable and not a disabled button, so it is never announced as
+          an actionable control. */}
+      <View style={styles.teaserRow} accessibilityRole="text">
+        <View style={styles.teaserBadge}>
+          <ThemedText style={styles.teaserBadgeText}>
+            {t("home.comingSoonBadge").toUpperCase()}
+          </ThemedText>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <ThemedText style={styles.teaserTitle}>{t("home.foodLogTeaserTitle")}</ThemedText>
+          <ThemedText variant="caption" style={styles.teaserBody}>
+            {t("home.foodLogTeaserBody")}
+          </ThemedText>
+        </View>
+      </View>
     </Card>
   );
 }
@@ -261,6 +280,34 @@ const styles = StyleSheet.create({
   noSchedule: {
     color: colors.textTertiary,
   },
+  teaserRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    paddingTop: spacing[3],
+  },
+  teaserBadge: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+    backgroundColor: colors.accentSoft,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+  },
+  teaserBadgeText: {
+    fontSize: 9,
+    fontFamily: fontFamily.bodyBold,
+    letterSpacing: 0.8,
+    color: colors.accent,
+  },
+  teaserTitle: {
+    fontSize: 12.5,
+    fontFamily: fontFamily.bodySemibold,
+    color: colors.textPrimary,
+  },
+  teaserBody: { color: colors.textTertiary, lineHeight: 16, marginTop: 1 },
   plannedRow: {
     flexDirection: "row",
     flexWrap: "wrap",

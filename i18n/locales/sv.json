@@ -70,7 +70,14 @@
     "familySpinHint": "Snurra på veckohjulet",
     "plannedToday": "Planerat idag: {{kcal}} kcal",
     "plannedRemaining": "{{kcal}} kcal kvar att fördela",
-    "plannedOver": "{{kcal}} kcal över dagens mål"
+    "plannedOver": "{{kcal}} kcal över dagens mål",
+    "locationHead": "Dagens plats",
+    "locationUnknown": "Dagens plats kommer snart",
+    "locationUnavailable": "Kunde inte hämta dagens plats",
+    "locationAria": "Dagens plats: {{location}}. {{status}}",
+    "comingSoonBadge": "Kommer snart",
+    "foodLogTeaserTitle": "Logga mat utanför Nutri",
+    "foodLogTeaserBody": "Snart kan du lägga till kalorier och makron från annan mat och få en komplett bild av hela dagen."
   },
   "menu": {
     "categories": {
@@ -113,7 +120,10 @@
       "customizeBadge": "Personlig",
       "customizeHeading": "Anpassa en måltid",
       "customizeSubheading": "Bygg en måltid efter dina mål och det du har kvar i dag.",
-      "customizeCta": "Anpassa måltid"
+      "customizeCta": "Anpassa måltid",
+      "lockedLabel": "Kräver din Nutri-profil",
+      "lockedSubheading": "Vi behöver dina mål och grunduppgifter för att kunna planera dagen åt dig.",
+      "lockedAria": "{{feature}} – låst tills din profil är klar"
     },
     "rec": {
       "badge": "Rekommenderad för dig · {{size}}",
@@ -234,7 +244,10 @@
     "errorStripeStartFailed": "Kunde inte starta onlinebetalningen. Försök igen.",
     "errorJustClosed": "Vi har precis stängt eller pausat. Försök igen senare.",
     "errorOutOfStockNamed": "Tyvärr, {{name}} hann precis ta slut. Ta bort den från varukorgen eller välj en annan rätt.",
-    "errorOutOfStockGeneric": "Tyvärr, en vara i din varukorg hann precis ta slut. Ta bort den eller välj något annat."
+    "errorOutOfStockGeneric": "Tyvärr, en vara i din varukorg hann precis ta slut. Ta bort den eller välj något annat.",
+    "comingSoonBadge": "Kommer snart",
+    "preorderTeaserTitle": "Förbeställning kommer snart",
+    "preorderTeaserBody": "Snart kan du välja dag, plats och upphämtningstid direkt i kassan."
   },
   "auth": {
     "loginTitle": "Välkommen tillbaka",

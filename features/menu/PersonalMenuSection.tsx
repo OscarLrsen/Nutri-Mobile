@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import { ThemedText } from "@/components/ui/ThemedText";
+import { NUTRITION_ONBOARDING_ROUTE } from "@/features/onboarding/nutritionOnboardingRoute";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { MenuPlanCard } from "./MenuPlanCard";
@@ -38,7 +39,7 @@ export function PersonalMenuSection({ profileGap }: { profileGap: boolean }) {
         <View style={styles.gapCard}>
           <ThemedText style={styles.gapText}>{t("menu.personal.profileGap")}</ThemedText>
           <Pressable
-            onPress={() => router.navigate("/(tabs)/konto")}
+            onPress={() => router.navigate(NUTRITION_ONBOARDING_ROUTE)}
             style={({ pressed }) => [styles.gapCta, pressed && { opacity: 0.85 }]}
             accessibilityRole="button"
             accessibilityLabel={t("menu.personal.profileGapCta")}
@@ -48,22 +49,51 @@ export function PersonalMenuSection({ profileGap }: { profileGap: boolean }) {
         </View>
       ) : null}
 
+      {/* Patch 15: both cards are gated on the SAME signal — the backend's
+          profile completeness (404/422). They stay visible so the customer
+          can see what unlocks, but carry a written lock reason (never an
+          icon alone) and lead to onboarding instead of a screen that would
+          only 422. */}
       <View style={styles.cards}>
         <MenuPlanCard
           badge={t("menu.personal.planBadge")}
           heading={t("menu.personal.planHeading")}
-          subheading={t("menu.personal.planSubheading")}
-          ctaLabel={t("menu.personal.planCta")}
-          accessibilityLabel={t("menu.personal.planHeading")}
-          onPress={() => router.push("/planera-dagen")}
+          subheading={
+            profileGap ? t("menu.personal.lockedSubheading") : t("menu.personal.planSubheading")
+          }
+          ctaLabel={profileGap ? t("menu.personal.profileGapCta") : t("menu.personal.planCta")}
+          lockLabel={profileGap ? t("menu.personal.lockedLabel") : undefined}
+          accessibilityLabel={
+            profileGap
+              ? t("menu.personal.lockedAria", { feature: t("menu.personal.planHeading") })
+              : t("menu.personal.planHeading")
+          }
+          onPress={() =>
+            profileGap
+              ? router.navigate(NUTRITION_ONBOARDING_ROUTE)
+              : router.push("/planera-dagen")
+          }
         />
         <MenuPlanCard
           badge={t("menu.personal.customizeBadge")}
           heading={t("menu.personal.customizeHeading")}
-          subheading={t("menu.personal.customizeSubheading")}
-          ctaLabel={t("menu.personal.customizeCta")}
-          accessibilityLabel={t("menu.personal.customizeHeading")}
-          onPress={() => router.push("/nutri-anpassar")}
+          subheading={
+            profileGap
+              ? t("menu.personal.lockedSubheading")
+              : t("menu.personal.customizeSubheading")
+          }
+          ctaLabel={profileGap ? t("menu.personal.profileGapCta") : t("menu.personal.customizeCta")}
+          lockLabel={profileGap ? t("menu.personal.lockedLabel") : undefined}
+          accessibilityLabel={
+            profileGap
+              ? t("menu.personal.lockedAria", { feature: t("menu.personal.customizeHeading") })
+              : t("menu.personal.customizeHeading")
+          }
+          onPress={() =>
+            profileGap
+              ? router.navigate(NUTRITION_ONBOARDING_ROUTE)
+              : router.push("/nutri-anpassar")
+          }
         />
       </View>
     </View>

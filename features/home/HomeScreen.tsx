@@ -10,6 +10,7 @@ import { RegularDropSheet } from "@/features/rewards/RegularDropSheet";
 import { colors, radius, spacing } from "@/theme";
 
 import { GreetingHeader } from "./GreetingHeader";
+import { HomeLocationStatusCard } from "./HomeLocationStatusCard";
 import { DailyTargetsCard } from "./DailyTargetsCard";
 import { TodayOrderStatusCard } from "./TodayOrderStatusCard";
 import { NutriFamilySection } from "./NutriFamilySection";
@@ -82,6 +83,9 @@ export function HomeScreen() {
 
         {user ? (
           <View style={styles.sections}>
+            {/* Patch 15: where the truck is today, directly under the name
+                and above the plan. Shares Meny's store queries. */}
+            <HomeLocationStatusCard />
             <DailyTargetsCard />
             <TodayOrderStatusCard />
             {/* The membership features — spin, points and this week's
