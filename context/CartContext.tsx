@@ -88,6 +88,69 @@ const CartContext = createContext<CartContextType | null>(null);
 /** Same storage key as the web's localStorage cart (spec §11.1/§22.7). */
 const CART_KEY = "nutri-cart";
 
+/**
+ * Stable per-line id sent to the backend as ClientLineId (patch 16C), so a
+ * stamp card reward can point at exactly one cart line.
+ *
+ * Uses the same crypto.randomUUID-with-fallback the custom-meal id already
+ * relies on. The fallback combines a timestamp with a random suffix rather
+ * than random alone, so two lines created in the same millisecond still
+ * differ — a collision here would mean discounting the wrong meal.
+ */
+function newClientLineId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+
+  // The fallback must still be a REAL uuid: the backend column is a uuid, so
+  // anything else fails the request, and the repair pass below would discard
+  // it and mint a new id on every launch. Not cryptographically strong, which
+  // does not matter — this only has to be unique within one cart.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EMPTY_UUID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * A line id the backend will actually accept. It rejects an all-zero guid and
+ * anything that is not a uuid, so a cart carrying one would fail checkout with
+ * an error the customer cannot act on — better to repair it on the way in.
+ */
+function isUsableClientLineId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim() === value &&
+    UUID_RE.test(value) &&
+    value.toLowerCase() !== EMPTY_UUID
+  );
+}
+
+/**
+ * Repairs stored line ids exactly once, on hydrate.
+ *
+ * Fixes missing, blank, all-zero, non-uuid and DUPLICATE ids. Duplicates
+ * matter most: two lines sharing an id make the reward ambiguous, and the
+ * backend refuses rather than guessing — so the customer would be stuck until
+ * they emptied the cart. Valid unique ids are preserved, because regenerating
+ * them would silently invalidate a selection the customer already made.
+ */
+function repairClientLineIds(items: CartItem[]): CartItem[] {
+  const seen = new Set<string>();
+  return items.map((item) => {
+    const current = item.clientLineId;
+    if (isUsableClientLineId(current) && !seen.has(current)) {
+      seen.add(current);
+      return item;
+    }
+    let replacement = newClientLineId();
+    while (seen.has(replacement)) replacement = newClientLineId();
+    seen.add(replacement);
+    return { ...item, clientLineId: replacement };
+  });
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -105,10 +168,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (stored && mounted) {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed)) {
-            // Migration: items without `kind` are meal items (pre-drink-upsell
-            // data) — same migration the web applies on hydrate.
+            // Migrations, applied once on hydrate. The persist effect below
+            // writes the migrated cart straight back, so a stored cart is
+            // upgraded exactly once rather than re-migrated every launch.
+            //
+            // - `kind`: items without it are meal items (pre-drink-upsell
+            //   data) — the same migration the web applies on hydrate.
+            // - `clientLineId`: carts stored before patch 16C have none.
+            //   Assigning it here (not at checkout) is what makes the id
+            //   stable — generating it per order attempt would hand the
+            //   backend a different line id on every retry.
             setItems(
-              parsed.map((item: CartItem) => ("kind" in item ? item : { ...item, kind: "meal" as const }))
+              repairClientLineIds(
+                parsed.map((item: CartItem) => ({
+                  ...item,
+                  kind: item.kind ?? ("meal" as const),
+                }))
+              )
             );
           }
         }
@@ -172,6 +248,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           ...prev,
           {
             id,
+            clientLineId: newClientLineId(),
             meal,
             sizeId,
             quantity,
@@ -242,6 +319,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         ...prev,
         {
           id,
+          clientLineId: newClientLineId(),
           kind: "drink" as const,
           drink,
           // Synthetic Meal wrapper — byte-for-byte the same mapping the web

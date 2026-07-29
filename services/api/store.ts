@@ -17,6 +17,13 @@ export interface StoreStatusData {
   publicMessage: string | null;
   nextOpenAtUtc: string | null;
   locationNote: string | null;
+  // ── Included GoWell window (patch 17A/B) ────────────────────────
+  /** Europe/Stockholm wall clock as the SERVER sees it. The device clock
+   * never decides whether the drink is included. */
+  serverLocalTime?: string | null;
+  /** True while 11:00 <= server local time < 14:00. Polled every 30s, so it
+   * can flip mid-session — the cart handles that explicitly. */
+  includedDrinkWindowOpen?: boolean;
 }
 
 export interface LocationInfoData {

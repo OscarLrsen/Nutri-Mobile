@@ -4,13 +4,27 @@ import { useRouter } from "expo-router";
 import { Card } from "@/components/ui/Card";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { Skeleton } from "@/components/feedback/Skeleton";
-import { isProfileGapError, useTodayNutritionQuery } from "@/services/api/nutritionQueries";
+import {
+  isProfileGapError,
+  useTodayDayPlanQuery,
+  useTodayNutritionQuery,
+} from "@/services/api/nutritionQueries";
+import {
+  deriveActiveDailyNutrition,
+  plannedDeviatesFromTarget,
+} from "@/features/nutrition/activeDailyNutrition";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
+import { homeAccents } from "./homeAccents";
 
 /**
- * "Dagens plan" — today's carb-cycled targets from
- * /api/nutrition-profile/today via the shared nutrition query hooks.
+ * "Dagens plan" — today's ACTIVE DAILY GOAL (the backend's carb-cycled
+ * adjustedTarget) via the shared ActiveDailyNutrition model (patch 13).
+ * The same number Profile's "Idag" row and Dagens status use — one truth.
+ *
+ * When a SAVED day plan exists and its total deviates from the goal, the
+ * card shows the two concepts explicitly ("Planerat idag: X kcal · Y kcal
+ * kvar att fördela") instead of silently mixing plan and goal.
  *
  * States: loading skeleton; 404/422 → missing-profile CTA into the existing
  * profile/onboarding flow on Mina sidor (no new onboarding logic); other
@@ -21,6 +35,7 @@ export function DailyTargetsCard() {
   const { t } = useTranslation();
   const router = useRouter();
   const todayQuery = useTodayNutritionQuery();
+  const dayPlanQuery = useTodayDayPlanQuery();
 
   if (todayQuery.isLoading) {
     return (
@@ -77,10 +92,14 @@ export function DailyTargetsCard() {
   }
 
   const today = todayQuery.data;
-  const target = today.adjustedTarget;
+  const active = deriveActiveDailyNutrition(today, dayPlanQuery.data);
+  const target = active?.target ?? today.adjustedTarget;
   const dayTypeName = today.dayType
     ? t(`profile.dayTypeNames.${today.dayType}`, { defaultValue: today.dayType })
     : null;
+  // Two-concept mode: only when a saved plan exists AND truly deviates.
+  const showPlanned = active !== null && plannedDeviatesFromTarget(active);
+  const plannedDiff = showPlanned && active.planned ? target.calories - active.planned.calories : 0;
 
   return (
     <Card style={styles.card} accessibilityLabel={t("home.planHead")}>
@@ -102,17 +121,55 @@ export function DailyTargetsCard() {
         </ThemedText>
       </View>
 
+      {/* Patch 11 visual pass: each macro cell carries its own accent
+          (soft fill + top edge + coloured value) so the card reads with
+          the same colour hierarchy as Meny. Labels stay — colour is never
+          the only carrier. */}
       <View style={styles.macroRow}>
-        <Macro label={t("home.macroProtein")} grams={target.proteinG} highlight />
-        <Macro label={t("home.macroCarbs")} grams={target.carbsG} />
-        <Macro label={t("home.macroFat")} grams={target.fatG} />
+        <Macro label={t("home.macroProtein")} grams={target.proteinG} accent={homeAccents.protein} />
+        <Macro label={t("home.macroCarbs")} grams={target.carbsG} accent={homeAccents.carbs} />
+        <Macro label={t("home.macroFat")} grams={target.fatG} accent={homeAccents.fat} />
       </View>
+
+      {/* Saved plan deviating from the goal → name both concepts (patch
+          13): the goal above stays the goal; the plan is shown AS a plan. */}
+      {showPlanned && active?.planned ? (
+        <View style={styles.plannedRow}>
+          <ThemedText variant="caption" style={styles.plannedLabel}>
+            {t("home.plannedToday", { kcal: active.planned.calories })}
+          </ThemedText>
+          <ThemedText variant="caption" style={styles.plannedDiff}>
+            {plannedDiff > 0
+              ? t("home.plannedRemaining", { kcal: plannedDiff })
+              : t("home.plannedOver", { kcal: Math.abs(plannedDiff) })}
+          </ThemedText>
+        </View>
+      ) : null}
 
       {!today.dayType ? (
         <ThemedText variant="caption" style={styles.noSchedule}>
           {t("home.noSchedule")}
         </ThemedText>
       ) : null}
+
+      {/* Patch 15: teaser only. Logging food eaten outside Nutri is not
+          built — no local logging, no backend model, and Today's status
+          still counts ORDERS exactly as before. Deliberately not a
+          Pressable and not a disabled button, so it is never announced as
+          an actionable control. */}
+      <View style={styles.teaserRow} accessibilityRole="text">
+        <View style={styles.teaserBadge}>
+          <ThemedText style={styles.teaserBadgeText}>
+            {t("home.comingSoonBadge").toUpperCase()}
+          </ThemedText>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <ThemedText style={styles.teaserTitle}>{t("home.foodLogTeaserTitle")}</ThemedText>
+          <ThemedText variant="caption" style={styles.teaserBody}>
+            {t("home.foodLogTeaserBody")}
+          </ThemedText>
+        </View>
+      </View>
     </Card>
   );
 }
@@ -122,11 +179,20 @@ function SectionLabel() {
   return <ThemedText style={styles.sectionLabel}>{t("home.planHead").toUpperCase()}</ThemedText>;
 }
 
-function Macro({ label, grams, highlight = false }: { label: string; grams: number; highlight?: boolean }) {
+function Macro({
+  label,
+  grams,
+  accent,
+}: {
+  label: string;
+  grams: number;
+  accent: { value: string; soft: string; border: string };
+}) {
   const { t } = useTranslation();
   return (
-    <View style={styles.macro}>
-      <ThemedText variant="monoLarge" style={[styles.macroValue, highlight && styles.macroValueHighlight]}>
+    <View style={[styles.macro, { backgroundColor: accent.soft, borderColor: accent.border }]}>
+      <View style={[styles.macroEdge, { backgroundColor: accent.value }]} />
+      <ThemedText variant="monoLarge" style={[styles.macroValue, { color: accent.value }]}>
         {grams}
         <ThemedText variant="caption" style={styles.macroUnit}>
           {t("home.gramUnit")}
@@ -189,26 +255,76 @@ const styles = StyleSheet.create({
     gap: 2,
     borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: colors.borderSoft,
-    backgroundColor: colors.cardAlt,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
+    overflow: "hidden",
+  },
+  macroEdge: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2.5,
+    opacity: 0.85,
   },
   macroValue: {
     fontSize: 18,
-    color: colors.textPrimary,
-  },
-  macroValueHighlight: {
-    color: colors.accent,
   },
   macroUnit: {
     color: colors.textTertiary,
   },
   macroLabel: {
-    color: colors.textTertiary,
+    color: colors.textSecondary,
     fontSize: 11,
   },
   noSchedule: {
+    color: colors.textTertiary,
+  },
+  teaserRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    paddingTop: spacing[3],
+  },
+  teaserBadge: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+    backgroundColor: colors.accentSoft,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+  },
+  teaserBadgeText: {
+    fontSize: 9,
+    fontFamily: fontFamily.bodyBold,
+    letterSpacing: 0.8,
+    color: colors.accent,
+  },
+  teaserTitle: {
+    fontSize: 12.5,
+    fontFamily: fontFamily.bodySemibold,
+    color: colors.textPrimary,
+  },
+  teaserBody: { color: colors.textTertiary, lineHeight: 16, marginTop: 1 },
+  plannedRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[2],
+    borderRadius: radius.btn,
+    backgroundColor: colors.cardAlt,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  plannedLabel: {
+    color: colors.textSecondary,
+  },
+  plannedDiff: {
     color: colors.textTertiary,
   },
   missingTitle: {

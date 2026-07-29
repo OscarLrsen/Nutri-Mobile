@@ -8,9 +8,11 @@ import { Skeleton } from "@/components/feedback/Skeleton";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { getRewardStatus } from "@/services/api/rewards";
 import { RegularDropBanner } from "@/features/rewards/RegularDropBanner";
+import { StampCardHomeCard } from "@/features/stampcard/StampCardHomeCard";
 import type { ApiRegularDropPoll } from "@/services/api/regularDrops";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
+import { homeAccents } from "./homeAccents";
 
 /**
  * "You're part of the Nutri family" — the Home segment that gathers the
@@ -54,9 +56,15 @@ export function NutriFamilySection({
       </ThemedText>
       <ThemedText style={styles.body}>{t("home.familyBody")}</ThemedText>
 
+      {/* Patch 11 visual pass: each membership row keeps its own icon
+          accent (spin = signature orange, points = Home's warm amber) so
+          the rows read as distinct features instead of identical list
+          lines. Destinations, queries and conditions untouched. */}
       <View style={styles.card}>
         <FamilyRow
           Icon={Gift}
+          iconColor={homeAccents.protein.value}
+          iconBg={homeAccents.protein.soft}
           title={t("rewards.screenTitle")}
           subtitle={canSpin ? t("home.spinReady") : t("home.familySpinHint")}
           subtitleAccent={canSpin}
@@ -69,6 +77,8 @@ export function NutriFamilySection({
         <View style={styles.divider} />
         <FamilyRow
           Icon={Star}
+          iconColor={homeAccents.fat.value}
+          iconBg={homeAccents.fat.soft}
           title={t("points.screenTitle")}
           subtitle={t("home.pointsSubtitle")}
           trailing={
@@ -88,6 +98,11 @@ export function NutriFamilySection({
         />
       </View>
 
+      {/* Stamp card (patch 16B) — a full card rather than another list row,
+          because it carries visual progress the row language cannot show.
+          Renders nothing at all if the API predates patch 16A. */}
+      <StampCardHomeCard />
+
       {/* Vote for Weekly — the existing banner, unchanged, same condition
           (only with a relevant poll) and the same sheet via the parent. */}
       {dropPoll ? <RegularDropBanner poll={dropPoll} onPress={onVotePress} /> : null}
@@ -97,6 +112,8 @@ export function NutriFamilySection({
 
 function FamilyRow({
   Icon,
+  iconColor,
+  iconBg,
   title,
   subtitle,
   subtitleAccent = false,
@@ -107,6 +124,8 @@ function FamilyRow({
   accessibilityHint,
 }: {
   Icon: LucideIcon;
+  iconColor: string;
+  iconBg: string;
   title: string;
   subtitle: string;
   subtitleAccent?: boolean;
@@ -125,11 +144,11 @@ function FamilyRow({
       accessibilityHint={accessibilityHint}
     >
       <View
-        style={styles.iconWrap}
+        style={[styles.iconWrap, { backgroundColor: iconBg }]}
         importantForAccessibility="no-hide-descendants"
         accessibilityElementsHidden
       >
-        <Icon size={16} color={colors.accent} strokeWidth={2} />
+        <Icon size={16} color={iconColor} strokeWidth={2} />
         {showDot ? <View style={styles.dot} /> : null}
       </View>
       <View style={styles.copy}>
@@ -174,7 +193,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.btn,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.accentSoft,
   },
   dot: {
     position: "absolute",

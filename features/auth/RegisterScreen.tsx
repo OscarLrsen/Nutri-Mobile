@@ -6,10 +6,11 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { ArrowLeft, Check, Info, Lock, Mail, User } from "lucide-react-native";
+import { ArrowLeft, Check, Info, Mail, User } from "lucide-react-native";
 
 import { LanguageButton } from "@/components/language/LanguageButton";
 import { Screen } from "@/components/ui/Screen";
@@ -325,7 +326,9 @@ export function RegisterScreen() {
                   ? setFormStep(1)
                   : router.canGoBack()
                     ? router.back()
-                    : router.replace("/(tabs)")
+                    : // Signed out, (tabs) is not mounted — login is the
+                      // only place behind registration.
+                      router.replace("/logga-in")
               }
               style={styles.backButton}
               accessibilityRole="button"
@@ -423,21 +426,39 @@ export function RegisterScreen() {
               </View>
 
               <View style={styles.fields}>
-                <AuthTextField
-                  label={t("auth.password")}
-                  icon={<Lock size={16} color="rgba(255,255,255,0.4)" strokeWidth={1.6} />}
-                  error={fieldErrors.password}
-                  isPassword
-                  value={password}
-                  onChangeText={(v) => {
-                    setPassword(v);
-                    if (fieldErrors.password)
-                      setFieldErrors((p) => ({ ...p, password: undefined }));
-                  }}
-                  placeholder={t("auth.passwordTooShort")}
-                  autoCapitalize="none"
-                  autoComplete="new-password"
-                />
+                {/* Password — a plain TextInput on purpose. Wrapped in
+                    AuthTextField this field could not be typed into on iOS
+                    (it focused and opened the keyboard, but characters were
+                    ignored); measured on device, the bare input fixes it
+                    while every other field on the screen keeps the shared
+                    component. Label and error line are rendered here so the
+                    field keeps the same look and the same validation
+                    feedback AuthTextField gave it. */}
+                <View style={styles.passwordField}>
+                  <ThemedText style={styles.passwordLabel}>{t("auth.password")}</ThemedText>
+                  <TextInput
+                    value={password}
+                    onChangeText={(v) => {
+                      setPassword(v);
+                      if (fieldErrors.password)
+                        setFieldErrors((p) => ({ ...p, password: undefined }));
+                    }}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="new-password"
+                    placeholder={t("auth.passwordTooShort")}
+                    placeholderTextColor="rgba(255,255,255,0.28)"
+                    style={[
+                      styles.passwordInput,
+                      !!fieldErrors.password && styles.passwordInputError,
+                    ]}
+                  />
+                  {fieldErrors.password ? (
+                    <ThemedText style={styles.error}>{fieldErrors.password}</ThemedText>
+                  ) : null}
+                </View>
+
                 {/* Strength meter */}
                 <View style={styles.strengthRow}>
                   <View style={styles.strengthBars}>
@@ -615,6 +636,26 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.58)",
   },
   fields: { gap: spacing[3] },
+  // Password field — mirrors AuthTextField's look (label + framed input +
+  // error line) so swapping the wrapper out changed nothing visually.
+  passwordField: { gap: 6 },
+  passwordLabel: {
+    fontSize: 12.5,
+    fontFamily: fontFamily.bodySemibold,
+    color: "rgba(255,255,255,0.72)",
+  },
+  passwordInput: {
+    height: 48,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 12,
+    paddingHorizontal: spacing[3],
+    fontSize: 15,
+    fontFamily: fontFamily.body,
+    color: colors.textPrimary,
+  },
+  passwordInputError: { borderColor: "rgba(248,113,113,0.5)" },
   helperRow: { flexDirection: "row", alignItems: "center", gap: 6, marginLeft: 2 },
   helperText: { flex: 1, fontSize: 11.5, lineHeight: 15, color: "rgba(255,255,255,0.42)" },
   emailSummary: {

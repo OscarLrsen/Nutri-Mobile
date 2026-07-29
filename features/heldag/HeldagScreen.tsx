@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Image } from "expo-image";
@@ -10,16 +10,17 @@ import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/services/auth/AuthProvider";
-import { useOnboardingStatus } from "@/services/auth/useOnboardingStatus";
+import { useNutritionProfileGate } from "@/features/onboarding/useNutritionProfileGate";
 import { getMeals, type ApiMeal } from "@/services/api/meals";
 import { getIngredients, type ApiIngredient } from "@/services/api/ingredients";
 import { getContainerTypes, type ApiContainerType } from "@/services/api/containerTypes";
 import { getTodayNutrition, type ApiMealDistribution } from "@/services/api/nutrition";
+import { getTodayDayPlan } from "@/services/api/dayPlan";
 import { SLOT_TO_MEAL_TIME_TAG, type WizardSlot } from "@/features/anpassar/optimizer";
 import { OnboardingGate } from "@/features/anpassar/NutriAnpassarScreen";
 import { apiMealToMeal } from "@/utils/pricing";
 import { formatPriceKr, krToOre } from "@/utils/money";
-import { env } from "@/lib/env";
+import { NUTRITION_ONBOARDING_ROUTE } from "@/features/onboarding/nutritionOnboardingRoute";
 import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 import {
@@ -31,6 +32,7 @@ import {
   getPackageWindowState,
   getStockholmHour,
   isPackageAvailable,
+  matchSlotLabel,
   SLOT_SERVES,
   SLOTS,
   type SlotResult,
@@ -76,8 +78,13 @@ export function HeldagScreen() {
   const insets = useSafeAreaInsets();
   const { addItem } = useCart();
   const { user, loading: authLoading } = useAuth();
-  const { loading: profileLoading, isOnboardingComplete } = useOnboardingStatus();
-  const needsGate = !authLoading && !profileLoading && !!user && isOnboardingComplete !== true;
+  // Patch 15: same backend-owned gate as Meny, Planera din dag and Anpassa
+  // en måltid — Supabase's is_onboarding_complete no longer decides whether
+  // a personal-nutrition feature may run, and a network failure is never
+  // reported as an unfinished profile.
+  const profileGate = useNutritionProfileGate();
+  const profileLoading = profileGate.isLoading;
+  const needsGate = !authLoading && !!user && profileGate.isProfileGap;
 
   const [results, setResults] = useState<SlotResult[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,11 +109,12 @@ export function HeldagScreen() {
     let cancelled = false;
     async function run() {
       try {
-        const [today, meals, library, containers] = await Promise.all([
+        const [today, meals, library, containers, savedPlan] = await Promise.all([
           getTodayNutrition(),
           getMeals(),
           getIngredients(),
           getContainerTypes(),
+          getTodayDayPlan().catch(() => null),
         ]);
         if (cancelled) return;
         if (!today || !today.adjustedTarget || today.adjustedTarget.calories <= 0) {
@@ -117,7 +125,30 @@ export function HeldagScreen() {
         setLoadedMeals(meals);
         setLoadedLibrary(library);
         setLoadedContainers(containers);
+        // Patch 13: the SAVED day plan's slot targets take priority over
+        // the automatic distribution — the same priority the menu, the
+        // day planner and Nutri Anpassar use, so the package optimises
+        // against the numbers every other surface shows. Only the TARGETS
+        // change; optimizer, snack handling and the ordering window are
+        // untouched.
         const targets = deriveTargets(today);
+        if (savedPlan && savedPlan.meals.length > 0) {
+          for (const slot of SLOTS) {
+            const saved = savedPlan.meals.find(
+              (m) => m.calories > 0 && matchSlotLabel(slot, m.label)
+            );
+            if (saved) {
+              targets[slot] = {
+                label: saved.label,
+                calories: saved.calories,
+                proteinG: saved.proteinG,
+                carbsG: saved.carbsG,
+                fatG: saved.fatG,
+                timingPurpose: targets[slot]?.timingPurpose ?? "",
+              };
+            }
+          }
+        }
         setLoadedTargets(targets);
         // Run sequentially so each slot can exclude already-chosen meal IDs
         const usedMealIds = new Set<string>();
@@ -278,7 +309,8 @@ export function HeldagScreen() {
   if (needsGate) {
     return (
       <OnboardingGate
-        onPrimary={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/onboarding`).catch(() => {})}
+        // Patch 15: stay in the app — this used to open the web onboarding.
+        onPrimary={() => router.navigate(NUTRITION_ONBOARDING_ROUTE)}
         onSecondary={() => router.navigate("/(tabs)/meny")}
       />
     );

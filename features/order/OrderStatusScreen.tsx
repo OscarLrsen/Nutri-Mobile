@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -28,6 +28,7 @@ import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
 import { PushPrePromptCard } from "@/features/push/PushPrePromptCard";
 import { useCart } from "@/context/CartContext";
 import { getOrderById, type ApiOrder } from "@/services/api/orders";
+import { STAMP_CARD_QUERY_ROOT } from "@/services/api/stampCardQueries";
 import type { ApiError } from "@/types/api";
 import { consumePendingStripeClear } from "@/utils/activeOrder";
 import { formatDate, formatNumber, formatTime, useLanguage, useTranslation } from "@/i18n";
@@ -183,6 +184,7 @@ export function OrderStatusScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { clearCart } = useCart();
+  const queryClient = useQueryClient();
 
   // REST polling every 5s (web parity); stops in terminal states. A failed
   // background refetch keeps the last known order in cache — that's the
@@ -226,6 +228,18 @@ export function OrderStatusScreen() {
       if (shouldClear) clearCart();
     });
   }, [order, clearCart]);
+
+  // Stamp card (patch 16B): the poll above is the one place in the customer
+  // app that observes an order reaching Delivered, which is exactly when the
+  // backend writes the stamps. Invalidate once so the card is already correct
+  // when the customer navigates back to Home.
+  const stampedRef = useRef(false);
+  useEffect(() => {
+    if (!order || stampedRef.current) return;
+    if (toCustomerStatus(order.status) !== "completed") return;
+    stampedRef.current = true;
+    void queryClient.invalidateQueries({ queryKey: [STAMP_CARD_QUERY_ROOT] });
+  }, [order, queryClient]);
 
   if (orderQuery.isLoading) {
     return (
@@ -362,6 +376,16 @@ function ProgressSteps({ labels, curStep }: { labels: string[]; curStep: number 
 function OrderLinesCard({ order }: { order: ApiOrder }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
+  // The line the stamp card reward covered, resolved from the id the server
+  // returned rather than by matching prices or names.
+  const stampCardMealName =
+    order.lines.find((l) => l.id === order.stampCardOrderLineId)?.titleSnapshot ?? null;
+  // Included GoWell (patch 17B). Matched on the real order line id the server
+  // returned — never on name or price, which cannot tell two drinks apart.
+  // If the line cannot be resolved the amount is still shown; only the
+  // flavour name is omitted.
+  const includedDrinkName =
+    order.lines.find((l) => l.id === order.includedDrinkOrderLineId)?.titleSnapshot ?? null;
   const paymentMethodLabel =
     order.paymentMethod === "stripe"
       ? t("checkout.payOnline")
@@ -407,20 +431,58 @@ function OrderLinesCard({ order }: { order: ApiOrder }) {
           </View>
           <View style={styles.lineRow}>
             <ThemedText style={styles.paymentMethodLabel}>
-              {order.discountPercent
-                ? t("coupon.orderDiscountRowPct", { pct: order.discountPercent })
-                : t("coupon.orderDiscountRowPlain")}
+              {/* A stamp card discount is a fixed amount, never a percentage —
+                  labelling it with one would print a rate nobody agreed to. */}
+              {(order.stampCardDiscountOre ?? 0) > 0
+                ? t("stampCardCheckout.orderDiscountRow")
+                : order.discountPercent
+                  ? t("coupon.orderDiscountRowPct", { pct: order.discountPercent })
+                  : t("coupon.orderDiscountRowPlain")}
             </ThemedText>
             <ThemedText style={styles.discountValue}>
               −{lineKr(order.discountAmountOre ?? 0, language)}
             </ThemedText>
           </View>
+          {/* Which meal the reward covered — the amount alone does not say. */}
+          {(order.stampCardDiscountOre ?? 0) > 0 && stampCardMealName ? (
+            <View style={styles.lineRow}>
+              <ThemedText style={styles.paymentMethodLabel}>{stampCardMealName}</ThemedText>
+            </View>
+          ) : null}
+          {/* Included GoWell, as its own line so a customer with both a free
+              meal and a free drink can see which amount is which. */}
+          {(order.includedDrinkDiscountOre ?? 0) > 0 ? (
+            <View style={styles.lineRow}>
+              <ThemedText style={styles.paymentMethodLabel}>
+                {includedDrinkName
+                  ? t("goWell.orderIncludedNamed", {
+                      flavour: includedDrinkName,
+                      count: order.includedDrinkDiscountedQuantity ?? 1,
+                    })
+                  : t("goWell.orderIncluded")}
+              </ThemedText>
+              <ThemedText style={styles.discountValue}>
+                −{lineKr(order.includedDrinkDiscountOre ?? 0, language)}
+              </ThemedText>
+            </View>
+          ) : null}
         </>
       ) : null}
       <View style={styles.totalRow}>
         <ThemedText style={styles.totalLabel}>{t("orderStatus.total")}</ThemedText>
         <ThemedText style={styles.totalValue}>{lineKr(order.totalOre, language)}</ThemedText>
       </View>
+
+      {/* Stamps (patch 16C2). The count is the SERVER's — a mixed order with
+          one discounted portion is exactly where a client-side guess goes
+          wrong. Before pickup it is a promise; after, a statement. */}
+      {(order.pendingStampCount ?? 0) > 0 ? (
+        <View style={styles.lineRow}>
+          <ThemedText style={styles.paymentMethodLabel}>
+            {t("stampCardCheckout.pendingStamps", { count: order.pendingStampCount ?? 0 })}
+          </ThemedText>
+        </View>
+      ) : null}
     </View>
   );
 }

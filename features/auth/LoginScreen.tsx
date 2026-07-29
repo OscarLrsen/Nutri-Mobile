@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
-import { ArrowLeft, Lock, Mail, Shield } from "lucide-react-native";
+import { Lock, Mail, Shield } from "lucide-react-native";
 
 import { LanguageButton } from "@/components/language/LanguageButton";
 import { Screen } from "@/components/ui/Screen";
@@ -99,15 +99,11 @@ export function LoginScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          {/* No back button: with the auth gate, login IS the first screen
+              for a signed-out user — there is nothing behind it, and the
+              old fallback pointed at (tabs), which is not even mounted
+              while signed out. Only the language switch remains. */}
           <View style={styles.topRow}>
-            <Pressable
-              onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)"))}
-              style={styles.backButton}
-              accessibilityRole="button"
-              accessibilityLabel={t("common.back")}
-            >
-              <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
-            </Pressable>
             <LanguageButton />
           </View>
 
@@ -202,15 +198,7 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-  },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.07)",
-    alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-end",
   },
   wordmark: {
     fontSize: 18,

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -46,6 +47,23 @@ import {
   isCouponRejectedError,
   isStockOutError,
 } from "@/utils/orderErrors";
+import { useCheckoutDiscount } from "@/context/CheckoutDiscountContext";
+import { useIncludedDrink } from "@/context/IncludedDrinkContext";
+import { useStampCardStatusQuery } from "@/services/api/stampCardQueries";
+import { getDrinks } from "@/services/api/drinks";
+import { GoWellCartSection, isQualifyingMealItem } from "./GoWellCartSection";
+import { isDrinkInStock, goWellFlavorLabel } from "@/features/menu/goWellFlavors";
+import {
+  isIncludedDrinkError,
+  includedDrinkErrorMessage,
+  includedDrinkRecovery,
+} from "./includedDrinkErrors";
+import { StampCardCheckoutCard, isQualifyingCartItem } from "./StampCardCheckoutCard";
+import {
+  isStampCardError,
+  isStampCardSelectionDead,
+  stampCardErrorMessage,
+} from "./stampCardErrors";
 import { setActiveOrderId, getActiveOrderId, setPendingStripeClear } from "@/utils/activeOrder";
 import { markOrderSuccessForPushPreprompt } from "@/features/push/orderSuccessSignal";
 import type { TFunction } from "i18next";
@@ -96,6 +114,8 @@ export function CartScreen() {
   const queryClient = useQueryClient();
   const { items, hydrated, clearCart, subtotalOre, totalOre } = useCart();
   const { selectedCoupon, clearSelectedCoupon } = useCoupon();
+  const { discount, clearStampCard } = useCheckoutDiscount();
+  const { selection: includedDrinkSelection, reset: resetIncludedDrink } = useIncludedDrink();
   const { user, loading: authLoading } = useAuth();
 
   const authEmail = user?.email ?? null;
@@ -131,11 +151,59 @@ export function CartScreen() {
   // A coupon only rides along when the order will carry a JWT sub claim —
   // the backend 401s couponId without one, and ordering is login-gated anyway.
   const appliedCoupon = selectedCoupon && user && isCouponUsable(selectedCoupon) ? selectedCoupon : null;
-  const discountPreview = appliedCoupon
+
+  /* ── Stamp card (patch 16C2) ────────────────────────────────────── */
+
+  // Same query key the card itself uses, so this shares the cached row rather
+  // than fetching twice. Caps come from the reward the customer selected, not
+  // from this status-level default — see selectedRewardMaxValueOre below.
+  const stampCardStatus = useStampCardStatusQuery().data ?? null;
+
+  // Only rides along when it still points at a line that is in the cart —
+  // removing the chosen meal must not send the server a dangling line id.
+  const activeStampCard =
+    discount.type === "stamp-card" &&
+    user &&
+    items.some((i) => i.clientLineId === discount.clientLineId && isQualifyingCartItem(i))
+      ? discount
+      : null;
+
+  // Preview only. The server recomputes from its own prices and cap, and the
+  // order response is what the customer is actually charged. The cap is the
+  // SELECTED reward's own — rewards earned under different settings carry
+  // different caps, so a shared value would preview the wrong number.
+  const stampCardItem = activeStampCard
+    ? items.find((i) => i.clientLineId === activeStampCard.clientLineId) ?? null
+    : null;
+  const selectedRewardMaxValueOre =
+    stampCardStatus?.availableRewardList?.find((r) => r.id === activeStampCard?.rewardId)
+      ?.maxValueOre ?? null;
+  const stampCardPreviewOre =
+    stampCardItem && selectedRewardMaxValueOre !== null
+      ? Math.min(krToOre(stampCardItem.meal.basePrice), selectedRewardMaxValueOre)
+      : 0;
+
+  // Every precondition the request depends on, checked against the LATEST
+  // server answer rather than what was true when the customer tapped.
+  const clientLineIds = items.map((i) => i.clientLineId);
+  const allLineIdsValidAndUnique =
+    clientLineIds.every((id) => !!id) && new Set(clientLineIds).size === clientLineIds.length;
+  const canSubmitStampCard =
+    !!activeStampCard &&
+    !!stampCardItem &&
+    allLineIdsValidAndUnique &&
+    // Still offered by the server. A reward reserved on another device, or
+    // spent since the cart was opened, has left this list.
+    (stampCardStatus?.availableRewardList ?? []).some((r) => r.id === activeStampCard.rewardId);
+
+  // Both discounts active is unrepresentable in CheckoutDiscountContext, so
+  // this can only fire if that invariant is ever broken — better a refused
+  // submit than a request the backend 400s.
+  const hasDiscountConflict = !!activeStampCard && !!appliedCoupon;
+
+  const discountPreview = appliedCoupon && !activeStampCard
     ? applyDiscountPreview(subtotalOre, appliedCoupon.percentage)
     : null;
-  // Without a coupon the cart total stays exactly the pre-coupon behavior.
-  const effectiveTotalOre = discountPreview ? discountPreview.totalOre : totalOre;
 
   // Same 30s store-status poll as the web's StoreStatusProvider; same
   // derivation — a settled fetch with no data counts as closed.
@@ -149,6 +217,52 @@ export function CartScreen() {
   const isClosed = storeStatus?.status === "Closed" || (statusSettled && storeStatus === null);
   const isPaused = storeStatus?.status === "Paused";
 
+  /* ── Included GoWell drink (patch 17B) ──────────────────────────── */
+
+  const goWellDrinks = (useQuery({ queryKey: ["drinks"], queryFn: getDrinks }).data ?? [])
+    .filter((d) => d.isGoWell === true);
+
+  // Every precondition re-checked against the LATEST server answer rather
+  // than what was true when the customer picked. The server still decides —
+  // this only avoids sending a request we already know it will refuse.
+  const includedDrinkLine =
+    includedDrinkSelection.type === "selected"
+      ? items.find((i) => i.clientLineId === includedDrinkSelection.clientLineId) ?? null
+      : null;
+  const includedDrinkProduct =
+    includedDrinkSelection.type === "selected"
+      ? goWellDrinks.find((d) => d.id === includedDrinkSelection.drinkId) ?? null
+      : null;
+
+  const activeIncludedDrinkLineId =
+    includedDrinkSelection.type === "selected" &&
+    storeStatus?.includedDrinkWindowOpen === true &&
+    items.some(isQualifyingMealItem) &&
+    allLineIdsValidAndUnique &&
+    includedDrinkLine?.kind === "drink" &&
+    !!includedDrinkProduct &&
+    isDrinkInStock(includedDrinkProduct) &&
+    (includedDrinkProduct.stockQuantity ?? 0) >= includedDrinkLine.quantity
+      ? includedDrinkSelection.clientLineId
+      : undefined;
+
+  // Preview only — the server recomputes and its answer is what is charged.
+  const includedDrinkPreviewOre = activeIncludedDrinkLineId
+    ? includedDrinkProduct?.priceOre ?? 0
+    : 0;
+
+  // Fixed discounts come off first, then the coupon percentage — mirroring
+  // the backend's composition so the preview cannot disagree with the charge.
+  // With no discounts at all this is still exactly the pre-coupon behavior.
+  const afterFixedOre = Math.max(
+    0,
+    totalOre - (activeStampCard ? stampCardPreviewOre : 0) - includedDrinkPreviewOre
+  );
+  const effectiveTotalOre = discountPreview
+    ? Math.max(0, afterFixedOre - discountPreview.discountAmountOre)
+    : afterFixedOre;
+
+
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pay_on_site");
   const [customerNote, setCustomerNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -157,6 +271,9 @@ export function CartScreen() {
   const [stockBlocked, setStockBlocked] = useState(false);
   const [activeReservationError, setActiveReservationError] = useState(false);
   const [activeOrderIdFromError, setActiveOrderIdFromError] = useState<string | null>(null);
+  // Stamp card → coupon confirmation. The reverse direction lives in
+  // StampCardCheckoutCard; both refuse to switch silently.
+  const [couponConflictOpen, setCouponConflictOpen] = useState(false);
 
   const hasUnavailableItems = items.some((item) => item.meal.available === false);
   // Drinks-only carts cannot pay online (web product gate).
@@ -188,6 +305,21 @@ export function CartScreen() {
     setStockBlocked(false);
     setActiveReservationError(false);
     setActiveOrderIdFromError(null);
+
+    // Last check before the request. No id is ever CREATED here — that would
+    // hand the backend a different line id on every retry; a cart that cannot
+    // produce valid unique ids is repaired on hydrate, not at submit time.
+    if (hasDiscountConflict) {
+      setError(t("stampCardCheckout.errorConflict"));
+      return;
+    }
+    if (activeStampCard && !canSubmitStampCard) {
+      clearStampCard();
+      queryClient.invalidateQueries({ queryKey: ["stamp-card"] }).catch(() => {});
+      setError(t("stampCardCheckout.errorLineMissing"));
+      return;
+    }
+
     setSubmitting(true);
     // Defense-in-depth: never start Stripe for a drinks-only cart (web parity).
     const effectivePaymentMethod: PaymentMethod = isDrinksOnly ? "pay_on_site" : paymentMethod;
@@ -197,12 +329,26 @@ export function CartScreen() {
         customerEmail: authEmail,
         paymentMethod: effectivePaymentMethod,
         customerNote: customerNote.trim() || undefined,
-        couponId: appliedCoupon?.id,
+        // One reward per order: the tagged union in CheckoutDiscountContext
+        // makes "both selected" unrepresentable, so this can never send a
+        // coupon and a stamp card together.
+        couponId: activeStampCard ? undefined : appliedCoupon?.id,
+        stampCardRewardId: activeStampCard?.rewardId,
+        stampCardLineId: activeStampCard?.clientLineId,
+        // Only the line id — never a price, a discount, isGoWell or the
+        // server clock. The backend recomputes all of it.
+        includedDrinkLineId: activeIncludedDrinkLineId,
         items: items.map((item) => {
           if (item.kind === "drink" && item.drink) {
-            return { mealId: item.drink.id, size: "medium", quantity: item.quantity };
+            return {
+              clientLineId: item.clientLineId,
+              mealId: item.drink.id,
+              size: "medium",
+              quantity: item.quantity,
+            };
           }
           return {
+            clientLineId: item.clientLineId,
             mealId: item.isCustom ? null : item.meal.id,
             size: item.sizeId,
             quantity: item.quantity,
@@ -225,6 +371,16 @@ export function CartScreen() {
       if (appliedCoupon) {
         clearSelectedCoupon();
         queryClient.invalidateQueries({ queryKey: ["coupons"] }).catch(() => {});
+      }
+
+      // Same for the stamp card: the order was accepted, so the reward is now
+      // Reserved server-side and is no longer spendable. Clearing the
+      // selection and refreshing the status here is what stops the next
+      // checkout from offering a reward that would come back 409 — this is a
+      // SUCCESS path, so nothing here shows an error.
+      if (activeStampCard) {
+        clearStampCard();
+        queryClient.invalidateQueries({ queryKey: ["stamp-card"] }).catch(() => {});
       }
 
       if (effectivePaymentMethod === "stripe") {
@@ -262,6 +418,28 @@ export function CartScreen() {
       if (isActiveReservationErr(err)) {
         setActiveReservationError(true);
         setActiveOrderIdFromError(await getActiveOrderId());
+      } else if (isStampCardError(err)) {
+        // No order was created. The cart is left exactly as it was — only the
+        // stamp card selection is dropped, and only when the server says it is
+        // genuinely dead rather than merely conflicting.
+        if (isStampCardSelectionDead(err)) {
+          clearStampCard();
+          queryClient.invalidateQueries({ queryKey: ["stamp-card"] }).catch(() => {});
+        }
+        setError(stampCardErrorMessage(err, t) ?? t("checkout.errorGeneric"));
+      } else if (isIncludedDrinkError(err)) {
+        // No order was created. The cart, the drink line and its quantity are
+        // all kept — only the inclusion is dropped, and the drink simply
+        // becomes a paid one. A network failure carries no code, so it never
+        // reaches this branch and the selection survives for the retry.
+        resetIncludedDrink();
+        const recovery = includedDrinkRecovery(err);
+        if (recovery === "refetch-status") {
+          queryClient.invalidateQueries({ queryKey: ["store", "status"] }).catch(() => {});
+        } else if (recovery === "refetch-drinks") {
+          queryClient.invalidateQueries({ queryKey: ["drinks"] }).catch(() => {});
+        }
+        setError(includedDrinkErrorMessage(err, t) ?? t("checkout.errorGeneric"));
       } else if (isCouponRejectedError(err)) {
         // Backend refused the coupon (used/expired/invalid) — no order was
         // created. Deselect it, refresh the list and surface the backend's
@@ -355,6 +533,12 @@ export function CartScreen() {
               <CartItemCard key={item.id} item={item} />
             ))}
 
+            {/* GoWell (patch 17B) — after the order lines, before the note.
+                Renders nothing when there are no GoWell products at all. */}
+            <View style={{ marginTop: spacing[5] }}>
+              <GoWellCartSection />
+            </View>
+
             {/* Customer note to kitchen (web parity; input capped at 100) */}
             <SectionHead style={{ marginTop: spacing[5] }}>{t("checkout.noteHead")}</SectionHead>
             <View style={styles.noteCard}>
@@ -370,6 +554,15 @@ export function CartScreen() {
               />
               <ThemedText style={styles.noteCounter}>{customerNote.length}/100</ThemedText>
             </View>
+
+            {/* Stamp card (patch 16C2) — sits with the discount section, above
+                the coupon, and renders nothing unless a reward is available.
+                Selecting it clears any coupon after confirming. */}
+            {user ? (
+              <View style={{ marginTop: spacing[5] }}>
+                <StampCardCheckoutCard items={items} />
+              </View>
+            ) : null}
 
             {/* Coupon (only for logged-in users with something to apply) */}
             {appliedCoupon || (user && usableCoupons.length > 0) ? (
@@ -403,7 +596,13 @@ export function CartScreen() {
                   </View>
                 ) : (
                   <Pressable
-                    onPress={() => router.push("/kuponger")}
+                    onPress={() => {
+                      // The other direction of the same rule: choosing a
+                      // coupon while the stamp card is active asks first, so
+                      // neither selection is ever dropped silently.
+                      if (activeStampCard) setCouponConflictOpen(true);
+                      else router.push("/kuponger");
+                    }}
                     style={({ pressed }) => [
                       styles.couponCard,
                       pressed && { backgroundColor: colors.cardAlt },
@@ -428,9 +627,14 @@ export function CartScreen() {
 
             <SectionHead style={{ marginTop: spacing[5] }}>{t("cart.summaryHead")}</SectionHead>
             <SummaryCard
-              coupon={appliedCoupon}
+              coupon={activeStampCard ? null : appliedCoupon}
               discountAmountOre={discountPreview?.discountAmountOre ?? 0}
               effectiveTotalOre={effectiveTotalOre}
+              stampCardDiscountOre={activeStampCard ? stampCardPreviewOre : 0}
+              includedDrinkDiscountOre={includedDrinkPreviewOre}
+              includedDrinkName={
+                includedDrinkProduct ? goWellFlavorLabel(includedDrinkProduct) : null
+              }
             />
 
             {/* Payment methods (web parity: pay_on_site / stripe / swish-disabled) */}
@@ -504,6 +708,19 @@ export function CartScreen() {
               </View>
             ) : null}
           </ScrollView>
+
+          {/* Stamp card → coupon: the mirror of the confirmation inside
+              StampCardCheckoutCard, so switching is explicit in both
+              directions. */}
+          <SwitchToCouponConfirm
+            visible={couponConflictOpen}
+            onKeep={() => setCouponConflictOpen(false)}
+            onSwitch={() => {
+              setCouponConflictOpen(false);
+              clearStampCard();
+              router.push("/kuponger");
+            }}
+          />
 
           {/* ── Sticky bottom CTA (web parity) ── */}
           <View style={styles.bottomBar}>
@@ -876,14 +1093,73 @@ function CartItemCard({ item }: { item: CartItem }) {
 /* ── Summary (web: Delsumma / Upphämtning Gratis / Totalt, plus the
  *    mobile coupon-preview row — backend recomputes at order time) ── */
 
+/** Stamp card → coupon confirmation. Same rule as the other direction: only
+ * one reward per order, and the customer is told before anything changes. */
+function SwitchToCouponConfirm({
+  visible,
+  onKeep,
+  onSwitch,
+}: {
+  visible: boolean;
+  onKeep: () => void;
+  onSwitch: () => void;
+}) {
+  const { t } = useTranslation();
+  if (!visible) return null;
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onKeep}>
+      <View style={styles.switchBackdrop}>
+        <View style={styles.switchBox}>
+          <ThemedText accessibilityRole="header" style={styles.switchTitle}>
+            {t("stampCardCheckout.conflictTitle")}
+          </ThemedText>
+          <ThemedText style={styles.switchBody}>
+            {t("stampCardCheckout.conflictToCouponBody")}
+          </ThemedText>
+          <View style={styles.switchActions}>
+            <Pressable
+              onPress={onKeep}
+              style={({ pressed }) => [styles.switchSecondary, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button"
+            >
+              <ThemedText style={styles.switchSecondaryLabel}>
+                {t("stampCardCheckout.conflictKeepStampCard")}
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              onPress={onSwitch}
+              style={({ pressed }) => [styles.switchPrimary, pressed && { opacity: 0.85 }]}
+              accessibilityRole="button"
+            >
+              <ThemedText style={styles.switchPrimaryLabel}>
+                {t("stampCardCheckout.conflictSwitchToCoupon")}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function SummaryCard({
   coupon,
   discountAmountOre,
   effectiveTotalOre,
+  stampCardDiscountOre,
+  includedDrinkDiscountOre,
+  includedDrinkName,
 }: {
   coupon: ApiCoupon | null;
   discountAmountOre: number;
   effectiveTotalOre: number;
+  /** Preview of the stamp card discount, 0 when unused. The server decides
+   * the real amount; this only keeps the summary honest before it answers. */
+  stampCardDiscountOre: number;
+  /** Preview of the included GoWell, 0 when unused. */
+  includedDrinkDiscountOre: number;
+  /** Flavour name for the row; null when nothing is included. */
+  includedDrinkName: string | null;
 }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
@@ -891,6 +1167,24 @@ function SummaryCard({
   return (
     <View style={styles.summaryCard}>
       <SummaryRow label={t("cart.summarySubtotal")} value={formatPriceKr(subtotalOre, language)} />
+      {stampCardDiscountOre > 0 ? (
+        <SummaryRow
+          label={t("stampCardCheckout.summaryRow")}
+          value={`−${formatPriceKr(stampCardDiscountOre, language)}`}
+          valueAccent
+        />
+      ) : null}
+      {includedDrinkDiscountOre > 0 ? (
+        <SummaryRow
+          label={
+            includedDrinkName
+              ? `${t("goWell.title")} · ${includedDrinkName}`
+              : t("goWell.summaryRow")
+          }
+          value={`−${formatPriceKr(includedDrinkDiscountOre, language)}`}
+          valueAccent
+        />
+      ) : null}
       {coupon ? (
         <SummaryRow
           label={t("coupon.cartDiscountRow", { code: coupon.code, pct: coupon.percentage })}
@@ -899,6 +1193,23 @@ function SummaryCard({
         />
       ) : null}
       <SummaryRow label={t("cart.summaryPickup")} value={t("cart.summaryFree")} valueMuted />
+      {/* Patch 15: teaser only, placed with the PICKUP information and
+          deliberately far from the payment buttons. It adds nothing to the
+          order payload, no date or service picker, and never claims this
+          order is a pre-order — see patch 14C. Not pressable. */}
+      <View style={styles.preorderTeaser} accessibilityRole="text">
+        <View style={styles.preorderBadge}>
+          <ThemedText style={styles.preorderBadgeText}>
+            {t("checkout.comingSoonBadge").toUpperCase()}
+          </ThemedText>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <ThemedText style={styles.preorderTitle}>{t("checkout.preorderTeaserTitle")}</ThemedText>
+          <ThemedText variant="caption" style={styles.preorderBody}>
+            {t("checkout.preorderTeaserBody")}
+          </ThemedText>
+        </View>
+      </View>
       <SummaryRow label={t("cart.summaryTotal")} value={formatPriceKr(effectiveTotalOre, language)} isTotal />
     </View>
   );
@@ -1175,6 +1486,37 @@ const styles = StyleSheet.create({
   },
 
   /* Summary */
+  switchBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
+  switchBox: {
+    margin: spacing[4],
+    marginBottom: spacing[8],
+    backgroundColor: colors.card,
+    borderRadius: radius.card,
+    padding: spacing[4],
+    gap: spacing[2],
+  },
+  switchTitle: { fontSize: 16, fontFamily: fontFamily.headlineSemibold, color: colors.textPrimary },
+  switchBody: { fontSize: 12.5, lineHeight: 17.5, color: colors.textSecondary },
+  switchActions: { flexDirection: "row", gap: spacing[2], marginTop: spacing[2] },
+  switchSecondary: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.btn,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  switchSecondaryLabel: { fontSize: 13, fontFamily: fontFamily.headlineSemibold, color: colors.textPrimary },
+  switchPrimary: {
+    flex: 1,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.btn,
+    backgroundColor: colors.accent,
+  },
+  switchPrimaryLabel: { fontSize: 13, fontFamily: fontFamily.headlineSemibold, color: colors.bg },
   summaryCard: {
     backgroundColor: colors.card,
     borderRadius: radius.card,
@@ -1182,6 +1524,37 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: "hidden",
   },
+  // Patch 15 pre-order teaser — sits with the pickup row, never near the
+  // payment controls.
+  preorderTeaser: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing[2],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+  },
+  preorderBadge: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+    backgroundColor: colors.accentSoft,
+    paddingHorizontal: spacing[2],
+    paddingVertical: 2,
+  },
+  preorderBadgeText: {
+    fontSize: 9,
+    fontFamily: fontFamily.bodyBold,
+    letterSpacing: 0.8,
+    color: colors.accent,
+  },
+  preorderTitle: {
+    fontSize: 12.5,
+    fontFamily: fontFamily.bodySemibold,
+    color: colors.textPrimary,
+  },
+  preorderBody: { color: colors.textTertiary, lineHeight: 16, marginTop: 1 },
   summaryRow: {
     flexDirection: "row",
     alignItems: "center",
