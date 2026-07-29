@@ -380,6 +380,12 @@ function OrderLinesCard({ order }: { order: ApiOrder }) {
   // returned rather than by matching prices or names.
   const stampCardMealName =
     order.lines.find((l) => l.id === order.stampCardOrderLineId)?.titleSnapshot ?? null;
+  // Included GoWell (patch 17B). Matched on the real order line id the server
+  // returned — never on name or price, which cannot tell two drinks apart.
+  // If the line cannot be resolved the amount is still shown; only the
+  // flavour name is omitted.
+  const includedDrinkName =
+    order.lines.find((l) => l.id === order.includedDrinkOrderLineId)?.titleSnapshot ?? null;
   const paymentMethodLabel =
     order.paymentMethod === "stripe"
       ? t("checkout.payOnline")
@@ -441,6 +447,23 @@ function OrderLinesCard({ order }: { order: ApiOrder }) {
           {(order.stampCardDiscountOre ?? 0) > 0 && stampCardMealName ? (
             <View style={styles.lineRow}>
               <ThemedText style={styles.paymentMethodLabel}>{stampCardMealName}</ThemedText>
+            </View>
+          ) : null}
+          {/* Included GoWell, as its own line so a customer with both a free
+              meal and a free drink can see which amount is which. */}
+          {(order.includedDrinkDiscountOre ?? 0) > 0 ? (
+            <View style={styles.lineRow}>
+              <ThemedText style={styles.paymentMethodLabel}>
+                {includedDrinkName
+                  ? t("goWell.orderIncludedNamed", {
+                      flavour: includedDrinkName,
+                      count: order.includedDrinkDiscountedQuantity ?? 1,
+                    })
+                  : t("goWell.orderIncluded")}
+              </ThemedText>
+              <ThemedText style={styles.discountValue}>
+                −{lineKr(order.includedDrinkDiscountOre ?? 0, language)}
+              </ThemedText>
             </View>
           ) : null}
         </>

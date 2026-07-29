@@ -2,73 +2,68 @@ import type { ApiDrink } from "@/services/api/drinks";
 import { colors } from "@/theme";
 
 /**
- * GoWell flavour identity mapping (patch 11). The PRODUCTS come from the
- * backend (id, name, price, stock, image — nothing hardcoded here); this
- * module only maps a STABLE, normalized flavour name to its visual
- * identity (background gradient + accent) for the carousel.
+ * GoWell flavour VISUAL identity — nothing else (patch 17B).
  *
- * Identification: the backend drink model has no GoWell flag, so a drink
- * counts as GoWell when its normalized name matches a known flavour OR
- * contains "gowell" (future-proofing for renamed products). A GoWell
- * drink whose flavour has no visual entry gets the NEUTRAL fallback —
- * layout never breaks on unknown future flavours. Anything else (LOKA,
- * water, future drinks) is NOT GoWell and keeps the standard drink card.
+ * Whether a drink IS GoWell is now `drink.isGoWell`, an admin-set backend
+ * flag. This module used to answer that question by matching the product
+ * name, which meant renaming a flavour silently changed a business rule and
+ * any drink called "GoWell …" would have started giving itself away. Names
+ * decide colours here and nothing more.
+ *
+ * The locked design is a compact premium card with the product image at its
+ * centre, so each flavour carries an accent (name, selected border, check)
+ * and a soft wash behind the image — not the full-card gradient the previous
+ * carousel used.
+ *
+ * A flavour with no entry gets the NEUTRAL identity, so a product the app has
+ * never heard of still renders correctly instead of breaking the layout.
  */
 
 export interface GoWellFlavorVisual {
-  /** Dark-theme background wash, top → bottom. */
-  gradient: readonly [string, string, string];
-  /** Accent used for the flavour name + pagination dot. */
+  /** Flavour name, selected border and check icon. */
   accent: string;
+  /** Subtle wash behind the product image. */
+  soft: string;
 }
 
 const NEUTRAL_VISUAL: GoWellFlavorVisual = {
-  gradient: ["rgba(232,101,10,0.22)", "rgba(232,101,10,0.08)", colors.card],
   accent: colors.accent,
+  soft: "rgba(232,101,10,0.10)",
 };
 
-/** Keyed on normalized flavour names as they exist in Nutri's data source
- * (verified against the live drink catalogue). */
+/** Keyed on normalized flavour names as they exist in Nutri's catalogue. */
 const FLAVOR_VISUALS: Record<string, GoWellFlavorVisual> = {
-  tropical: {
-    gradient: ["rgba(245,158,11,0.26)", "rgba(245,158,11,0.09)", colors.card],
-    accent: "#F5A623",
-  },
-  cola: {
-    gradient: ["rgba(160,82,32,0.30)", "rgba(160,82,32,0.10)", colors.card],
-    accent: "#C98A4B",
-  },
-  "jordgubb & lime": {
-    gradient: ["rgba(225,29,72,0.24)", "rgba(132,204,22,0.08)", colors.card],
-    accent: "#F0526E",
-  },
-  "svarta vinbär & blåbär": {
-    gradient: ["rgba(124,58,237,0.26)", "rgba(59,130,246,0.09)", colors.card],
-    accent: "#A78BFA",
-  },
-  "hallon, jordgubb & mynta": {
-    gradient: ["rgba(236,72,153,0.24)", "rgba(45,212,191,0.08)", colors.card],
-    accent: "#F472B6",
-  },
-  "ananas & kaktus": {
-    gradient: ["rgba(202,224,20,0.20)", "rgba(34,197,94,0.08)", colors.card],
-    accent: "#BBD332",
-  },
+  tropical: { accent: "#F5A623", soft: "rgba(245,166,35,0.12)" },
+  cola: { accent: "#C98A4B", soft: "rgba(201,138,75,0.12)" },
+  "jordgubb & lime": { accent: "#F0526E", soft: "rgba(240,82,110,0.12)" },
+  "svarta vinbär & blåbär": { accent: "#A78BFA", soft: "rgba(167,139,250,0.12)" },
+  "hallon, jordgubb & mynta": { accent: "#F472B6", soft: "rgba(244,114,182,0.12)" },
+  "ananas & kaktus": { accent: "#BBD332", soft: "rgba(187,211,50,0.12)" },
 };
 
 function normalizeFlavorName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** True when the drink belongs to the GoWell family (known flavour name
- * or explicit "GoWell" branding in the product name). */
-export function isGoWellDrink(drink: ApiDrink): boolean {
-  const normalized = normalizeFlavorName(drink.name);
-  return normalized.includes("gowell") || normalized in FLAVOR_VISUALS;
-}
-
-/** Visual identity for a GoWell drink — neutral fallback for flavours the
- * mapping doesn't know yet. */
+/**
+ * Visual identity for a GoWell drink. Presentation only — callers decide what
+ * counts as GoWell via `drink.isGoWell`, never via this module.
+ */
 export function getGoWellVisual(drink: ApiDrink): GoWellFlavorVisual {
   return FLAVOR_VISUALS[normalizeFlavorName(drink.name)] ?? NEUTRAL_VISUAL;
+}
+
+/**
+ * The flavour name to show on a card. GoWell products are named by flavour
+ * ("Tropical"), so a "GoWell" prefix is stripped rather than repeated beside
+ * the section heading that already says it.
+ */
+export function goWellFlavorLabel(drink: ApiDrink): string {
+  const withoutBrand = drink.name.trim().replace(/^gowell\s*/i, "").trim();
+  return withoutBrand.length > 0 ? withoutBrand : drink.name.trim();
+}
+
+/** True when the drink can actually be handed over right now. */
+export function isDrinkInStock(drink: ApiDrink): boolean {
+  return drink.isAvailable && (drink.stockQuantity ?? 0) > 0;
 }

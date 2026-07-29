@@ -44,6 +44,13 @@ export interface ApiOrder {
   /** Stamps this order adds at pickup. Server-computed, because the client
    * would get a mixed order with one discounted portion subtly wrong. */
   pendingStampCount?: number;
+  // ── Included GoWell drink (patch 17A/B, additive) ───────────────
+  /** Amount the included drink took off, in öre. 0 or absent when unused. */
+  includedDrinkDiscountOre?: number;
+  /** The drink line it applied to. Match on this id, never on name or price. */
+  includedDrinkOrderLineId?: string | null;
+  /** Portions included — 1 when used. */
+  includedDrinkDiscountedQuantity?: number;
 }
 
 export interface ApiOrderLine {
@@ -93,6 +100,10 @@ export interface CreateOrderInput {
   /** clientLineId of the line the free meal applies to. Required whenever
    * stampCardRewardId is set. */
   stampCardLineId?: string;
+  /** clientLineId of the GoWell line the customer wants included (patch
+   * 17B). Omitted means no included drink — the server never picks a
+   * flavour, and neither does this client. */
+  includedDrinkLineId?: string;
   items: {
     /** Stable per-line id so a reward can name exactly one line. */
     clientLineId?: string;
@@ -142,6 +153,7 @@ export async function createOrder(order: CreateOrderInput): Promise<ApiOrder> {
       // must never construct that request in the first place.
       stampCardRewardId: rest.stampCardRewardId ?? null,
       stampCardLineId: rest.stampCardLineId ?? null,
+      includedDrinkLineId: rest.includedDrinkLineId ?? null,
       lines: items.map(
         ({ isTailored, customMacros: _unused, customIngredients, containerTypeId, ...line }) => ({
           ...line,

@@ -48,7 +48,16 @@ import {
   isStockOutError,
 } from "@/utils/orderErrors";
 import { useCheckoutDiscount } from "@/context/CheckoutDiscountContext";
+import { useIncludedDrink } from "@/context/IncludedDrinkContext";
 import { useStampCardStatusQuery } from "@/services/api/stampCardQueries";
+import { getDrinks } from "@/services/api/drinks";
+import { GoWellCartSection, isQualifyingMealItem } from "./GoWellCartSection";
+import { isDrinkInStock, goWellFlavorLabel } from "@/features/menu/goWellFlavors";
+import {
+  isIncludedDrinkError,
+  includedDrinkErrorMessage,
+  includedDrinkRecovery,
+} from "./includedDrinkErrors";
 import { StampCardCheckoutCard, isQualifyingCartItem } from "./StampCardCheckoutCard";
 import {
   isStampCardError,
@@ -106,6 +115,7 @@ export function CartScreen() {
   const { items, hydrated, clearCart, subtotalOre, totalOre } = useCart();
   const { selectedCoupon, clearSelectedCoupon } = useCoupon();
   const { discount, clearStampCard } = useCheckoutDiscount();
+  const { selection: includedDrinkSelection, reset: resetIncludedDrink } = useIncludedDrink();
   const { user, loading: authLoading } = useAuth();
 
   const authEmail = user?.email ?? null;
@@ -194,12 +204,6 @@ export function CartScreen() {
   const discountPreview = appliedCoupon && !activeStampCard
     ? applyDiscountPreview(subtotalOre, appliedCoupon.percentage)
     : null;
-  // Without any discount the cart total stays exactly the pre-coupon behavior.
-  const effectiveTotalOre = activeStampCard
-    ? Math.max(0, totalOre - stampCardPreviewOre)
-    : discountPreview
-      ? discountPreview.totalOre
-      : totalOre;
 
   // Same 30s store-status poll as the web's StoreStatusProvider; same
   // derivation — a settled fetch with no data counts as closed.
@@ -212,6 +216,52 @@ export function CartScreen() {
   const statusSettled = !storeStatusQuery.isLoading;
   const isClosed = storeStatus?.status === "Closed" || (statusSettled && storeStatus === null);
   const isPaused = storeStatus?.status === "Paused";
+
+  /* ── Included GoWell drink (patch 17B) ──────────────────────────── */
+
+  const goWellDrinks = (useQuery({ queryKey: ["drinks"], queryFn: getDrinks }).data ?? [])
+    .filter((d) => d.isGoWell === true);
+
+  // Every precondition re-checked against the LATEST server answer rather
+  // than what was true when the customer picked. The server still decides —
+  // this only avoids sending a request we already know it will refuse.
+  const includedDrinkLine =
+    includedDrinkSelection.type === "selected"
+      ? items.find((i) => i.clientLineId === includedDrinkSelection.clientLineId) ?? null
+      : null;
+  const includedDrinkProduct =
+    includedDrinkSelection.type === "selected"
+      ? goWellDrinks.find((d) => d.id === includedDrinkSelection.drinkId) ?? null
+      : null;
+
+  const activeIncludedDrinkLineId =
+    includedDrinkSelection.type === "selected" &&
+    storeStatus?.includedDrinkWindowOpen === true &&
+    items.some(isQualifyingMealItem) &&
+    allLineIdsValidAndUnique &&
+    includedDrinkLine?.kind === "drink" &&
+    !!includedDrinkProduct &&
+    isDrinkInStock(includedDrinkProduct) &&
+    (includedDrinkProduct.stockQuantity ?? 0) >= includedDrinkLine.quantity
+      ? includedDrinkSelection.clientLineId
+      : undefined;
+
+  // Preview only — the server recomputes and its answer is what is charged.
+  const includedDrinkPreviewOre = activeIncludedDrinkLineId
+    ? includedDrinkProduct?.priceOre ?? 0
+    : 0;
+
+  // Fixed discounts come off first, then the coupon percentage — mirroring
+  // the backend's composition so the preview cannot disagree with the charge.
+  // With no discounts at all this is still exactly the pre-coupon behavior.
+  const afterFixedOre = Math.max(
+    0,
+    totalOre - (activeStampCard ? stampCardPreviewOre : 0) - includedDrinkPreviewOre
+  );
+  const effectiveTotalOre = discountPreview
+    ? Math.max(0, afterFixedOre - discountPreview.discountAmountOre)
+    : afterFixedOre;
+
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pay_on_site");
   const [customerNote, setCustomerNote] = useState("");
@@ -285,6 +335,9 @@ export function CartScreen() {
         couponId: activeStampCard ? undefined : appliedCoupon?.id,
         stampCardRewardId: activeStampCard?.rewardId,
         stampCardLineId: activeStampCard?.clientLineId,
+        // Only the line id — never a price, a discount, isGoWell or the
+        // server clock. The backend recomputes all of it.
+        includedDrinkLineId: activeIncludedDrinkLineId,
         items: items.map((item) => {
           if (item.kind === "drink" && item.drink) {
             return {
@@ -374,6 +427,19 @@ export function CartScreen() {
           queryClient.invalidateQueries({ queryKey: ["stamp-card"] }).catch(() => {});
         }
         setError(stampCardErrorMessage(err, t) ?? t("checkout.errorGeneric"));
+      } else if (isIncludedDrinkError(err)) {
+        // No order was created. The cart, the drink line and its quantity are
+        // all kept — only the inclusion is dropped, and the drink simply
+        // becomes a paid one. A network failure carries no code, so it never
+        // reaches this branch and the selection survives for the retry.
+        resetIncludedDrink();
+        const recovery = includedDrinkRecovery(err);
+        if (recovery === "refetch-status") {
+          queryClient.invalidateQueries({ queryKey: ["store", "status"] }).catch(() => {});
+        } else if (recovery === "refetch-drinks") {
+          queryClient.invalidateQueries({ queryKey: ["drinks"] }).catch(() => {});
+        }
+        setError(includedDrinkErrorMessage(err, t) ?? t("checkout.errorGeneric"));
       } else if (isCouponRejectedError(err)) {
         // Backend refused the coupon (used/expired/invalid) — no order was
         // created. Deselect it, refresh the list and surface the backend's
@@ -467,6 +533,12 @@ export function CartScreen() {
               <CartItemCard key={item.id} item={item} />
             ))}
 
+            {/* GoWell (patch 17B) — after the order lines, before the note.
+                Renders nothing when there are no GoWell products at all. */}
+            <View style={{ marginTop: spacing[5] }}>
+              <GoWellCartSection />
+            </View>
+
             {/* Customer note to kitchen (web parity; input capped at 100) */}
             <SectionHead style={{ marginTop: spacing[5] }}>{t("checkout.noteHead")}</SectionHead>
             <View style={styles.noteCard}>
@@ -559,6 +631,10 @@ export function CartScreen() {
               discountAmountOre={discountPreview?.discountAmountOre ?? 0}
               effectiveTotalOre={effectiveTotalOre}
               stampCardDiscountOre={activeStampCard ? stampCardPreviewOre : 0}
+              includedDrinkDiscountOre={includedDrinkPreviewOre}
+              includedDrinkName={
+                includedDrinkProduct ? goWellFlavorLabel(includedDrinkProduct) : null
+              }
             />
 
             {/* Payment methods (web parity: pay_on_site / stripe / swish-disabled) */}
@@ -1071,6 +1147,8 @@ function SummaryCard({
   discountAmountOre,
   effectiveTotalOre,
   stampCardDiscountOre,
+  includedDrinkDiscountOre,
+  includedDrinkName,
 }: {
   coupon: ApiCoupon | null;
   discountAmountOre: number;
@@ -1078,6 +1156,10 @@ function SummaryCard({
   /** Preview of the stamp card discount, 0 when unused. The server decides
    * the real amount; this only keeps the summary honest before it answers. */
   stampCardDiscountOre: number;
+  /** Preview of the included GoWell, 0 when unused. */
+  includedDrinkDiscountOre: number;
+  /** Flavour name for the row; null when nothing is included. */
+  includedDrinkName: string | null;
 }) {
   const { t } = useTranslation();
   const { language } = useLanguage();
@@ -1089,6 +1171,17 @@ function SummaryCard({
         <SummaryRow
           label={t("stampCardCheckout.summaryRow")}
           value={`−${formatPriceKr(stampCardDiscountOre, language)}`}
+          valueAccent
+        />
+      ) : null}
+      {includedDrinkDiscountOre > 0 ? (
+        <SummaryRow
+          label={
+            includedDrinkName
+              ? `${t("goWell.title")} · ${includedDrinkName}`
+              : t("goWell.summaryRow")
+          }
+          value={`−${formatPriceKr(includedDrinkDiscountOre, language)}`}
           valueAccent
         />
       ) : null}

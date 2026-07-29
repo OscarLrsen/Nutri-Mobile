@@ -21,7 +21,6 @@ import { MealCard } from "./MealCard";
 import { DrinkCard } from "./DrinkCard";
 import { PersonalMenuSection } from "./PersonalMenuSection";
 import { GoWellFlavorCarousel } from "./GoWellFlavorCarousel";
-import { isGoWellDrink } from "./goWellFlavors";
 import { recommendSize, slotForCategory, slotTarget } from "./mealRecommendation";
 import {
   isProfileGapError,
@@ -106,7 +105,8 @@ export function MenuScreen() {
     // flavour never appears twice. Water (LOKA) and any other drink keep
     // the standard DrinkCard below the carousel.
     const nonShakeDrinks = drinks.filter((d) => d.category !== "Shakes");
-    const goWell = nonShakeDrinks.filter(isGoWellDrink);
+    // The BACKEND flag decides, never the product name (patch 17B).
+    const goWell = nonShakeDrinks.filter((d) => d.isGoWell === true);
     return {
       goWellDrinks: goWell,
       groups: {
@@ -121,7 +121,7 @@ export function MenuScreen() {
           .filter((d) => d.category === "Shakes")
           .map((drink): MenuItem => ({ kind: "drink", drink })),
         dryck: nonShakeDrinks
-          .filter((d) => !isGoWellDrink(d))
+          .filter((d) => d.isGoWell !== true)
           .map((drink): MenuItem => ({ kind: "drink", drink })),
       } satisfies Record<CategoryId, MenuItem[]>,
     };
