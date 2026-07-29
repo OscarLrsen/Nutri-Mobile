@@ -3,6 +3,7 @@ import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 
 import { queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/services/auth/AuthProvider";
 import { configureNotificationHandling } from "@/services/push/pushNotifications";
 
 /**
@@ -41,6 +42,23 @@ function routeForPush(data: unknown): string | null {
 // platforms — remember handled notification ids so a tap navigates once.
 const handledResponseIds = new Set<string>();
 
+// Auth snapshot for the module-level tap handler (patch 11 auth gate):
+// the component below mirrors useAuth() into this variable. When signed
+// out, a push deep link routes VIA login with the destination as the
+// `next` param — an app-internal path from our own allowlist, which
+// LoginScreen only follows when it starts with "/" (never an external
+// URL). ConsentGate/intro/survey overlays still sit above whatever the
+// login lands on, so the gate order is preserved.
+let signedInSnapshot = false;
+
+function navigate(route: string): void {
+  if (signedInSnapshot) {
+    router.push(route as never);
+  } else {
+    router.replace({ pathname: "/logga-in", params: { next: route } });
+  }
+}
+
 function handleResponse(response: Notifications.NotificationResponse): void {
   const id = response.notification.request.identifier;
   if (handledResponseIds.has(id)) return;
@@ -49,13 +67,13 @@ function handleResponse(response: Notifications.NotificationResponse): void {
   const route = routeForPush(response.notification.request.content.data);
   if (!route) return;
   try {
-    router.push(route as never);
+    navigate(route);
   } catch {
     // Router not ready yet (cold start) — one delayed retry, then give up:
     // the user is still inside the app, just not auto-navigated.
     setTimeout(() => {
       try {
-        router.push(route as never);
+        navigate(route);
       } catch {
         // Give up silently.
       }
@@ -64,7 +82,16 @@ function handleResponse(response: Notifications.NotificationResponse): void {
 }
 
 export function PushNotificationResponder() {
+  const { user, loading } = useAuth();
   useEffect(() => {
+    signedInSnapshot = !!user;
+  }, [user]);
+
+  useEffect(() => {
+    // Wait until the session state is KNOWN before processing the
+    // cold-start response — otherwise a signed-in user's push tap would
+    // route via login unnecessarily. `loading` resolves exactly once.
+    if (loading) return;
     configureNotificationHandling();
 
     let cancelled = false;
@@ -89,7 +116,7 @@ export function PushNotificationResponder() {
       tapSub.remove();
       receivedSub.remove();
     };
-  }, []);
+  }, [loading]);
 
   return null;
 }

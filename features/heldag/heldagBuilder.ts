@@ -53,6 +53,10 @@ const FALLBACK_SHARE: Record<WizardSlot, number> = {
   Mellanmål: 0.2,
 };
 
+/** Shared with the menu's portion recommendation (patch 12) — one copy of
+ * the fallback shares, never two. */
+export const FALLBACK_SHARE_FOR_SLOT = FALLBACK_SHARE;
+
 export type SlotResult =
   | {
       slot: WizardSlot;
@@ -95,7 +99,7 @@ export function getPackageWindowState(hour: number): PackageWindowState {
 
 /* ── Slot target derivation ─────────────────────────────── */
 
-function matchSlotLabel(slot: WizardSlot, label: string): boolean {
+export function matchSlotLabel(slot: WizardSlot, label: string): boolean {
   const l = label.toLowerCase();
   switch (slot) {
     case "Frukost":

@@ -84,4 +84,18 @@ export interface CartItem {
   kind?: "meal" | "drink";
   /** Populated only when kind === "drink". Stores the original ApiDrink for order payload mapping. */
   drink?: ApiDrink;
+  /**
+   * Stable client-generated line id, sent to the backend as ClientLineId
+   * (patch 16C). It exists so a stamp card reward can name exactly ONE line:
+   * two identical meals in one cart are otherwise indistinguishable, and a
+   * request index would silently discount the wrong meal the day lines are
+   * reordered or merged server-side.
+   *
+   * Generated once when a distinct cart line is created and preserved for its
+   * whole life — quantity changes and merges keep it, so the reward the
+   * customer picked stays pointed at the meal they picked. Optional only
+   * because carts stored before this patch have none; they are migrated on
+   * hydrate.
+   */
+  clientLineId?: string;
 }

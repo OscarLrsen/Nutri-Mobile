@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import Slider from "@react-native-community/slider";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, Minus, Plus, RotateCcw, Sparkles } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
@@ -39,6 +40,7 @@ const STEP = { kcal: 50, macro: 5 } as const;
 
 export function MacroAdjustScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { language } = useLanguage();
@@ -172,6 +174,9 @@ export function MacroAdjustScreen() {
       const updated = await getNutritionResult();
       setResult(updated);
       applyResult(updated);
+      // Patch 13: the override changes today's goal — refresh every
+      // shared nutrition query so Home/Profil/Meny update together.
+      void queryClient.invalidateQueries({ queryKey: ["nutrition"] });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
     } catch {
@@ -188,6 +193,7 @@ export function MacroAdjustScreen() {
       const updated = await getNutritionResult();
       setResult(updated);
       applyResult(updated);
+      void queryClient.invalidateQueries({ queryKey: ["nutrition"] });
     } catch {
       // stay on page (web parity)
     } finally {

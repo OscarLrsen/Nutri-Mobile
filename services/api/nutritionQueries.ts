@@ -9,6 +9,7 @@ import {
   type ApiRemainingToday,
   type ApiTodayNutrition,
 } from "./nutrition";
+import { getTodayDayPlan, type SavedDayPlanResponse } from "./dayPlan";
 
 /**
  * Shared TanStack Query hooks for the daily-nutrition endpoints. Hem is the
@@ -44,6 +45,23 @@ export function useTodayNutritionQuery() {
     queryFn: getTodayNutrition,
     enabled: !!user,
     retry: retryUnlessProfileGap,
+  });
+}
+
+/** Query-key prefix for the saved day plan — PlanDayScreen invalidates
+ * this after a save so the menu's recommendations follow immediately. */
+export const DAY_PLAN_QUERY_PREFIX = ["nutrition", "day-plan"] as const;
+
+/** GET /api/day-plan/today via ONE shared query (patch 12) — the user's
+ * SAVED plan. Menu recommendations prioritise these slot targets over the
+ * automatic distribution; getTodayDayPlan never throws (null = no plan /
+ * error), so this query cannot poison the menu. */
+export function useTodayDayPlanQuery() {
+  const { user } = useAuth();
+  return useQuery<SavedDayPlanResponse | null>({
+    queryKey: [...DAY_PLAN_QUERY_PREFIX, user?.id ?? null],
+    queryFn: getTodayDayPlan,
+    enabled: !!user,
   });
 }
 

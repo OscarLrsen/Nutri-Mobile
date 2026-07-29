@@ -35,6 +35,13 @@ export interface ApiDrink {
   showFat?: boolean;
   showFiber?: boolean;
   showCaffeine?: boolean;
+  /**
+   * True for the GoWell family (patch 17B). Admin-set on the backend and
+   * the ONLY thing business logic may read — goWellFlavors.ts matches names
+   * for gradients, which must never decide what a customer gets free.
+   * Optional so an older API simply yields no GoWell.
+   */
+  isGoWell?: boolean;
 }
 
 /** GET /api/drinks — public. */
