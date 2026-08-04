@@ -16,6 +16,10 @@ export interface ApiOnboardingSurveyStatus {
   answered: boolean;
   skipped: boolean;
   version: string;
+  /** The first qualifying order the survey belongs to — decided
+   * server-side, so the overlay always returns to the right order. */
+  orderId?: string | null;
+  orderNumber?: number | null;
 }
 
 /** Stable option keys — must match OnboardingSurveyV1 in the backend. */
@@ -50,6 +54,8 @@ export async function getOnboardingSurveyStatus(): Promise<ApiOnboardingSurveySt
 export async function submitOnboardingSurvey(input: {
   discoverySource: string;
   choiceReasons: string[];
+  /** App language the answers were given in, stored for the admin view. */
+  language?: string;
 }): Promise<ApiOnboardingSurveyStatus> {
   const { data } = await apiClient.post<ApiOnboardingSurveyStatus>(
     "/api/onboarding-survey",

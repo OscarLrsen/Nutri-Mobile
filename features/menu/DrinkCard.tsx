@@ -8,6 +8,7 @@ import type { ApiDrink } from "@/services/api/drinks";
 import { useCart } from "@/context/CartContext";
 import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
+import { drinkDescription, drinkName } from "./drinkText";
 
 /**
  * Drink card — mobile port of the web /meny DrinkCard's always-visible
@@ -50,9 +51,16 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
   const showNutrition = drink.showNutrition ?? true;
   const outOfStock = !drink.isAvailable || drink.stockQuantity === 0;
 
+  // Catalogue copy is admin-written per product, so it cannot be a locale
+  // key — it comes back translated from the API and is resolved here.
+  const name = drinkName(drink, language);
+  const description = drinkDescription(drink, language);
+
   const handleAdd = () => {
     if (outOfStock || added) return;
-    addDrinkItem(drink);
+    // addDrinkItem owns the confirmation and returns false if it added
+    // nothing, so a rejected add can never leave the button claiming success.
+    if (!addDrinkItem(drink)) return;
     setAdded(true);
     if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
     addedTimerRef.current = setTimeout(() => setAdded(false), 1800);
@@ -83,7 +91,7 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
             contentFit="cover"
             transition={150}
             onError={() => setImageFailed(true)}
-            accessibilityLabel={drink.name}
+            accessibilityLabel={name}
           />
         ) : (
           <View style={styles.imagePlaceholder}>
@@ -95,14 +103,14 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
       <View style={styles.body}>
         <View style={styles.titleRow}>
           <ThemedText variant="bodyMedium" style={styles.title} numberOfLines={2}>
-            {drink.name}
+            {name}
           </ThemedText>
           <ThemedText style={styles.price}>{formatNumber(priceKr, language)} kr</ThemedText>
         </View>
 
-        {drink.description ? (
+        {description ? (
           <ThemedText variant="caption" color="textTertiary" numberOfLines={1}>
-            {drink.description}
+            {description}
           </ThemedText>
         ) : null}
 
@@ -157,8 +165,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: "hidden",
   },
+  // Release P9: standard drinks (LOKA/water) step back visually — GoWell
+  // owns the section's stage, so this card is deliberately more compact.
   imageWrap: {
-    height: 150,
+    height: 96,
     backgroundColor: colors.cardAlt,
   },
   imagePlaceholder: {

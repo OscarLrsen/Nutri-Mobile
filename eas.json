@@ -12,6 +12,15 @@
       "distribution": "internal",
       "environment": "preview"
     },
+    "staging": {
+      "distribution": "internal",
+      "environment": "preview",
+      "channel": "staging",
+      "ios": { "simulator": false },
+      "env": {
+        "APP_VARIANT": "staging"
+      }
+    },
     "production": {
       "autoIncrement": true
     }

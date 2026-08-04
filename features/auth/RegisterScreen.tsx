@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -20,7 +19,8 @@ import { supabase } from "@/services/auth/supabase";
 import { submitRegistrationConsents } from "@/services/api/consents";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { env } from "@/lib/env";
-import { useTranslation } from "@/i18n";
+import { openPolicy } from "@/utils/webUrls";
+import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 
 /**
@@ -48,6 +48,7 @@ import { colors, fontFamily, spacing } from "@/theme";
  */
 export function RegisterScreen() {
   const { t } = useTranslation();
+  const { language } = useLanguage();
   const router = useRouter();
   const { next } = useLocalSearchParams<{ next?: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -519,7 +520,7 @@ export function RegisterScreen() {
                     {t("auth.termsAcceptPrefix")}
                     <ThemedText
                       style={[styles.consentLabel, styles.consentLink]}
-                      onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/kopvillkor`)}
+                      onPress={() => void openPolicy("kopvillkor", language)}
                       accessibilityRole="link"
                     >
                       {t("auth.termsLinkText")}
@@ -527,7 +528,7 @@ export function RegisterScreen() {
                     {t("auth.termsAnd")}
                     <ThemedText
                       style={[styles.consentLabel, styles.consentLink]}
-                      onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/integritet`)}
+                      onPress={() => void openPolicy("integritet", language)}
                       accessibilityRole="link"
                     >
                       {t("auth.privacyLinkText")}

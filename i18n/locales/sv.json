@@ -17,7 +17,8 @@
     "tabHome": "Hem",
     "tabMenu": "Meny",
     "tabCart": "Varukorg",
-    "tabAccount": "Mina sidor"
+    "tabAccount": "Mina sidor",
+    "done": "Klar"
   },
   "hero": {
     "headline1": "Hela råvaror.",
@@ -77,7 +78,10 @@
     "locationAria": "Dagens plats: {{location}}. {{status}}",
     "comingSoonBadge": "Kommer snart",
     "foodLogTeaserTitle": "Logga mat utanför Nutri",
-    "foodLogTeaserBody": "Snart kan du lägga till kalorier och makron från annan mat och få en komplett bild av hela dagen."
+    "foodLogTeaserBody": "Snart kan du lägga till kalorier och makron från annan mat och få en komplett bild av hela dagen.",
+    "todayHead": "Idag",
+    "pointsPill": "{{points}} Nutri Points",
+    "nextActionOrder": "Beställ dagens måltid"
   },
   "menu": {
     "categories": {
@@ -110,6 +114,11 @@
     },
     "personal": {
       "title": "Din personliga meny",
+      "personalBadge": "Anpassad för dig",
+      "calcError": "Kunde inte hämta din personliga portion just nu.",
+      "staticPriceNote": "Ordinarie pris visas.",
+      "yourPortion": "Din portion",
+      "yourPortionSub": "Mängderna är beräknade efter ditt mål och din dag.",
       "subtitle": "Baserad på din profil, dina mål och vad du har kvar i dag.",
       "profileGap": "Fyll i din profil för personliga portioner.",
       "profileGapCta": "Fyll i profil",
@@ -182,6 +191,9 @@
   },
   "cart": {
     "title": "Varukorg",
+    "toastAdded": "Tillagd i varukorgen",
+    "toastAddedNamed": "{{name}} tillagd i varukorgen",
+    "toastAddFailed": "Kunde inte läggas i varukorgen",
     "countMeal_one": "{{count}} rätt",
     "countMeal_other": "{{count}} rätter",
     "countDrink_one": "{{count}} dryck",
@@ -208,14 +220,15 @@
     "openAt": "Vi öppnar kl. {{time}}",
     "openToday": "Öppnar idag kl. {{time}}",
     "openOn": "Öppnar {{when}}",
-    "noteHead": "Något vi bör veta? (valfritt)",
-    "notePlaceholder": "T.ex. ingen rödlök, sås vid sidan",
+    "noteHead": "Övriga kommentarer",
+    "notePlaceholder": "T.ex. ingen rödlök",
     "paymentHeading": "Betalningsmetod",
     "payAtPickup": "Betala i kassan",
     "payAtPickupSub": "Betala vid upphämtning hos foodtrucken",
     "payOnline": "Betala online",
     "payOnlineSub": "Kort, Apple Pay och Google Pay via Stripe",
     "swish": "Swish",
+    "swishComingSoon": "Swish kommer snart",
     "comingSoon": "Kommer snart",
     "onlineDrinksOnly": "Onlinebetalning är tillgänglig när du beställer mat. Dryck kan betalas i kassan.",
     "infoHeading": "Betala i kassan när du hämtar",
@@ -590,7 +603,20 @@
     "baselineLabel": "Grundplan",
     "todayGoalRow": "Idag · {{dayType}}",
     "todayGoalFallbackDay": "Dagens mål",
-    "plannedToday": "Planerat idag: {{kcal}} kcal"
+    "plannedToday": "Planerat idag: {{kcal}} kcal",
+    "editProfile": "Redigera min profil",
+    "weightRow": "Vikt",
+    "weightRowCurrent": "Nuvarande: {{weight}} kg",
+    "weightRowDelta": "Nuvarande: {{weight}} kg ({{delta}} kg sedan förra uppdateringen)",
+    "weightRowEmpty": "Lägg in din vikt",
+    "weightEditHelp": "Din nya vikt sparas som aktuell grunddata och styr kalori- och målberäkningen direkt.",
+    "weightGoalTitle": "Uppdatera kalorimål?",
+    "weightGoalBody": "Du har idag {{current}} kcal som mål i din profil. Baserat på din nya vikt rekommenderar Nutri {{recommended}} kcal. Vill du uppdatera ditt kalorimål?",
+    "weightGoalUpdate": "Ja, uppdatera",
+    "weightGoalKeep": "Nej, behåll nuvarande",
+    "sectionBasics": "Personlig information",
+    "sectionActivity": "Aktivitet",
+    "sectionGoal": "Mål och tempo"
   },
   "orderHistory": {
     "title": "Orderhistorik",
@@ -633,7 +659,8 @@
     "adjustMacros": "Justera makros ({{diff}} kcal)",
     "noChanges": "Inga ändringar",
     "decreaseNamed": "Minska {{name}}",
-    "increaseNamed": "Öka {{name}}"
+    "increaseNamed": "Öka {{name}}",
+    "ofGoal": "av målet {{kcal}} kcal ({{pct}}%)"
   },
   "mealDetail": {
     "loading": "Laddar",
@@ -976,7 +1003,8 @@
       "toggleWeeklyHint": "Påminnelse när veckans snurr öppnar.",
       "toggleProfile": "Profilpåminnelser",
       "toggleProfileHint": "Enstaka påminnelser om att göra klart din profil.",
-      "updateError": "Kunde inte spara. Försök igen."
+      "updateError": "Kunde inte spara. Försök igen.",
+      "masterLabel": "Notiser"
     }
   },
   "locationStatus": {
@@ -1139,6 +1167,7 @@
     "rewardBadge": "INTJÄNAD",
     "rewardBody": "Din belöning väntar på dig. Möjlighet att använda den i checkout kommer snart.",
     "rewardValue": "Belöningen gäller en huvudmåltid upp till {{maxValue}}.",
+    "rewardValueInfo": "Belöningen gäller en huvudmåltid. Värdet beräknas när kortet är fullt och baseras på dina tio stämplar.",
     "errorTitle": "Kunde inte hämta stämpelkortet",
     "retry": "Försök igen",
     "unavailableTitle": "Stämpelkortet är inte tillgängligt än",
@@ -1241,5 +1270,36 @@
     "errorUnavailable": "Den valda smaken är inte tillgänglig just nu.",
     "errorOutOfStock": "Den valda smaken är slut. Välj en annan.",
     "errorInvalid": "GoWell kunde inte ingå i den här ordern."
+  },
+  "activeOrder": {
+    "title": "Aktiv beställning",
+    "titleNumbered": "Beställning #{{number}}",
+    "received": "Mottagen",
+    "inProgress": "Tillagas nu",
+    "ready": "Redo att hämtas!",
+    "awaitingPayment": "Väntar på betalning",
+    "eta": "ca {{minutes}} min",
+    "open": "Öppna orderstatus"
+  },
+  "water": {
+    "label": "Vatten",
+    "count": "{{glasses}} glas · {{ml}} ml",
+    "add": "Lägg till ett glas vatten",
+    "remove": "Ta bort ett glas vatten"
+  },
+  "foodReview": {
+    "title": "Hur smakade maten?",
+    "subtitle": "Berätta vad du tyckte om din senaste beställning.",
+    "subtitleMeal": "Berätta vad du tyckte om {{meal}}.",
+    "close": "Stäng",
+    "starLabel": "{{value}} av 5 stjärnor",
+    "commentPlaceholder": "Skriv en kommentar (valfritt)",
+    "anonymous": "Var anonym",
+    "marketing": "Nutri får använda mitt omdöme i marknadsföring",
+    "marketingHint": "Helt frivilligt och aldrig förvalt.",
+    "error": "Det gick inte att skicka just nu. Försök igen.",
+    "submit": "Skicka",
+    "sending": "Skickar…",
+    "notNow": "Inte nu"
   }
 }

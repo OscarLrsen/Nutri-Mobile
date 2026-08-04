@@ -1,5 +1,7 @@
 import type { ApiDrink } from "@/services/api/drinks";
+import type { AppLanguage } from "@/i18n/languages";
 import { colors } from "@/theme";
+import { drinkName } from "./drinkText";
 
 /**
  * GoWell flavour VISUAL identity — nothing else (patch 17B).
@@ -57,10 +59,16 @@ export function getGoWellVisual(drink: ApiDrink): GoWellFlavorVisual {
  * The flavour name to show on a card. GoWell products are named by flavour
  * ("Tropical"), so a "GoWell" prefix is stripped rather than repeated beside
  * the section heading that already says it.
+ *
+ * Takes the language because this is display text: a Danish app should read
+ * the Danish flavour name where the admin has written one. Note that
+ * getGoWellVisual above deliberately keeps keying on the Swedish `drink.name`
+ * — the accent colour must not move when someone adds a translation.
  */
-export function goWellFlavorLabel(drink: ApiDrink): string {
-  const withoutBrand = drink.name.trim().replace(/^gowell\s*/i, "").trim();
-  return withoutBrand.length > 0 ? withoutBrand : drink.name.trim();
+export function goWellFlavorLabel(drink: ApiDrink, language: AppLanguage): string {
+  const localized = drinkName(drink, language).trim();
+  const withoutBrand = localized.replace(/^gowell\s*/i, "").trim();
+  return withoutBrand.length > 0 ? withoutBrand : localized;
 }
 
 /** True when the drink can actually be handed over right now. */

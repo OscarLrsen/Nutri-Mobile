@@ -43,7 +43,7 @@ export function GoWellFlavorCard({
   const { language } = useLanguage();
   const visual = getGoWellVisual(drink);
   const inStock = isDrinkInStock(drink);
-  const label = goWellFlavorLabel(drink);
+  const label = goWellFlavorLabel(drink, language);
 
   const stateLabel = !inStock
     ? t("goWell.soldOut")
@@ -68,7 +68,10 @@ export function GoWellFlavorCard({
       accessibilityState={{ selected, disabled: !inStock }}
       accessibilityLabel={`${label}. ${stateLabel}`}
     >
-      <View style={[styles.imageWrap, { backgroundColor: visual.soft }]}>
+      {/* Release P9: the transparent bottle floats straight on the card —
+          the inner tinted box made it read as "ruta i ruta i ruta". The
+          flavour accent survives in the name and the selection border. */}
+      <View style={styles.imageWrap}>
         <Image
           source={drink.image || undefined}
           style={styles.image}
@@ -110,21 +113,21 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing[2],
+    padding: spacing[3],
     gap: spacing[2],
     // Comfortably above the 44pt minimum target on its own.
-    minHeight: 150,
+    minHeight: 198,
   },
   cardSoldOut: { opacity: 0.45 },
+  // Release P9: GoWell gets the visual priority — a taller, airier stage
+  // with NO background box behind the transparent bottle render.
   imageWrap: {
-    height: 84,
-    borderRadius: radius.btn,
+    height: 132,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
   },
   // contain, never cover: a bottle must not be cropped to fill the box.
-  image: { width: "72%", height: "82%" },
+  image: { width: "86%", height: "94%" },
   copy: { gap: 2, paddingHorizontal: 2, paddingBottom: 2 },
   name: { fontSize: 13, fontFamily: fontFamily.headlineSemibold, lineHeight: 17 },
   price: { fontSize: 12.5, color: colors.textSecondary },

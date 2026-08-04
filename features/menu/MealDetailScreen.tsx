@@ -16,8 +16,11 @@ import { getIngredients } from "@/services/api/ingredients";
 import { getStoreStatus } from "@/services/api/store";
 import { apiMealToMeal, CUSTOMER_SIZE_OPTIONS, previewMealPriceOre } from "@/utils/pricing";
 import { formatPriceKr } from "@/utils/money";
+import { getCalorieComparison } from "@/utils/calorieComparisons";
+import { sortIngredientsByAmount } from "@/utils/ingredientOrder";
 import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
+import { usePersonalizedMeal } from "./personalizedMenu";
 
 /**
  * Meal detail — mobile port of the web (customer)/meal/[id]/page.tsx,
@@ -41,6 +44,10 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  */
 
 const LOW_STOCK_THRESHOLD = 3;
+
+/** The sticky header bar below the safe-area inset: 36pt buttons +
+ * spacing[2] bottom padding — the height the hero must own (P24). */
+const HEADER_BAR_HEIGHT = 44;
 
 export function MealDetailScreen() {
   const { t } = useTranslation();
@@ -115,15 +122,39 @@ export function MealDetailScreen() {
   const sizeDef =
     CUSTOMER_SIZE_OPTIONS.find((s) => s.id === effectiveSize) ?? CUSTOMER_SIZE_OPTIONS[0];
 
+  // ── The personally computed meal, per size ───────────────────────────
+  //
+  // Both customer sizes are computed through the SAME engine the Anpassar
+  // wizard used (optimizer grams → backend /custom-meal/calculate for
+  // nutrition and öre-precise price), so switching M/L updates grams,
+  // macros and price consistently from the server — never a local UI
+  // multiplication of the personal numbers.
+  const personalMedium = usePersonalizedMeal(meal, "medium");
+  const personalLarge = usePersonalizedMeal(meal, "large");
+  const personal = effectiveSize === "large" ? personalLarge : personalMedium;
+  const personalData = personal.status === "ready" ? personal.data : null;
+  const personalFor = (sizeId: string) => {
+    const state = sizeId === "large" ? personalLarge : personalMedium;
+    return state.status === "ready" ? state.data : null;
+  };
+
   const macros = useMemo(() => {
     if (!meal) return null;
+    if (personalData) {
+      return {
+        calories: Math.round(personalData.calc.totalKcal),
+        proteinG: Math.round(personalData.calc.totalProteinG),
+        carbsG: Math.round(personalData.calc.totalCarbsG),
+        fatG: Math.round(personalData.calc.totalFatG),
+      };
+    }
     return {
       calories: Math.round(meal.macros.calories * sizeDef.macroMultiplier),
       proteinG: Math.round(meal.macros.proteinG * sizeDef.macroMultiplier),
       carbsG: Math.round(meal.macros.carbsG * sizeDef.macroMultiplier),
       fatG: Math.round(meal.macros.fatG * sizeDef.macroMultiplier),
     };
-  }, [meal, sizeDef]);
+  }, [meal, sizeDef, personalData]);
 
   const totalGramsBase = useMemo(
     () => (meal ? meal.ingredients.reduce((sum, ing) => sum + (ing.amountG ?? 0), 0) : 0),
@@ -143,7 +174,12 @@ export function MealDetailScreen() {
   }, [meal, ingredientsQuery.data]);
 
   // Öre all the way; formatted only at render (web computes the same product).
-  const totalOre = meal ? previewMealPriceOre(meal.basePrice, sizeDef.priceMultiplier) * quantity : 0;
+  // The personal price (backend-computed) wins whenever it exists.
+  const totalOre = meal
+    ? (personalData
+        ? personalData.calc.totalPriceOre
+        : previewMealPriceOre(meal.basePrice, sizeDef.priceMultiplier)) * quantity
+    : 0;
 
   const selected = stockBySize[effectiveSize as "medium" | "large"] ?? { soldOut: false, count: null };
   const showLowStock =
@@ -156,7 +192,34 @@ export function MealDetailScreen() {
   // Same guard + call + 1.8s confirmation as the web page's handleAdd.
   const handleAdd = () => {
     if (!meal || stockLocked) return;
-    addItem(apiMealToMeal(meal), effectiveSize, quantity);
+    if (personalData) {
+      // The tailored handoff the Anpassar wizard used: server macros and
+      // grams, surcharge reconciling to the server's öre price. The order
+      // endpoint recomputes and validates the price server-side.
+      addItem(
+        apiMealToMeal(meal),
+        "medium",
+        quantity,
+        {
+          calories: Math.round(personalData.calc.totalKcal),
+          proteinG: Math.round(personalData.calc.totalProteinG),
+          carbsG: Math.round(personalData.calc.totalCarbsG),
+          fatG: Math.round(personalData.calc.totalFatG),
+          fiberG: Math.round(personalData.calc.totalFiberG),
+        },
+        personalData.ingredients.map((ing) => ({
+          ingredientId: ing.ingredientId,
+          name: ing.name,
+          amountG: ing.amountG,
+        })),
+        personalData.surchargeKr,
+        personalData.containerTypeId,
+        undefined,
+        meal.name,
+      );
+    } else {
+      addItem(apiMealToMeal(meal), effectiveSize, quantity);
+    }
     setAdded(true);
     if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
     addedTimerRef.current = setTimeout(() => setAdded(false), 1800);
@@ -184,6 +247,16 @@ export function MealDetailScreen() {
   }
 
   const showImage = !imageFailed && meal.image.trim().length > 0;
+
+  // The website's pedagogical calorie comparison, verbatim logic (P26) —
+  // seeded by the meal id so the line is stable per dish, never random per
+  // render.
+  const comparison = getCalorieComparison(
+    macros?.calories ?? 0,
+    macros?.proteinG,
+    meal.id,
+    language,
+  );
 
   return (
     <View style={styles.root}>
@@ -214,8 +287,16 @@ export function MealDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}>
-        {/* ── Hero image ── */}
-        <View style={styles.hero}>
+        {/* ── Hero image ──
+            Release P24: the hero owns the header's height explicitly
+            (insets.top + the 44pt bar) instead of silently losing its top
+            to the absolute header — that mismatch was the "image sits too
+            high and glitches" report. The image still bleeds behind the
+            translucent bar by design, but the VISIBLE portion is now a
+            stable 240pt on every device, the badge clears the bar, and the
+            placeholder keeps the exact same box so loading never shifts
+            layout. */}
+        <View style={[styles.hero, { height: 240 + insets.top + HEADER_BAR_HEIGHT }]}>
           {showImage ? (
             <Image
               source={{ uri: meal.image }}
@@ -236,7 +317,7 @@ export function MealDetailScreen() {
             pointerEvents="none"
           />
           {meal.badgeText ? (
-            <View style={styles.badge}>
+            <View style={[styles.badge, { top: insets.top + HEADER_BAR_HEIGHT + spacing[3] }]}>
               <ThemedText style={styles.badgeText}>{meal.badgeText.toUpperCase()}</ThemedText>
             </View>
           ) : null}
@@ -278,10 +359,21 @@ export function MealDetailScreen() {
             {isFixed
               ? t("mealDetail.nutrition")
               : `${t("mealDetail.nutrition")} · ${t(`mealDetail.sizeNames.${effectiveSize}`, { defaultValue: effectiveSize })}`}
-            {totalGramsBase > 0
-              ? ` (${Math.round(totalGramsBase * sizeDef.macroMultiplier)}g)`
-              : ""}
+            {personalData
+              ? ` (${personalData.calc.totalWeightGrams}g)`
+              : totalGramsBase > 0
+                ? ` (${Math.round(totalGramsBase * sizeDef.macroMultiplier)}g)`
+                : ""}
           </SectionHead>
+          {personalData ? (
+            <ThemedText variant="caption" style={styles.personalNote}>
+              {t("menu.personal.yourPortionSub")}
+            </ThemedText>
+          ) : personal.status === "error" ? (
+            <ThemedText variant="caption" style={styles.personalErrorNote}>
+              {t("menu.personal.calcError")} {t("menu.personal.staticPriceNote")}
+            </ThemedText>
+          ) : null}
           <View style={styles.macroGrid}>
             {[
               { val: macros?.proteinG ?? 0, unit: "g", label: t("mealDetail.macroProtein"), hi: true },
@@ -299,6 +391,13 @@ export function MealDetailScreen() {
             ))}
           </View>
 
+          {/* ── The website's calorie comparison (P26) ── */}
+          {comparison ? (
+            <ThemedText variant="caption" style={styles.comparison}>
+              {comparison}
+            </ThemedText>
+          ) : null}
+
           {/* ── Size selector (radio rows) — hidden for fixed-portion meals ── */}
           {!isFixed && (
             <>
@@ -312,9 +411,17 @@ export function MealDetailScreen() {
                   const sCount = sStock?.count ?? null;
                   const sShowLow =
                     !sSoldOut && sCount !== null && sCount > 0 && sCount <= LOW_STOCK_THRESHOLD;
-                  const sizePriceOre = previewMealPriceOre(meal.basePrice, s.priceMultiplier);
-                  const sizeGrams =
-                    totalGramsBase > 0 ? `${Math.round(totalGramsBase * s.macroMultiplier)}g` : null;
+                  // The personally computed price/weight for THIS size when
+                  // the engine has it — the static preview only otherwise.
+                  const sizePersonal = personalFor(s.id);
+                  const sizePriceOre = sizePersonal
+                    ? sizePersonal.calc.totalPriceOre
+                    : previewMealPriceOre(meal.basePrice, s.priceMultiplier);
+                  const sizeGrams = sizePersonal
+                    ? `${sizePersonal.calc.totalWeightGrams}g`
+                    : totalGramsBase > 0
+                      ? `${Math.round(totalGramsBase * s.macroMultiplier)}g`
+                      : null;
                   const sizeName = t(`mealDetail.sizeNames.${s.id}`, { defaultValue: s.label });
                   return (
                     <Pressable
@@ -374,18 +481,41 @@ export function MealDetailScreen() {
             </>
           )}
 
-          {/* ── Ingredients ── */}
+          {/* ── Ingredients ──
+              Personal mode shows THE CUSTOMER'S portion: the exact grams the
+              engine computed for their target (the same amounts the order
+              line will snapshot) — never the recipe defaults relabelled. */}
           {meal.ingredients.length > 0 && (
             <>
               <Divider />
-              <SectionHead>{t("mealDetail.ingredients")}</SectionHead>
+              <SectionHead>
+                {personalData ? t("menu.personal.yourPortion") : t("mealDetail.ingredients")}
+              </SectionHead>
               <View>
-                {meal.ingredients.map((ing, i) => (
+                {/* Amounts are resolved to what is DISPLAYED (personal grams,
+                    or the recipe scaled to the chosen size) before sorting, so
+                    the order always matches the numbers on screen and an M/L
+                    switch reorders the list by itself. */}
+                {sortIngredientsByAmount(
+                  personalData
+                    ? personalData.ingredients.map((ing) => ({
+                        name: ing.name,
+                        amountG: ing.amountG,
+                      }))
+                    : meal.ingredients.map((ing) => ({
+                        name: ing.name,
+                        amountG:
+                          ing.amountG > 0
+                            ? Math.round(ing.amountG * sizeDef.macroMultiplier)
+                            : ing.amountG,
+                      })),
+                  language,
+                ).map((ing, i, rows) => (
                   <View
                     key={`${ing.name}-${i}`}
                     style={[
                       styles.ingredientRow,
-                      i < meal.ingredients.length - 1 && styles.ingredientRowBorder,
+                      i < rows.length - 1 && styles.ingredientRowBorder,
                     ]}
                   >
                     <View style={styles.ingredientDot} />
@@ -394,7 +524,7 @@ export function MealDetailScreen() {
                       {ing.amountG > 0 ? (
                         <ThemedText variant="caption" style={styles.ingredientGrams}>
                           {"  —  "}
-                          {Math.round(ing.amountG * sizeDef.macroMultiplier)}g
+                          {ing.amountG}g
                         </ThemedText>
                       ) : null}
                     </ThemedText>
@@ -538,13 +668,14 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     color: colors.textPrimary,
   },
-  hero: { height: 260, backgroundColor: "#1A1A1A" },
+  // Height set inline: 240 + safe-area inset + the header bar (P24).
+  hero: { backgroundColor: "#1A1A1A" },
   heroPlaceholder: { flex: 1, alignItems: "center", justifyContent: "center" },
   heroGradient: { position: "absolute", left: 0, right: 0, bottom: 0, height: 100 },
+  // top set inline so the badge always clears the header bar (P24).
   badge: {
     position: "absolute",
     left: spacing[3],
-    top: 100,
     backgroundColor: "rgba(232,101,10,0.92)",
     borderRadius: radius.chip,
     paddingHorizontal: 8,
@@ -559,6 +690,12 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: spacing[5], paddingTop: spacing[4] },
   title: { fontSize: 22, fontFamily: fontFamily.bodyBold, color: colors.textPrimary, letterSpacing: -0.5 },
   description: { marginTop: 5, fontSize: 13, lineHeight: 18, color: "rgba(255,255,255,0.38)" },
+  comparison: {
+    marginTop: spacing[2],
+    fontStyle: "italic",
+    color: colors.textSecondary,
+    lineHeight: 17,
+  },
   compactMacroRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing[2] },
   compactMacro: { fontFamily: fontFamily.mono, fontSize: 12.5, color: "rgba(255,255,255,0.38)" },
   compactDot: { color: "rgba(255,255,255,0.3)", fontSize: 12 },
@@ -629,6 +766,8 @@ const styles = StyleSheet.create({
   ingredientGrams: { color: "rgba(255,255,255,0.25)", fontFamily: fontFamily.body, fontSize: 11.5 },
   allergenLine: { marginTop: spacing[3], color: "rgba(232,200,80,0.60)", fontSize: 11 },
   allergyNote: { marginTop: spacing[2], fontStyle: "italic", color: colors.textMuted, fontSize: 11 },
+  personalNote: { color: colors.textSecondary, fontSize: 11, lineHeight: 15, marginTop: 2 },
+  personalErrorNote: { color: "#ffb759", fontSize: 11, lineHeight: 15, marginTop: 2 },
   bottomBar: {
     position: "absolute",
     left: 0,

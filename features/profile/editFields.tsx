@@ -1,14 +1,52 @@
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import {
+  InputAccessoryView,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
 import { Check } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 
 /**
  * Shared edit-modal fields — ports of the web profile page's EditNumField /
  * EditOptionGroup / option-row buttons (same select styling: orange border +
  * tinted background + check marker on the active option).
+ *
+ * KEYBOARD DISMISSAL (release P8): the iOS numeric pad has NO return key,
+ * so every numeric field attaches a shared "Klar" accessory bar above the
+ * keyboard; Android gets returnKeyType="done" + dismissal on submit. The
+ * keyboard could previously only be closed by luck.
  */
+
+const NUMERIC_ACCESSORY_ID = "nutri-numeric-done";
+
+/** Mounted once per screen that hosts numeric fields (iOS only). */
+export function NumericDoneBar() {
+  const { t } = useTranslation();
+
+  if (Platform.OS !== "ios") return null;
+
+  return (
+    <InputAccessoryView nativeID={NUMERIC_ACCESSORY_ID}>
+      <View style={styles.accessoryBar}>
+        <Pressable
+          onPress={() => Keyboard.dismiss()}
+          accessibilityRole="button"
+          accessibilityLabel={t("common.done")}
+          style={({ pressed }) => [styles.accessoryDone, pressed && { opacity: 0.7 }]}
+        >
+          <ThemedText style={styles.accessoryDoneText}>{t("common.done")}</ThemedText>
+        </Pressable>
+      </View>
+    </InputAccessoryView>
+  );
+}
 
 export function FieldLabel({
   children,
@@ -52,6 +90,9 @@ export function EditNumField({
           placeholder={placeholder}
           placeholderTextColor="#4E4A46"
           keyboardType="numeric"
+          returnKeyType="done"
+          onSubmitEditing={() => Keyboard.dismiss()}
+          inputAccessoryViewID={Platform.OS === "ios" ? NUMERIC_ACCESSORY_ID : undefined}
           style={styles.input}
         />
         <ThemedText style={styles.unit}>{unit}</ThemedText>
@@ -178,6 +219,21 @@ export function PillPair({
 
 const styles = StyleSheet.create({
   fieldWrap: { gap: 6 },
+  accessoryBar: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    backgroundColor: "#1C1C1E",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.12)",
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+  },
+  accessoryDone: { paddingHorizontal: spacing[3], paddingVertical: spacing[1] },
+  accessoryDoneText: {
+    fontSize: 15,
+    fontFamily: fontFamily.bodySemibold,
+    color: colors.accent,
+  },
   fieldLabel: { fontSize: 14, fontFamily: fontFamily.bodyMedium, color: "#8A8480" },
   optional: { fontSize: 12, fontFamily: fontFamily.body, color: "#4E4A46" },
   helper: { fontSize: 12, lineHeight: 16, color: "rgba(255,255,255,0.4)" },

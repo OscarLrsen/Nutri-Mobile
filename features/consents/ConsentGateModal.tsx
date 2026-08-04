@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { Linking, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { acceptMandatoryConsents, getMyConsents } from "@/services/api/consents";
-import { env } from "@/lib/env";
-import { useTranslation } from "@/i18n";
+import { openPolicy } from "@/utils/webUrls";
+import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 
 /**
@@ -28,6 +28,7 @@ import { colors, fontFamily, spacing } from "@/theme";
 export function ConsentGateModal() {
   const { user, signOut } = useAuth();
   const { t } = useTranslation();
+  const { language } = useLanguage();
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState(false);
 
@@ -70,7 +71,7 @@ export function ConsentGateModal() {
                 {t("auth.termsAcceptPrefix")}
                 <ThemedText
                   style={[styles.consentLabel, styles.consentLink]}
-                  onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/kopvillkor`)}
+                  onPress={() => void openPolicy("kopvillkor", language)}
                   accessibilityRole="link"
                 >
                   {t("auth.termsLinkText")}
@@ -78,7 +79,7 @@ export function ConsentGateModal() {
                 {t("auth.termsAnd")}
                 <ThemedText
                   style={[styles.consentLabel, styles.consentLink]}
-                  onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/integritet`)}
+                  onPress={() => void openPolicy("integritet", language)}
                   accessibilityRole="link"
                 >
                   {t("auth.privacyLinkText")}

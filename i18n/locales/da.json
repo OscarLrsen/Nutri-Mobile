@@ -17,7 +17,8 @@
     "tabHome": "Hjem",
     "tabMenu": "Menu",
     "tabCart": "Kurv",
-    "tabAccount": "Mine sider"
+    "tabAccount": "Mine sider",
+    "done": "Færdig"
   },
   "hero": {
     "headline1": "Hele råvarer.",
@@ -77,7 +78,10 @@
     "locationAria": "Dagens sted: {{location}}. {{status}}",
     "comingSoonBadge": "Kommer snart",
     "foodLogTeaserTitle": "Registrér mad uden for Nutri",
-    "foodLogTeaserBody": "Snart kan du tilføje kalorier og makroer fra anden mad og få et komplet overblik over hele dagen."
+    "foodLogTeaserBody": "Snart kan du tilføje kalorier og makroer fra anden mad og få et komplet overblik over hele dagen.",
+    "todayHead": "I dag",
+    "pointsPill": "{{points}} Nutri Points",
+    "nextActionOrder": "Bestil dagens måltid"
   },
   "menu": {
     "categories": {
@@ -110,6 +114,11 @@
     },
     "personal": {
       "title": "Din personlige menu",
+      "personalBadge": "Tilpasset til dig",
+      "calcError": "Kunne ikke hente din personlige portion lige nu.",
+      "staticPriceNote": "Normal pris vises.",
+      "yourPortion": "Din portion",
+      "yourPortionSub": "Mængderne er beregnet efter dit mål og din dag.",
       "subtitle": "Baseret på din profil, dine mål og hvad du har tilbage i dag.",
       "profileGap": "Udfyld din profil for at få personlige portioner.",
       "profileGapCta": "Udfyld profil",
@@ -182,6 +191,9 @@
   },
   "cart": {
     "title": "Kurv",
+    "toastAdded": "Tilføjet til kurven",
+    "toastAddedNamed": "{{name}} tilføjet til kurven",
+    "toastAddFailed": "Kunne ikke føjes til kurven",
     "countMeal_one": "{{count}} ret",
     "countMeal_other": "{{count}} retter",
     "countDrink_one": "{{count}} drik",
@@ -208,14 +220,15 @@
     "openAt": "Vi åbner kl. {{time}}",
     "openToday": "Åbner i dag kl. {{time}}",
     "openOn": "Åbner {{when}}",
-    "noteHead": "Noget vi bør vide? (valgfrit)",
-    "notePlaceholder": "F.eks. ingen rødløg, sauce ved siden af",
+    "noteHead": "Øvrige kommentarer",
+    "notePlaceholder": "F.eks. ingen rødløg",
     "paymentHeading": "Betalingsmetode",
     "payAtPickup": "Betal ved kassen",
     "payAtPickupSub": "Betal ved afhentning hos food trucken",
     "payOnline": "Betal online",
     "payOnlineSub": "Kort, Apple Pay og Google Pay via Stripe",
     "swish": "Swish",
+    "swishComingSoon": "Swish kommer snart",
     "comingSoon": "Kommer snart",
     "onlineDrinksOnly": "Onlinebetaling er tilgængelig, når du bestiller mad. Drikke kan betales ved kassen.",
     "infoHeading": "Betal ved kassen, når du henter",
@@ -590,7 +603,20 @@
     "baselineLabel": "Grundplan",
     "todayGoalRow": "I dag · {{dayType}}",
     "todayGoalFallbackDay": "Dagens mål",
-    "plannedToday": "Planlagt i dag: {{kcal}} kcal"
+    "plannedToday": "Planlagt i dag: {{kcal}} kcal",
+    "editProfile": "Rediger min profil",
+    "weightRow": "Vægt",
+    "weightRowCurrent": "Nuværende: {{weight}} kg",
+    "weightRowDelta": "Nuværende: {{weight}} kg ({{delta}} kg siden sidst)",
+    "weightRowEmpty": "Tilføj din vægt",
+    "weightEditHelp": "Din nye vægt gemmes som aktuel basisdata og styrer kalorie- og målberegningen med det samme.",
+    "weightGoalTitle": "Opdater kaloriemål?",
+    "weightGoalBody": "Din profil har i dag et mål på {{current}} kcal. Baseret på din nye vægt anbefaler Nutri {{recommended}} kcal. Vil du opdatere dit kaloriemål?",
+    "weightGoalUpdate": "Ja, opdater",
+    "weightGoalKeep": "Nej, behold nuværende",
+    "sectionBasics": "Personlige oplysninger",
+    "sectionActivity": "Aktivitet",
+    "sectionGoal": "Mål og tempo"
   },
   "orderHistory": {
     "title": "Ordrehistorik",
@@ -633,7 +659,8 @@
     "adjustMacros": "Justér makroer ({{diff}} kcal)",
     "noChanges": "Ingen ændringer",
     "decreaseNamed": "Reducér {{name}}",
-    "increaseNamed": "Forøg {{name}}"
+    "increaseNamed": "Forøg {{name}}",
+    "ofGoal": "af målet {{kcal}} kcal ({{pct}}%)"
   },
   "mealDetail": {
     "loading": "Indlæser",
@@ -976,7 +1003,8 @@
       "toggleWeeklyHint": "En påmindelse, når ugens hjul åbner.",
       "toggleProfile": "Profilpåmindelser",
       "toggleProfileHint": "Lejlighedsvise påmindelser om at færdiggøre din profil.",
-      "updateError": "Kunne ikke gemme. Prøv igen."
+      "updateError": "Kunne ikke gemme. Prøv igen.",
+      "masterLabel": "Notifikationer"
     }
   },
   "locationStatus": {
@@ -1139,6 +1167,7 @@
     "rewardBadge": "OPTJENT",
     "rewardBody": "Din belønning venter på dig. Du kan snart bruge den i checkout.",
     "rewardValue": "Belønningen dækker ét hovedmåltid op til {{maxValue}}.",
+    "rewardValueInfo": "Belønningen dækker ét hovedmåltid. Værdien beregnes, når dit kort er fuldt, baseret på dine ti stempler.",
     "errorTitle": "Kunne ikke hente dit stempelkort",
     "retry": "Prøv igen",
     "unavailableTitle": "Stempelkortet er ikke tilgængeligt endnu",
@@ -1241,5 +1270,36 @@
     "errorUnavailable": "Den smag er ikke tilgængelig lige nu.",
     "errorOutOfStock": "Den smag er udsolgt. Vælg en anden.",
     "errorInvalid": "GoWell kunne ikke inkluderes i denne ordre."
+  },
+  "activeOrder": {
+    "title": "Aktiv bestilling",
+    "titleNumbered": "Bestilling #{{number}}",
+    "received": "Modtaget",
+    "inProgress": "Tilberedes nu",
+    "ready": "Klar til afhentning!",
+    "awaitingPayment": "Afventer betaling",
+    "eta": "ca. {{minutes}} min",
+    "open": "Åbn ordrestatus"
+  },
+  "water": {
+    "label": "Vand",
+    "count": "{{glasses}} glas · {{ml}} ml",
+    "add": "Tilføj et glas vand",
+    "remove": "Fjern et glas vand"
+  },
+  "foodReview": {
+    "title": "Hvordan smagte maden?",
+    "subtitle": "Fortæl os, hvad du syntes om din seneste bestilling.",
+    "subtitleMeal": "Fortæl os, hvad du syntes om {{meal}}.",
+    "close": "Luk",
+    "starLabel": "{{value}} af 5 stjerner",
+    "commentPlaceholder": "Skriv en kommentar (valgfrit)",
+    "anonymous": "Vær anonym",
+    "marketing": "Nutri må bruge min anmeldelse i markedsføring",
+    "marketingHint": "Helt frivilligt og aldrig forudvalgt.",
+    "error": "Kunne ikke sende lige nu. Prøv igen.",
+    "submit": "Send",
+    "sending": "Sender…",
+    "notNow": "Ikke nu"
   }
 }

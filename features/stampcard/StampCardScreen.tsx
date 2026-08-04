@@ -71,7 +71,7 @@ export function StampCardScreen() {
           // the Home card: last known truth beats an error panel.
           <>
             <ProgressCard status={status} />
-            <RulesCard maxValueOre={status.maxValueOre} />
+            <RulesCard />
             <HistorySection
               entries={historyQuery.data?.entries ?? []}
               rewards={historyQuery.data?.rewards ?? []}
@@ -109,8 +109,14 @@ function ProgressCard({
   status: NonNullable<ReturnType<typeof useStampCardStatusQuery>["data"]>;
 }) {
   const { t } = useTranslation();
-  const { currentStamps, stampsRequired, stampsRemaining, availableRewards, maxValueOre } = status;
-  const maxValue = useFormattedPrice(maxValueOre);
+  const { currentStamps, stampsRequired, stampsRemaining, availableRewards } = status;
+  // THE REWARD'S OWN SNAPSHOT, not the admin default. Each completed card
+  // stores the value computed from ITS ten stamps (backend is the price
+  // authority); the global setting is only the fallback for responses that
+  // predate the per-reward field. A legacy reward whose snapshot IS 149 kr
+  // still shows 149 kr — that is its truth.
+  const rewardSnapshotOre = status.availableRewardList?.[0]?.maxValueOre ?? status.maxValueOre;
+  const maxValue = useFormattedPrice(rewardSnapshotOre);
   const hasReward = availableRewards > 0;
   const isFirstCard = currentStamps === 0 && !hasReward;
 
@@ -168,16 +174,15 @@ function ProgressCard({
   );
 }
 
-/** Öre → kronor through the shared helper. The cap is admin-controlled
- * server-side and must never be hardcoded in copy. */
+/** Öre → kronor through the shared helper. The value is server-owned and
+ * must never be hardcoded in copy. */
 function useFormattedPrice(ore: number): string {
   const { language } = useLanguage();
   return formatPriceKr(ore, language);
 }
 
-function RulesCard({ maxValueOre }: { maxValueOre: number }) {
+function RulesCard() {
   const { t } = useTranslation();
-  const maxValue = useFormattedPrice(maxValueOre);
 
   const rules = [
     t("stampCard.ruleMeals"),
@@ -194,8 +199,11 @@ function RulesCard({ maxValueOre }: { maxValueOre: number }) {
       <ThemedText accessibilityRole="header" style={styles.sectionTitle}>
         {t("stampCard.howItWorksTitle")}
       </ThemedText>
+      {/* No exact amount here: an IN-PROGRESS card's personal value does not
+          exist yet — it is computed from the ten stamps when the card
+          completes. The completed reward above shows its own snapshot. */}
       <ThemedText style={styles.body}>{t("stampCard.howItWorksBody")}</ThemedText>
-      <ThemedText style={styles.body}>{t("stampCard.rewardValue", { maxValue })}</ThemedText>
+      <ThemedText style={styles.body}>{t("stampCard.rewardValueInfo")}</ThemedText>
 
       <View style={styles.rules}>
         {rules.map((rule) => (

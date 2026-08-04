@@ -26,6 +26,14 @@ import {
 import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
 import { PushPrePromptCard } from "@/features/push/PushPrePromptCard";
+import { OnboardingSurveyOverlay } from "@/features/survey/OnboardingSurveyOverlay";
+import {
+  estimateWaitMinutes,
+  isTerminal,
+  stepIndex,
+  toCustomerStatus,
+  type CustomerStatus,
+} from "@/features/order/orderStatusShared";
 import { useCart } from "@/context/CartContext";
 import { getOrderById, type ApiOrder } from "@/services/api/orders";
 import { STAMP_CARD_QUERY_ROOT } from "@/services/api/stampCardQueries";
@@ -69,63 +77,8 @@ import { colors, fontFamily, spacing } from "@/theme";
  * shown in the summary card. The web page displays neither.
  */
 
-/* ── Status helpers (verbatim web ports) ── */
-
-type CustomerStatus =
-  | "awaiting_payment"
-  | "created"
-  | "inprogress"
-  | "ready"
-  | "completed"
-  | "cancelled"
-  | "expired"
-  | "terminal";
-
-function toCustomerStatus(s: string): CustomerStatus {
-  switch (s.toLowerCase()) {
-    case "pendingpayment":
-      return "awaiting_payment";
-    case "pending":
-      return "created";
-    case "confirmed":
-    case "preparing":
-      return "inprogress";
-    case "ready":
-      return "ready";
-    case "delivered":
-      return "completed";
-    case "cancelled":
-    case "canceled":
-      return "cancelled";
-    case "expired":
-      return "expired";
-    default:
-      return "terminal";
-  }
-}
-
-const KITCHEN_STATUSES = ["created", "inprogress", "ready"] as const;
-function stepIndex(s: CustomerStatus) {
-  return KITCHEN_STATUSES.indexOf(s as (typeof KITCHEN_STATUSES)[number]);
-}
-
-function isTerminal(cs: CustomerStatus) {
-  return cs === "terminal" || cs === "expired" || cs === "completed" || cs === "cancelled";
-}
-
-/** Rough customer-facing wait estimate per state (verbatim web values). */
-function estimateWaitMinutes(cs: CustomerStatus): number | null {
-  switch (cs) {
-    case "created":
-      return 12;
-    case "inprogress":
-      return 5;
-    case "ready":
-      return null;
-    default:
-      return null;
-  }
-}
+/* ── Status helpers — moved to orderStatusShared.ts, shared with the
+      active-order banner so the two can never drift ── */
 
 function sizeLabel(size: string, t: TFunction): string {
   return t(`orderStatus.sizeNames.${size.toLowerCase()}`, { defaultValue: size });
@@ -265,7 +218,18 @@ export function OrderStatusScreen() {
   const cs = toCustomerStatus(order.status);
 
   if (cs === "created" || cs === "inprogress" || cs === "ready") {
-    return <OrderActiveView order={order} fetchError={fetchError} />;
+    return (
+      <>
+        <OrderActiveView order={order} fetchError={fetchError} />
+        {/* Release change: the onboarding survey moved from app start to the
+            wait after the FIRST order. Mounted only on the active views, so
+            it can never appear before an order exists; its own server-truth
+            gating (shouldShow) makes it one-time — and finishing it simply
+            unmounts the overlay, landing the customer right back here on the
+            live order status. */}
+        <OnboardingSurveyOverlay />
+      </>
+    );
   }
   if (cs === "completed") {
     return <OrderCompletedView order={order} />;

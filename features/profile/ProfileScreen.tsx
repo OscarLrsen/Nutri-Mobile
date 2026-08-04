@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Linking, Modal, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,9 +11,11 @@ import { useAuth } from "@/services/auth/AuthProvider";
 import { useOnboardingStatus } from "@/services/auth/useOnboardingStatus";
 import { supabase } from "@/services/auth/supabase";
 import {
+  deleteMacroOverride,
   getNutritionProfile,
   getNutritionResult,
   previewNutritionResult,
+  upsertMacroOverride,
   upsertNutritionProfile,
   type ApiNutritionProfile,
   type ApiNutritionResult,
@@ -34,9 +36,11 @@ import {
   deriveActiveDailyNutrition,
   plannedDeviatesFromTarget,
 } from "@/features/nutrition/activeDailyNutrition";
-import { env } from "@/lib/env";
-import { ACTIVE_ORDER_KEY } from "@/utils/activeOrder";
+
 import { deriveDisplayName, deriveInitials } from "@/utils/displayName";
+import { openPolicy } from "@/utils/webUrls";
+import { ActiveOrderBanner } from "@/features/order/ActiveOrderBanner";
+import { TRAINING_DAYS_ENABLED } from "./featureFlags";
 import { LanguagePickerSheet } from "@/components/language/LanguagePickerSheet";
 import { SUPPORTED_LANGUAGES, formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
@@ -112,6 +116,13 @@ function formFromProfile(np: ApiNutritionProfile): ProfileFormState {
   };
 }
 
+/**
+ * How far Nutri's recalculated recommendation must move before the weight
+ * dialog asks about it. The engine rounds targets to 10 kcal, so tiny
+ * fluctuations below this are noise, not a decision the customer should make.
+ */
+const CALORIE_SUGGESTION_THRESHOLD_KCAL = 50;
+
 function buildDtoFromStoredProfile(np: ApiNutritionProfile): UpsertNutritionProfileDto {
   return {
     gender: np.gender,
@@ -167,6 +178,23 @@ export function ProfileScreen() {
   const [showOrders, setShowOrders] = useState(false);
   const [planFocus, setPlanFocus] = useState<string>("balance");
 
+  // Release P14: the previous weight, for the "senaste förändring" line.
+  // Device-local — the backend keeps no weight history.
+  const [prevWeight, setPrevWeight] = useState<number | null>(null);
+  useEffect(() => {
+    if (!user) {
+      setPrevWeight(null);
+      return;
+    }
+    AsyncStorage.getItem(`nutri_weight_prev_${user.id}`)
+      .then((stored) => {
+        if (!stored) return;
+        const parsed = JSON.parse(stored) as { weightKg?: number };
+        if (typeof parsed.weightKg === "number") setPrevWeight(parsed.weightKg);
+      })
+      .catch(() => {});
+  }, [user]);
+
   // ── Weekly schedule state ──
   const [weeklySchedule, setWeeklySchedule] = useState<WeeklyScheduleDto[] | null>(null);
   const [weeklyScheduleLoading, setWeeklyScheduleLoading] = useState(false);
@@ -180,7 +208,10 @@ export function ProfileScreen() {
       weightKg: parseFloat(form.weightKg) || 0,
       heightCm: parseInt(form.heightCm) || 0,
       bodyFatLevel: form.bodyFatLevel,
-      targetWeightKg: null,
+      // Release P14: PRESERVE any stored goal weight — the old hard-coded
+      // null silently wiped it on every save. Current weight and goal weight
+      // are separate facts; only the current one is edited here.
+      targetWeightKg: nutritionProfile?.targetWeightKg ?? null,
       activityType: form.activityType,
       stepsRange: form.stepsRange,
       trainingSessions: form.trainingSessions,
@@ -190,7 +221,7 @@ export function ProfileScreen() {
       mealCountSnacks: 1,
       planFocus: PLAN_FOCUS_MAP[planFocus] ?? "Balance",
     }),
-    [form, planFocus]
+    [form, planFocus, nutritionProfile]
   );
 
   // Patch 13: reloadResult is now ALSO triggered by the shared nutrition
@@ -319,7 +350,9 @@ export function ProfileScreen() {
   const saveEdit = async () => {
     setSaving(true);
     setSaveError("");
-    if (editing === "grunddata") {
+    // Every section that carries the basic numbers validates them — the
+    // combined page (P13) and the weight quick-edit (P14) included.
+    if (editing === "grunddata" || editing === "profil" || editing === "vikt") {
       const age = parseInt(form.ageYears);
       const weight = parseFloat(form.weightKg);
       const height = parseInt(form.heightCm);
@@ -334,12 +367,34 @@ export function ProfileScreen() {
       }
     }
     try {
+      const previousWeight = nutritionProfile?.weightKg ?? null;
+      // The goal the customer actually had SAVED before this change —
+      // override-applied. Captured here because reloadResult below replaces
+      // the state with the post-change numbers.
+      const previousResult = nutritionResult;
+      const wasIncomplete = isOnboardingComplete !== true;
       const updated = await upsertNutritionProfile(buildDto());
       setNutritionProfile(updated);
       setPlanFocus(mapPlanFocusBack(updated.planFocus));
       // Patch 13: a profile change alters today's goal — refresh every
       // shared nutrition query so Home/Meny/Planera din dag follow.
       void queryClient.invalidateQueries({ queryKey: ["nutrition"] });
+
+      // Release P14: remember the OLD weight when it changed, so the weight
+      // row can show a simple "senaste förändring" — device-local because
+      // the backend keeps no weight history (documented limitation).
+      if (
+        user &&
+        previousWeight !== null &&
+        Math.abs(updated.weightKg - previousWeight) >= 0.1
+      ) {
+        setPrevWeight(previousWeight);
+        void AsyncStorage.setItem(
+          `nutri_weight_prev_${user.id}`,
+          JSON.stringify({ weightKg: previousWeight, at: new Date().toISOString() }),
+        ).catch(() => {});
+      }
+
       if (updated.isComplete) {
         await reloadResult(updated);
         if (isOnboardingComplete !== true) {
@@ -348,16 +403,130 @@ export function ProfileScreen() {
       } else {
         setNutritionResult(null);
       }
+
+      // Release P17: a FIRST-TIME completed onboarding lands in the menu,
+      // immediately and without passing Home — the customer can start
+      // ordering right away. One-shot by construction: the flag flips to
+      // true above, so this branch can never re-trigger.
+      if (wasIncomplete && updated.isComplete) {
+        setEditing(null);
+        setSaveDone(false);
+        router.replace("/(tabs)/meny");
+        return;
+      }
+
       setSaveDone(true);
       setTimeout(() => {
         setEditing(null);
         setSaveDone(false);
       }, 900);
+
+      // ── Weight changed → offer Nutri's recalculated goal ────────────────
+      //
+      // AFTER the modal-close flow so the sheet dismisses normally; the
+      // native dialog then owns the screen. The weight itself is already
+      // saved above whatever the customer answers — the question is only
+      // about the GOAL.
+      const weightChanged =
+        previousWeight !== null && Math.abs(updated.weightKg - previousWeight) >= 0.1;
+      if (updated.isComplete && weightChanged && previousResult !== null) {
+        void maybeOfferRecalculatedGoal(updated, previousResult);
+      }
     } catch {
       setSaveError(t("profile.errorSave"));
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── Weight → calorie recommendation ───────────────────────────────────
+  //
+  // THE THREE NUMBERS ARE KEPT APART. `recommended` is Nutri's server-side
+  // recommendation for the NEW weight — the same engine onboarding uses,
+  // fetched via /preview, never computed on the device. `previousGoal` is
+  // the goal the customer had SAVED before the change (override-applied).
+  // The macro-derived target never enters the comparison separately — when
+  // an override exists it IS the saved goal, and in Auto mode the saved
+  // goal IS the recommendation.
+  const maybeOfferRecalculatedGoal = async (
+    updated: ApiNutritionProfile,
+    previousResult: ApiNutritionResult,
+  ) => {
+    const previousGoal = Math.round(previousResult.calorieTarget);
+    if (previousGoal <= 0) return;
+
+    let recommended: number;
+    try {
+      const preview = await previewNutritionResult(buildDtoFromStoredProfile(updated));
+      recommended = Math.round(preview.calorieTarget);
+    } catch {
+      return; // no server recommendation — nothing honest to ask about
+    }
+
+    if (Math.abs(recommended - previousGoal) < CALORIE_SUGGESTION_THRESHOLD_KCAL) return;
+    if (!mountedRef.current) return;
+
+    const wasAuto = previousResult.mode === "Auto";
+
+    Alert.alert(
+      t("profile.weightGoalTitle"),
+      t("profile.weightGoalBody", {
+        current: formatNumber(previousGoal, language),
+        recommended: formatNumber(recommended, language),
+      }),
+      [
+        {
+          text: t("profile.weightGoalKeep"),
+          style: "cancel",
+          onPress: () => {
+            void answerRecalculatedGoal(updated, previousResult, wasAuto, false);
+          },
+        },
+        {
+          text: t("profile.weightGoalUpdate"),
+          onPress: () => {
+            void answerRecalculatedGoal(updated, previousResult, wasAuto, true);
+          },
+        },
+      ],
+      { cancelable: false },
+    );
+  };
+
+  const answerRecalculatedGoal = async (
+    updated: ApiNutritionProfile,
+    previousResult: ApiNutritionResult,
+    wasAuto: boolean,
+    adoptRecommendation: boolean,
+  ) => {
+    try {
+      if (adoptRecommendation && !wasAuto) {
+        // Follow Nutri again: dropping the override makes the goal (and the
+        // macros derived from it) track the recommendation — one source of
+        // truth, no copied numbers.
+        await deleteMacroOverride();
+      } else if (!adoptRecommendation && wasAuto) {
+        // Keep the previous goal: in Auto mode the goal has already moved
+        // with the new weight, so keeping it means pinning the OLD result
+        // as an override — the customer's explicit choice, stored where
+        // chosen goals live.
+        await upsertMacroOverride({
+          proteinG: previousResult.proteinG,
+          carbsG: previousResult.carbsG,
+          fatG: previousResult.fatG,
+          fiberG: previousResult.fiberG,
+          userCalorieTarget: Math.round(previousResult.calorieTarget),
+        });
+      }
+      // The other two combinations need no write: adopt+Auto already tracks,
+      // keep+override already holds the customer's number.
+    } catch {
+      // The weight is saved either way; the goal write failing must not
+      // strand the screen — the resync below shows whatever is stored.
+    }
+
+    await reloadResult(updated);
+    void queryClient.invalidateQueries({ queryKey: ["nutrition"] });
   };
 
   const cancelEdit = () => {
@@ -426,14 +595,39 @@ export function ProfileScreen() {
     staleTime: 60_000,
   });
   const [consentSaveError, setConsentSaveError] = useState(false);
+  // Monotonic ticket per toggle: a slow response from an EARLIER tap must
+  // never overwrite the state of a later one (release P21's race guard).
+  const marketingTicketRef = useRef(0);
   const marketingMutation = useMutation({
     mutationFn: setEmailMarketingConsent,
-    onSuccess: (data: ApiConsentsResponse) => {
+    // Release P21: OPTIMISTIC. The switch answers the finger immediately —
+    // the old flow disabled the row and waited for the round-trip, which
+    // read as "laggy or broken". The cache flips at once; a failure rolls
+    // back and re-reads the server truth.
+    onMutate: async (granted: boolean) => {
+      const ticket = ++marketingTicketRef.current;
+      setConsentSaveError(false);
+      await queryClient.cancelQueries({ queryKey: ["consents", "me"] });
+      const previous = queryClient.getQueryData<ApiConsentsResponse>(["consents", "me"]);
+      if (previous) {
+        queryClient.setQueryData<ApiConsentsResponse>(["consents", "me"], {
+          ...previous,
+          emailMarketingActive: granted,
+        });
+      }
+      return { previous, ticket };
+    },
+    onSuccess: (data: ApiConsentsResponse, _granted, context) => {
+      if (context?.ticket !== marketingTicketRef.current) return;
       setConsentSaveError(false);
       queryClient.setQueryData(["consents", "me"], data);
     },
-    onError: () => {
+    onError: (_error, _granted, context) => {
+      if (context?.ticket !== marketingTicketRef.current) return;
       setConsentSaveError(true);
+      if (context?.previous) {
+        queryClient.setQueryData(["consents", "me"], context.previous);
+      }
       void queryClient.invalidateQueries({ queryKey: ["consents", "me"] });
     },
   });
@@ -446,7 +640,9 @@ export function ProfileScreen() {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem(ACTIVE_ORDER_KEY).catch(() => {});
+    // signOut() clears the followed order centrally (AuthProvider), so every
+    // sign-out path behaves identically. Removing the key here only dropped it
+    // from storage — not from the store that already-mounted banners read.
     await signOut();
   };
 
@@ -493,6 +689,8 @@ export function ProfileScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      {/* The live order follows the customer here too (P2). */}
+      <ActiveOrderBanner />
       {/* ── Onboarding modal ── */}
       {showOnboardingModal && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setShowOnboardingModal(false)}>
@@ -680,7 +878,71 @@ export function ProfileScreen() {
         </View>
       ) : null}
 
-      {/* ── 3. NÄSTA STEG ── */}
+      {/* ── 3. MITT KONTO — moved directly under the active plan (release
+          QA): the account basics are what the customer comes here to change,
+          so they must not sit below the navigation rows. Release P13: ONE
+          combined profile page instead of four small sub-modals, plus the
+          weight row (P14). The training-days entry is hidden behind
+          TRAINING_DAYS_ENABLED (P16) — data and backend stay untouched,
+          flip the flag to bring it back. ── */}
+      {np && (
+        <>
+          <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
+            {t("profile.myAccount").toUpperCase()}
+          </ThemedText>
+          <View style={styles.accountCard}>
+            <Pressable
+              onPress={() => openEdit("profil")}
+              style={[styles.accountRow, styles.accountRowBorder]}
+              accessibilityRole="button"
+              accessibilityLabel={t("profile.editProfile")}
+            >
+              <ThemedText style={styles.accountRowText}>{t("profile.editProfile")}</ThemedText>
+              <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
+            </Pressable>
+            <Pressable
+              onPress={() => openEdit("vikt")}
+              style={[
+                styles.accountRow,
+                TRAINING_DAYS_ENABLED && styles.accountRowBorder,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t("profile.weightRow")}
+            >
+              <View style={{ flex: 1, paddingRight: spacing[3] }}>
+                <ThemedText style={styles.accountRowText}>{t("profile.weightRow")}</ThemedText>
+                <ThemedText style={styles.consentRowHint}>
+                  {np.weightKg
+                    ? prevWeight !== null && Math.abs(prevWeight - np.weightKg) >= 0.1
+                      ? t("profile.weightRowDelta", {
+                          weight: np.weightKg,
+                          delta: `${np.weightKg > prevWeight ? "+" : "−"}${Math.abs(
+                            Math.round((np.weightKg - prevWeight) * 10) / 10,
+                          )}`,
+                        })
+                      : t("profile.weightRowCurrent", { weight: np.weightKg })
+                    : t("profile.weightRowEmpty")}
+                </ThemedText>
+              </View>
+              <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
+            </Pressable>
+            {TRAINING_DAYS_ENABLED ? (
+              <Pressable
+                onPress={() => setScheduleExpanded(true)}
+                style={styles.accountRow}
+                accessibilityRole="button"
+              >
+                <ThemedText style={styles.accountRowText}>
+                  {t("profile.editTrainingDays")}
+                </ThemedText>
+                <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
+              </Pressable>
+            ) : null}
+          </View>
+        </>
+      )}
+
+      {/* ── 4. NÄSTA STEG ── */}
       <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
         {t("profile.nextSteps").toUpperCase()}
       </ThemedText>
@@ -722,35 +984,6 @@ export function ProfileScreen() {
         </Pressable>
         {showOrders && accountEmail ? <OrderHistory email={accountEmail} /> : null}
       </View>
-
-      {/* ── 4. MITT KONTO ── */}
-      {np && (
-        <>
-          <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
-            {t("profile.myAccount").toUpperCase()}
-          </ThemedText>
-          <View style={styles.accountCard}>
-            {(
-              [
-                { label: t("profile.editBasicData"), action: () => openEdit("grunddata") },
-                { label: t("profile.editActivity"), action: () => openEdit("aktivitet") },
-                { label: t("profile.editGoal"), action: () => openEdit("mal") },
-                { label: t("profile.editTrainingDays"), action: () => setScheduleExpanded(true) },
-              ] as const
-            ).map((row, i, arr) => (
-              <Pressable
-                key={row.label}
-                onPress={row.action}
-                style={[styles.accountRow, i < arr.length - 1 && styles.accountRowBorder]}
-                accessibilityRole="button"
-              >
-                <ThemedText style={styles.accountRowText}>{row.label}</ThemedText>
-                <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
-              </Pressable>
-            ))}
-          </View>
-        </>
-      )}
 
       {/* ── 4b. Språk — always rendered (also without a nutrition profile) ── */}
       <ThemedText style={[styles.sectionHead, styles.sectionHeadSpaced]}>
@@ -847,7 +1080,9 @@ export function ProfileScreen() {
           </View>
           <Switch
             value={consentsQuery.data?.emailMarketingActive ?? false}
-            disabled={consentsQuery.isPending || marketingMutation.isPending}
+            // Only the initial load disables the row — the toggle itself is
+            // optimistic and answers immediately (P21).
+            disabled={consentsQuery.isPending}
             onValueChange={(next) => marketingMutation.mutate(next)}
             trackColor={{ false: "rgba(255,255,255,0.12)", true: colors.accent }}
             thumbColor="#fff"
@@ -855,7 +1090,7 @@ export function ProfileScreen() {
           />
         </View>
         <Pressable
-          onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/kopvillkor`)}
+          onPress={() => void openPolicy("kopvillkor", language)}
           style={[styles.accountRow, styles.accountRowBorder]}
           accessibilityRole="link"
         >
@@ -863,7 +1098,7 @@ export function ProfileScreen() {
           <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
         </Pressable>
         <Pressable
-          onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/integritet`)}
+          onPress={() => void openPolicy("integritet", language)}
           style={styles.accountRow}
           accessibilityRole="link"
         >
@@ -900,8 +1135,8 @@ export function ProfileScreen() {
         />
       )}
 
-      {/* ── Training schedule sheet ── */}
-      {np && scheduleExpanded && (
+      {/* ── Training schedule sheet — hidden with the entry (P16) ── */}
+      {TRAINING_DAYS_ENABLED && np && scheduleExpanded && (
         <TrainingScheduleSheet
           schedule={weeklySchedule}
           loading={weeklyScheduleLoading}

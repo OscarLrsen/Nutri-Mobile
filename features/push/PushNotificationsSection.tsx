@@ -122,11 +122,21 @@ export function PushNotificationsSection() {
     <>
       <ThemedText style={styles.sectionHead}>{t("push.profile.sectionTitle").toUpperCase()}</ThemedText>
       <View style={styles.card}>
+        {/* Release P20: ONE master on/off that always shows the honest
+            state. Off when the OS denied or never asked — flipping it on
+            asks the system (undetermined) or guides to Inställningar
+            (denied); it can never pretend to be active without permission.
+            When on, the two extra categories appear beneath it. */}
         {permission === "denied" ? (
           <>
-            <View style={[styles.row, styles.rowBorder]}>
-              <ThemedText style={styles.hint}>{t("push.profile.osDenied")}</ThemedText>
-            </View>
+            <ToggleRow
+              label={t("push.profile.masterLabel")}
+              hint={t("push.profile.osDenied")}
+              value={false}
+              disabled={false}
+              onChange={() => Linking.openSettings().catch(() => {})}
+              bordered
+            />
             <Pressable
               onPress={() => Linking.openSettings().catch(() => {})}
               style={styles.row}
@@ -137,17 +147,15 @@ export function PushNotificationsSection() {
             </Pressable>
           </>
         ) : permission === "undetermined" ? (
-          <>
-            <View style={[styles.row, styles.rowBorder]}>
-              <ThemedText style={styles.hint}>{t("push.profile.osUndetermined")}</ThemedText>
-            </View>
-            <Pressable onPress={enableFromUndetermined} style={styles.row} accessibilityRole="button">
-              <ThemedText style={[styles.rowText, { color: colors.accent }]}>
-                {t("push.profile.enable")}
-              </ThemedText>
-              <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
-            </Pressable>
-          </>
+          <ToggleRow
+            label={t("push.profile.masterLabel")}
+            hint={t("push.profile.osUndetermined")}
+            value={false}
+            disabled={false}
+            onChange={(next) => {
+              if (next) void enableFromUndetermined();
+            }}
+          />
         ) : !ownDevice ? (
           // Granted, but this device isn't in the registry (offline at
           // registration, signed out then in, …) — honest hint; the effect
@@ -160,33 +168,37 @@ export function PushNotificationsSection() {
         ) : (
           <>
             <ToggleRow
-              label={t("push.profile.toggleOrders")}
-              hint={t("push.profile.toggleOrdersHint")}
-              value={ownDevice.orderUpdatesEnabled}
-              disabled={prefsMutation.isPending}
-              onChange={(v) => toggle({ orderUpdatesEnabled: v })}
-              bordered
-            />
-            <ToggleRow
-              label={t("push.profile.toggleWeekly")}
-              hint={t("push.profile.toggleWeeklyHint")}
-              value={ownDevice.weeklyRewardsEnabled}
-              disabled={prefsMutation.isPending}
-              onChange={(v) => toggle({ weeklyRewardsEnabled: v })}
-              bordered
-            />
-            <ToggleRow
-              label={t("push.profile.toggleProfile")}
+              label={t("push.profile.masterLabel")}
               hint={
                 prefsMutation.isError
                   ? t("push.profile.updateError")
-                  : t("push.profile.toggleProfileHint")
+                  : t("push.profile.toggleOrdersHint")
               }
               hintError={prefsMutation.isError}
-              value={ownDevice.profileRemindersEnabled}
+              value={ownDevice.orderUpdatesEnabled}
               disabled={prefsMutation.isPending}
-              onChange={(v) => toggle({ profileRemindersEnabled: v })}
+              onChange={(v) => toggle({ orderUpdatesEnabled: v })}
+              bordered={ownDevice.orderUpdatesEnabled}
             />
+            {ownDevice.orderUpdatesEnabled ? (
+              <>
+                <ToggleRow
+                  label={t("push.profile.toggleWeekly")}
+                  hint={t("push.profile.toggleWeeklyHint")}
+                  value={ownDevice.weeklyRewardsEnabled}
+                  disabled={prefsMutation.isPending}
+                  onChange={(v) => toggle({ weeklyRewardsEnabled: v })}
+                  bordered
+                />
+                <ToggleRow
+                  label={t("push.profile.toggleProfile")}
+                  hint={t("push.profile.toggleProfileHint")}
+                  value={ownDevice.profileRemindersEnabled}
+                  disabled={prefsMutation.isPending}
+                  onChange={(v) => toggle({ profileRemindersEnabled: v })}
+                />
+              </>
+            ) : null}
           </>
         )}
       </View>

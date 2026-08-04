@@ -1,11 +1,14 @@
 import { Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
+import { Droplets, Minus, Plus, ShoppingBag, Target } from "lucide-react-native";
 
 import { Card } from "@/components/ui/Card";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { Skeleton } from "@/components/feedback/Skeleton";
+import { useAuth } from "@/hooks/useAuth";
 import {
   isProfileGapError,
+  useRemainingTodayQuery,
   useTodayDayPlanQuery,
   useTodayNutritionQuery,
 } from "@/services/api/nutritionQueries";
@@ -13,33 +16,40 @@ import {
   deriveActiveDailyNutrition,
   plannedDeviatesFromTarget,
 } from "@/features/nutrition/activeDailyNutrition";
+import { useActiveOrder } from "@/features/order/useActiveOrder";
+import { GLASS_ML, useWaterLog } from "@/features/home/waterLog";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { homeAccents } from "./homeAccents";
 
 /**
- * "Dagens plan" — today's ACTIVE DAILY GOAL (the backend's carb-cycled
- * adjustedTarget) via the shared ActiveDailyNutrition model (patch 13).
- * The same number Profile's "Idag" row and Dagens status use — one truth.
+ * "Idag" — the ONE daily section (release merge of the old "Dagens plan" and
+ * "Dagens status" cards, which competed with duplicate headings and repeated
+ * numbers).
  *
- * When a SAVED day plan exists and its total deviates from the goal, the
- * card shows the two concepts explicitly ("Planerat idag: X kcal · Y kcal
- * kvar att fördela") instead of silently mixing plan and goal.
+ * Reading order mirrors how the day is experienced: the goal (kcal + macros)
+ * → what has happened so far (ordered / remaining, same backend semantics as
+ * before: consumedToday counts today's accepted ORDERS) → water → the day's
+ * single next action. The plan/goal deviation row and the profile-gap CTA
+ * are carried over unchanged.
  *
- * States: loading skeleton; 404/422 → missing-profile CTA into the existing
- * profile/onboarding flow on Mina sidor (no new onboarding logic); other
- * errors → inline retry; dayType null (no weekly schedule row today) →
- * base targets with an explanatory caption.
+ * Water is device-local by design — the backend has no water model, so a
+ * glass is a fast, offline-safe counter (see waterLog.ts) rather than fake
+ * API data. Rapid taps all land; the UI answers instantly.
  */
-export function DailyTargetsCard() {
+export function TodayCard() {
   const { t } = useTranslation();
   const router = useRouter();
+  const { user } = useAuth();
   const todayQuery = useTodayNutritionQuery();
   const dayPlanQuery = useTodayDayPlanQuery();
+  const remainingQuery = useRemainingTodayQuery();
+  const { isActive: hasActiveOrder } = useActiveOrder();
+  const water = useWaterLog(user?.id ?? null);
 
   if (todayQuery.isLoading) {
     return (
-      <Card style={styles.card} accessibilityLabel={t("home.planHead")}>
+      <Card style={styles.card} accessibilityLabel={t("home.todayHead")}>
         <SectionLabel />
         <Skeleton height={40} width={140} />
         <Skeleton height={16} />
@@ -97,12 +107,16 @@ export function DailyTargetsCard() {
   const dayTypeName = today.dayType
     ? t(`profile.dayTypeNames.${today.dayType}`, { defaultValue: today.dayType })
     : null;
-  // Two-concept mode: only when a saved plan exists AND truly deviates.
   const showPlanned = active !== null && plannedDeviatesFromTarget(active);
-  const plannedDiff = showPlanned && active.planned ? target.calories - active.planned.calories : 0;
+  const plannedDiff =
+    showPlanned && active.planned ? target.calories - active.planned.calories : 0;
+
+  const remaining = remainingQuery.data ?? null;
+  const nothingOrdered = (remaining?.consumedToday.calories ?? 0) === 0;
 
   return (
-    <Card style={styles.card} accessibilityLabel={t("home.planHead")}>
+    <Card style={styles.card} accessibilityLabel={t("home.todayHead")}>
+      {/* ── The goal ─────────────────────────────────────────────── */}
       <View style={styles.headRow}>
         <SectionLabel />
         {dayTypeName ? (
@@ -121,18 +135,12 @@ export function DailyTargetsCard() {
         </ThemedText>
       </View>
 
-      {/* Patch 11 visual pass: each macro cell carries its own accent
-          (soft fill + top edge + coloured value) so the card reads with
-          the same colour hierarchy as Meny. Labels stay — colour is never
-          the only carrier. */}
       <View style={styles.macroRow}>
         <Macro label={t("home.macroProtein")} grams={target.proteinG} accent={homeAccents.protein} />
         <Macro label={t("home.macroCarbs")} grams={target.carbsG} accent={homeAccents.carbs} />
         <Macro label={t("home.macroFat")} grams={target.fatG} accent={homeAccents.fat} />
       </View>
 
-      {/* Saved plan deviating from the goal → name both concepts (patch
-          13): the goal above stays the goal; the plan is shown AS a plan. */}
       {showPlanned && active?.planned ? (
         <View style={styles.plannedRow}>
           <ThemedText variant="caption" style={styles.plannedLabel}>
@@ -152,31 +160,90 @@ export function DailyTargetsCard() {
         </ThemedText>
       ) : null}
 
-      {/* Patch 15: teaser only. Logging food eaten outside Nutri is not
-          built — no local logging, no backend model, and Today's status
-          still counts ORDERS exactly as before. Deliberately not a
-          Pressable and not a disabled button, so it is never announced as
-          an actionable control. */}
-      <View style={styles.teaserRow} accessibilityRole="text">
-        <View style={styles.teaserBadge}>
-          <ThemedText style={styles.teaserBadgeText}>
-            {t("home.comingSoonBadge").toUpperCase()}
-          </ThemedText>
+      {/* ── So far today (old "Dagens status", compacted) ─────────── */}
+      {remaining ? (
+        <View style={styles.statusRow}>
+          <View style={styles.statusCell}>
+            <View style={styles.statusHead}>
+              <ShoppingBag size={12} color={homeAccents.protein.value} strokeWidth={2.25} />
+              <ThemedText variant="caption" style={styles.statusLabel}>
+                {t("home.orderedToday")}
+              </ThemedText>
+            </View>
+            <ThemedText variant="mono" style={styles.statusValue}>
+              {remaining.consumedToday.calories} {t("home.kcalUnit")}
+            </ThemedText>
+          </View>
+          <View style={styles.statusDivider} />
+          <View style={styles.statusCell}>
+            <View style={styles.statusHead}>
+              <Target size={12} color={homeAccents.carbs.value} strokeWidth={2.25} />
+              <ThemedText variant="caption" style={styles.statusLabel}>
+                {t("home.remainingToday")}
+              </ThemedText>
+            </View>
+            <ThemedText variant="mono" style={styles.statusValue}>
+              {remaining.remainingToday.calories} {t("home.kcalUnit")}
+            </ThemedText>
+          </View>
         </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <ThemedText style={styles.teaserTitle}>{t("home.foodLogTeaserTitle")}</ThemedText>
-          <ThemedText variant="caption" style={styles.teaserBody}>
-            {t("home.foodLogTeaserBody")}
-          </ThemedText>
+      ) : null}
+
+      {/* ── Water ─────────────────────────────────────────────────── */}
+      <View style={styles.waterRow}>
+        <View style={styles.waterInfo}>
+          <Droplets size={16} color="#5FA0FF" strokeWidth={2.25} />
+          <View>
+            <ThemedText variant="bodyMedium" style={styles.waterLabel}>
+              {t("water.label")}
+            </ThemedText>
+            <ThemedText variant="caption" style={styles.waterMeta}>
+              {t("water.count", { glasses: water.glasses, ml: water.ml, glassMl: GLASS_ML })}
+            </ThemedText>
+          </View>
+        </View>
+        <View style={styles.waterButtons}>
+          {water.glasses > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("water.remove")}
+              onPress={water.removeGlass}
+              style={({ pressed }) => [styles.waterBtn, styles.waterBtnGhost, pressed && { opacity: 0.7 }]}
+            >
+              <Minus size={16} color={colors.textSecondary} strokeWidth={2.25} />
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t("water.add")}
+            onPress={water.addGlass}
+            style={({ pressed }) => [styles.waterBtn, pressed && { opacity: 0.8 }]}
+          >
+            <Plus size={16} color="#FFFFFF" strokeWidth={2.5} />
+          </Pressable>
         </View>
       </View>
+
+      {/* ── The day's next action ─────────────────────────────────── */}
+      {!hasActiveOrder && nothingOrdered ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("home.nextActionOrder")}
+          onPress={() => router.navigate("/(tabs)/meny")}
+          style={({ pressed }) => [styles.nextAction, pressed && { opacity: 0.85 }]}
+        >
+          <ThemedText variant="bodyMedium" style={styles.nextActionText}>
+            {t("home.nextActionOrder")}
+          </ThemedText>
+        </Pressable>
+      ) : null}
     </Card>
   );
 }
 
 function SectionLabel() {
   const { t } = useTranslation();
-  return <ThemedText style={styles.sectionLabel}>{t("home.planHead").toUpperCase()}</ThemedText>;
+  return <ThemedText style={styles.sectionLabel}>{t("home.todayHead").toUpperCase()}</ThemedText>;
 }
 
 function Macro({
@@ -280,34 +347,6 @@ const styles = StyleSheet.create({
   noSchedule: {
     color: colors.textTertiary,
   },
-  teaserRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing[2],
-    borderTopWidth: 1,
-    borderTopColor: colors.borderSoft,
-    paddingTop: spacing[3],
-  },
-  teaserBadge: {
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.accentBorder,
-    backgroundColor: colors.accentSoft,
-    paddingHorizontal: spacing[2],
-    paddingVertical: 2,
-  },
-  teaserBadgeText: {
-    fontSize: 9,
-    fontFamily: fontFamily.bodyBold,
-    letterSpacing: 0.8,
-    color: colors.accent,
-  },
-  teaserTitle: {
-    fontSize: 12.5,
-    fontFamily: fontFamily.bodySemibold,
-    color: colors.textPrimary,
-  },
-  teaserBody: { color: colors.textTertiary, lineHeight: 16, marginTop: 1 },
   plannedRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -326,6 +365,85 @@ const styles = StyleSheet.create({
   },
   plannedDiff: {
     color: colors.textTertiary,
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    paddingTop: spacing[3],
+  },
+  statusCell: {
+    flex: 1,
+    gap: 2,
+  },
+  statusHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+  },
+  statusLabel: {
+    color: colors.textSecondary,
+  },
+  statusValue: {
+    fontSize: 16,
+    color: colors.textPrimary,
+  },
+  statusDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing[3],
+  },
+  waterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    paddingTop: spacing[3],
+  },
+  waterInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    flex: 1,
+  },
+  waterLabel: {
+    fontSize: 14,
+  },
+  waterMeta: {
+    color: colors.textTertiary,
+  },
+  waterButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[2],
+  },
+  waterBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accent,
+  },
+  waterBtnGhost: {
+    backgroundColor: colors.cardAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  nextAction: {
+    borderRadius: radius.btn,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: colors.accentBorder,
+    alignItems: "center",
+    paddingVertical: spacing[3],
+  },
+  nextActionText: {
+    color: colors.accent,
+    fontSize: 14,
   },
   missingTitle: {
     color: colors.textPrimary,

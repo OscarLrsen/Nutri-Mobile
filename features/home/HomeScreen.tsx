@@ -7,12 +7,12 @@ import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { useActiveRegularDropQuery } from "@/services/api/regularDrops";
 import { RegularDropSheet } from "@/features/rewards/RegularDropSheet";
+import { ActiveOrderBanner } from "@/features/order/ActiveOrderBanner";
 import { colors, radius, spacing } from "@/theme";
 
 import { GreetingHeader } from "./GreetingHeader";
 import { HomeLocationStatusCard } from "./HomeLocationStatusCard";
-import { DailyTargetsCard } from "./DailyTargetsCard";
-import { TodayOrderStatusCard } from "./TodayOrderStatusCard";
+import { TodayCard } from "./TodayCard";
 import { NutriFamilySection } from "./NutriFamilySection";
 import { LoggedOutHome } from "./LoggedOutHome";
 import { heroGradient } from "./homeAccents";
@@ -57,37 +57,43 @@ export function HomeScreen() {
         contentContainerStyle={[styles.content, !user && styles.contentLoggedOut]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header — same content as before (logo + greeting), now on the
-            soft accent wash Rewards/Heldag already use (patch 11 visual
-            pass) instead of a flat card, so Home opens with the same
-            colour presence as the rest of the app. Text sits on the dark
-            end of the gradient — contrast unchanged. */}
+        {/* Header — release slimming: one row (name + Nutri points), no
+            logo badge, tighter padding. The soft accent wash stays so Home
+            keeps its colour presence without the height. */}
         <LinearGradient
           colors={[...heroGradient]}
           start={{ x: 0, y: 0 }}
           end={{ x: 0.85, y: 1 }}
           style={[styles.hero, !user && styles.heroLoggedOut]}
         >
-          <View style={styles.logoRow}>
-            <View style={styles.logoBadge}>
-              <Image
-                source={require("@/assets/nutri-logo.png")}
-                style={styles.logo}
-                contentFit="contain"
-                accessibilityLabel="Nutri"
-              />
+          {user ? (
+            <GreetingHeader />
+          ) : (
+            <View style={styles.logoRow}>
+              <View style={styles.logoBadge}>
+                <Image
+                  source={require("@/assets/nutri-logo.png")}
+                  style={styles.logo}
+                  contentFit="contain"
+                  accessibilityLabel="Nutri"
+                />
+              </View>
             </View>
-          </View>
-          {user ? <GreetingHeader /> : null}
+          )}
         </LinearGradient>
 
         {user ? (
           <View style={styles.sections}>
+            {/* The live order, wherever the customer is — see
+                ActiveOrderBanner. Renders nothing without one. */}
+            <ActiveOrderBanner />
             {/* Patch 15: where the truck is today, directly under the name
                 and above the plan. Shares Meny's store queries. */}
             <HomeLocationStatusCard />
-            <DailyTargetsCard />
-            <TodayOrderStatusCard />
+            {/* Release merge: the old "Dagens plan" + "Dagens status" cards
+                are ONE section now, with water logging and the day's next
+                action — see TodayCard. */}
+            <TodayCard />
             {/* The membership features — spin, points and this week's
                 vote — gathered under one heading. */}
             <NutriFamilySection
@@ -119,14 +125,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   hero: {
-    gap: spacing[3],
     borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.accentBorder,
     overflow: "hidden",
     paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-    paddingBottom: spacing[3],
+    paddingVertical: spacing[3],
     marginBottom: spacing[3],
   },
   heroLoggedOut: {

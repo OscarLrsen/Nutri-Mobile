@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import {
+  InputAccessoryView,
+  Keyboard,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import Slider from "@react-native-community/slider";
@@ -304,11 +313,18 @@ export function MacroAdjustScreen() {
             <ThemedText style={styles.statusTitle}>
               {inBalance ? t("macroAdjust.statusMatch") : t("macroAdjust.statusNeeds")}
             </ThemedText>
+            {/* Release P1: the TOP number is the macros' own live sum
+                (4/4/9 kcal per gram), recomputed on every slider tick — the
+                goal is the comparison beside it. The two used to read as one
+                number that "didn't update". */}
             <ThemedText style={styles.statusSub}>
-              {formatNumber(userKcal, language)} kcal ·{" "}
               <ThemedText style={[styles.statusSub, { color: inBalance ? "#6DD49F" : colors.accent }]}>
-                {totalPct}%
-              </ThemedText>
+                {formatNumber(macroPlanKcal, language)} kcal
+              </ThemedText>{" "}
+              · {t("macroAdjust.ofGoal", {
+                kcal: formatNumber(userKcal, language),
+                pct: totalPct,
+              })}
             </ThemedText>
           </View>
         </View>
@@ -332,6 +348,8 @@ export function MacroAdjustScreen() {
                 onSubmitEditing={commitKcalDraft}
                 selectTextOnFocus
                 keyboardType="number-pad"
+                returnKeyType="done"
+                inputAccessoryViewID={Platform.OS === "ios" ? "nutri-macro-kcal-done" : undefined}
                 maxLength={4}
                 accessibilityLabel={t("macroAdjust.calorieGoal")}
                 style={styles.kcalInput}
@@ -468,6 +486,23 @@ export function MacroAdjustScreen() {
           </Pressable>
         </View>
       </ScrollView>
+
+      {/* iOS "Klar" bar above the number pad (P8) — dismissal blurs the
+          field, which commits the draft via onBlur. */}
+      {Platform.OS === "ios" ? (
+        <InputAccessoryView nativeID="nutri-macro-kcal-done">
+          <View style={styles.accessoryBar}>
+            <Pressable
+              onPress={() => Keyboard.dismiss()}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.done")}
+              style={({ pressed }) => [styles.accessoryDone, pressed && { opacity: 0.7 }]}
+            >
+              <ThemedText style={styles.accessoryDoneText}>{t("common.done")}</ThemedText>
+            </Pressable>
+          </View>
+        </InputAccessoryView>
+      ) : null}
     </View>
   );
 }
@@ -606,6 +641,21 @@ const styles = StyleSheet.create({
   },
   statusTitle: { fontSize: 13.5, fontFamily: fontFamily.bodySemibold, letterSpacing: -0.2, color: colors.textPrimary },
   statusSub: { fontSize: 11.5, fontFamily: fontFamily.mono, color: "rgba(255,255,255,0.45)" },
+  accessoryBar: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    backgroundColor: "#1C1C1E",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.12)",
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+  },
+  accessoryDone: { paddingHorizontal: spacing[3], paddingVertical: spacing[1] },
+  accessoryDoneText: {
+    fontSize: 15,
+    fontFamily: fontFamily.bodySemibold,
+    color: colors.accent,
+  },
   sectionHead: {
     marginHorizontal: spacing[5],
     marginTop: spacing[4],

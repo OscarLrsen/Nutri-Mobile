@@ -15,6 +15,7 @@ import {
   getLocationStatusLabel,
   STATUS_COLORS,
 } from "@/utils/locationStatus";
+import { ActiveOrderBanner } from "@/features/order/ActiveOrderBanner";
 import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { MealCard } from "./MealCard";
@@ -278,10 +279,11 @@ export function MenuScreen() {
             contentContainerStyle={styles.list}
             ListHeaderComponent={
               <View style={styles.listHeader}>
-                {/* "Din personliga meny" (patch 12): plan-your-day +
-                    customise-a-meal as the two clear entry points; the
-                    Heldag package is offered INSIDE the day planner
-                    (Alternativ B), so the menu top stays two cards.
+                {/* The live order follows the customer into the menu too —
+                    renders nothing without one. */}
+                <ActiveOrderBanner />
+                {/* "Din personliga meny" (patch 12, release-trimmed to the
+                    day planner only — see PersonalMenuSection).
                     FlatList-correct header content — never a ScrollView
                     around the list. Rendered only under Huvudmåltider
                     (see showOrderingEntries). */}

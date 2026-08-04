@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -16,7 +15,6 @@ import {
   AlertTriangle,
   BadgePercent,
   ChevronRight,
-  CreditCard,
   Info,
   Menu,
   Minus,
@@ -53,6 +51,7 @@ import { useStampCardStatusQuery } from "@/services/api/stampCardQueries";
 import { getDrinks } from "@/services/api/drinks";
 import { GoWellCartSection, isQualifyingMealItem } from "./GoWellCartSection";
 import { isDrinkInStock, goWellFlavorLabel } from "@/features/menu/goWellFlavors";
+import { drinkName } from "@/features/menu/drinkText";
 import {
   isIncludedDrinkError,
   includedDrinkErrorMessage,
@@ -68,7 +67,7 @@ import { setActiveOrderId, getActiveOrderId, setPendingStripeClear } from "@/uti
 import { markOrderSuccessForPushPreprompt } from "@/features/push/orderSuccessSignal";
 import type { TFunction } from "i18next";
 
-import { env } from "@/lib/env";
+import { openPolicy } from "@/utils/webUrls";
 import { formatDateTime, formatTime, useLanguage, useTranslation } from "@/i18n";
 import type { AppLanguage } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
@@ -633,11 +632,16 @@ export function CartScreen() {
               stampCardDiscountOre={activeStampCard ? stampCardPreviewOre : 0}
               includedDrinkDiscountOre={includedDrinkPreviewOre}
               includedDrinkName={
-                includedDrinkProduct ? goWellFlavorLabel(includedDrinkProduct) : null
+                includedDrinkProduct ? goWellFlavorLabel(includedDrinkProduct, language) : null
               }
             />
 
-            {/* Payment methods (web parity: pay_on_site / stripe / swish-disabled) */}
+            {/* Payment methods — release P28: "Betala online" is HIDDEN
+                from the customer flow. The Stripe machinery (handleSubmit's
+                stripe branch, session creation, webhooks) is untouched and
+                unreachable from here; paymentMethod can only ever be
+                pay_on_site. The Swish teaser stays as forward-looking
+                context. */}
             <SectionHead style={{ marginTop: spacing[5] }}>
               {t("checkout.paymentHeading")}
             </SectionHead>
@@ -650,18 +654,13 @@ export function CartScreen() {
                 selected={paymentMethod === "pay_on_site"}
                 onSelect={() => setPaymentMethod("pay_on_site")}
               />
+              {/* Swish is a teaser only. The backend integration exists but is
+                  switched off (Swish__Enabled=false), so nothing here may be
+                  able to reach it: the row is disabled, carries no handler,
+                  and paymentMethod cannot hold "swish". One label, no
+                  sublabel — the copy is the whole message. */}
               <PaymentRow
-                label={t("checkout.payOnline")}
-                sublabel={t("checkout.payOnlineSub")}
-                icon={<CreditCard size={18} color={colors.textPrimary} strokeWidth={1.6} />}
-                iconBg={colors.accent}
-                selected={paymentMethod === "stripe"}
-                onSelect={() => setPaymentMethod("stripe")}
-                disabled={isDrinksOnly}
-              />
-              <PaymentRow
-                label={t("checkout.swish")}
-                sublabel={t("checkout.comingSoon")}
+                label={t("checkout.swishComingSoon")}
                 icon={<ThemedText style={styles.swishIcon}>S</ThemedText>}
                 iconBg="#0F4EFF"
                 selected={false}
@@ -670,15 +669,6 @@ export function CartScreen() {
                 last
               />
             </View>
-
-            {/* Drinks-only: explain why online payment is unavailable */}
-            {isDrinksOnly && (
-              <View style={styles.mutedBox}>
-                <ThemedText style={styles.mutedBoxText}>
-                  {t("checkout.onlineDrinksOnly")}
-                </ThemedText>
-              </View>
-            )}
 
             {/* Pay-at-counter info box (web parity) */}
             {paymentMethod === "pay_on_site" && (
@@ -803,7 +793,7 @@ export function CartScreen() {
               {t("checkout.termsPrefix")}
               <ThemedText
                 style={styles.termsLink}
-                onPress={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/kopvillkor`)}
+                onPress={() => void openPolicy("kopvillkor", language)}
               >
                 {t("checkout.termsLink")}
               </ThemedText>
@@ -904,6 +894,13 @@ function CartItemCard({ item }: { item: CartItem }) {
   const isDrink = item.kind === "drink";
   const size = isDrink ? undefined : MEAL_SIZES.find((s) => s.id === item.sizeId);
   const multiplier = size?.priceMultiplier ?? 1;
+
+  // The synthetic Meal wrapper on a drink line snapshots the Swedish name at
+  // add time, so rendering item.meal.name directly would freeze the language
+  // the customer happened to be using when they tapped add. The original
+  // ApiDrink is kept on the line, so resolve from that instead and the cart
+  // follows a language switch like every other screen.
+  const displayName = isDrink && item.drink ? drinkName(item.drink, language) : item.meal.name;
   const macroMult = size?.macroMultiplier ?? 1;
   const surcharge = item.ingredientSurchargeKr ?? 0;
   // Fixed meal: keep the cart preview in lockstep with the backend's öre
@@ -953,7 +950,7 @@ function CartItemCard({ item }: { item: CartItem }) {
                 source={{ uri: item.meal.image }}
                 style={StyleSheet.absoluteFill}
                 contentFit="cover"
-                accessibilityLabel={item.meal.name}
+                accessibilityLabel={displayName}
               />
             ) : (
               <View style={styles.itemImagePlaceholder}>
@@ -966,7 +963,7 @@ function CartItemCard({ item }: { item: CartItem }) {
             <View>
               <View style={styles.itemTitleRow}>
                 <ThemedText style={styles.itemName} numberOfLines={2}>
-                  {item.meal.name}
+                  {displayName}
                 </ThemedText>
                 {item.isCustom ? (
                   <View style={styles.customBadge}>
@@ -1079,7 +1076,7 @@ function CartItemCard({ item }: { item: CartItem }) {
           <View style={{ flex: 1 }}>
             <ThemedText style={styles.unavailableHeading}>{t("cart.stockOutHeading")}</ThemedText>
             <ThemedText style={styles.unavailableName}>
-              {item.meal.name}
+              {displayName}
               {sizeShort ? ` · ${sizeShort}` : ""}
             </ThemedText>
             <ThemedText style={styles.unavailableText}>{t("cart.stockOutText")}</ThemedText>

@@ -17,7 +17,8 @@
     "tabHome": "Home",
     "tabMenu": "Menu",
     "tabCart": "Cart",
-    "tabAccount": "My pages"
+    "tabAccount": "My pages",
+    "done": "Done"
   },
   "hero": {
     "headline1": "Whole ingredients.",
@@ -77,7 +78,10 @@
     "locationAria": "Today's location: {{location}}. {{status}}",
     "comingSoonBadge": "Coming soon",
     "foodLogTeaserTitle": "Log meals outside Nutri",
-    "foodLogTeaserBody": "Soon you'll be able to add calories and macros from other food and see your complete day in one place."
+    "foodLogTeaserBody": "Soon you'll be able to add calories and macros from other food and see your complete day in one place.",
+    "todayHead": "Today",
+    "pointsPill": "{{points}} Nutri Points",
+    "nextActionOrder": "Order today’s meal"
   },
   "menu": {
     "categories": {
@@ -110,6 +114,11 @@
     },
     "personal": {
       "title": "Your personal menu",
+      "personalBadge": "Tailored for you",
+      "calcError": "Couldn’t fetch your personal portion right now.",
+      "staticPriceNote": "Regular price shown.",
+      "yourPortion": "Your portion",
+      "yourPortionSub": "Amounts are calculated for your goal and your day.",
       "subtitle": "Based on your profile, your goals and what you have left today.",
       "profileGap": "Complete your profile to get personal portions.",
       "profileGapCta": "Complete profile",
@@ -182,6 +191,9 @@
   },
   "cart": {
     "title": "Cart",
+    "toastAdded": "Added to cart",
+    "toastAddedNamed": "{{name}} added to cart",
+    "toastAddFailed": "Couldn't be added to cart",
     "countMeal_one": "{{count}} meal",
     "countMeal_other": "{{count}} meals",
     "countDrink_one": "{{count}} drink",
@@ -208,14 +220,15 @@
     "openAt": "We open at {{time}}",
     "openToday": "Opens today at {{time}}",
     "openOn": "Opens {{when}}",
-    "noteHead": "Anything we should know? (optional)",
-    "notePlaceholder": "E.g. no red onion, sauce on the side",
+    "noteHead": "Other comments",
+    "notePlaceholder": "E.g. no red onion",
     "paymentHeading": "Payment method",
     "payAtPickup": "Pay at the counter",
     "payAtPickupSub": "Pay when you pick up at the food truck",
     "payOnline": "Pay online",
     "payOnlineSub": "Card, Apple Pay and Google Pay via Stripe",
     "swish": "Swish",
+    "swishComingSoon": "Swish coming soon",
     "comingSoon": "Coming soon",
     "onlineDrinksOnly": "Online payment is available when you order food. Drinks can be paid at the counter.",
     "infoHeading": "Pay at the counter when you pick up",
@@ -590,7 +603,20 @@
     "baselineLabel": "Base plan",
     "todayGoalRow": "Today · {{dayType}}",
     "todayGoalFallbackDay": "Today's goal",
-    "plannedToday": "Planned today: {{kcal}} kcal"
+    "plannedToday": "Planned today: {{kcal}} kcal",
+    "editProfile": "Edit my profile",
+    "weightRow": "Weight",
+    "weightRowCurrent": "Current: {{weight}} kg",
+    "weightRowDelta": "Current: {{weight}} kg ({{delta}} kg since last update)",
+    "weightRowEmpty": "Add your weight",
+    "weightEditHelp": "Your new weight becomes your current baseline and updates the calorie and goal calculation right away.",
+    "weightGoalTitle": "Update calorie goal?",
+    "weightGoalBody": "Your profile currently has a goal of {{current}} kcal. Based on your new weight, Nutri recommends {{recommended}} kcal. Do you want to update your calorie goal?",
+    "weightGoalUpdate": "Yes, update",
+    "weightGoalKeep": "No, keep current",
+    "sectionBasics": "Personal information",
+    "sectionActivity": "Activity",
+    "sectionGoal": "Goal and pace"
   },
   "orderHistory": {
     "title": "Order history",
@@ -633,7 +659,8 @@
     "adjustMacros": "Adjust macros ({{diff}} kcal)",
     "noChanges": "No changes",
     "decreaseNamed": "Decrease {{name}}",
-    "increaseNamed": "Increase {{name}}"
+    "increaseNamed": "Increase {{name}}",
+    "ofGoal": "of the {{kcal}} kcal goal ({{pct}}%)"
   },
   "mealDetail": {
     "loading": "Loading",
@@ -976,7 +1003,8 @@
       "toggleWeeklyHint": "A reminder when the weekly spin opens.",
       "toggleProfile": "Profile reminders",
       "toggleProfileHint": "Occasional reminders to complete your profile.",
-      "updateError": "Couldn't save. Please try again."
+      "updateError": "Couldn't save. Please try again.",
+      "masterLabel": "Notifications"
     }
   },
   "locationStatus": {
@@ -1139,13 +1167,14 @@
     "rewardBadge": "EARNED",
     "rewardBody": "Your reward is waiting. You will be able to use it at checkout soon.",
     "rewardValue": "The reward covers one main meal up to {{maxValue}}.",
+    "rewardValueInfo": "The reward covers one main meal. The value is calculated when your card is full, based on your ten stamps.",
     "errorTitle": "Could not load your stamp card",
     "retry": "Try again",
     "unavailableTitle": "Stamp card is not available yet",
     "unavailableBody": "This feature is on its way. Your card will appear here as soon as it is live.",
     "howItWorksTitle": "How it works",
     "howItWorksBody": "You get a stamp for every paid main meal you pick up. Once you have collected ten stamps you get a free main meal.",
-    "ruleMeals": "Regular meals and Nutri Anpassar earn stamps.",
+    "ruleMeals": "Regular meals and Nutri Adapts earn stamps.",
     "ruleHeldag": "Each meal in a full-day package counts separately.",
     "ruleDrinks": "Drinks and extras do not earn stamps.",
     "rulePickup": "The stamp is added after you have picked up your order.",
@@ -1241,5 +1270,36 @@
     "errorUnavailable": "That flavour is not available right now.",
     "errorOutOfStock": "That flavour is sold out. Pick another one.",
     "errorInvalid": "GoWell could not be included in this order."
+  },
+  "activeOrder": {
+    "title": "Active order",
+    "titleNumbered": "Order #{{number}}",
+    "received": "Received",
+    "inProgress": "Being prepared",
+    "ready": "Ready for pickup!",
+    "awaitingPayment": "Awaiting payment",
+    "eta": "approx {{minutes}} min",
+    "open": "Open order status"
+  },
+  "water": {
+    "label": "Water",
+    "count": "{{glasses}} glasses · {{ml}} ml",
+    "add": "Add a glass of water",
+    "remove": "Remove a glass of water"
+  },
+  "foodReview": {
+    "title": "How was the food?",
+    "subtitle": "Tell us what you thought of your latest order.",
+    "subtitleMeal": "Tell us what you thought of {{meal}}.",
+    "close": "Close",
+    "starLabel": "{{value}} of 5 stars",
+    "commentPlaceholder": "Write a comment (optional)",
+    "anonymous": "Stay anonymous",
+    "marketing": "Nutri may use my review in marketing",
+    "marketingHint": "Entirely optional and never pre-selected.",
+    "error": "Could not send right now. Please try again.",
+    "submit": "Send",
+    "sending": "Sending…",
+    "notNow": "Not now"
   }
 }

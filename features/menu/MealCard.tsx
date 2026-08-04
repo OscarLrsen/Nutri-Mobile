@@ -6,12 +6,16 @@ import { Check, Plus, Sparkles, UtensilsCrossed } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/hooks/useAuth";
 import type { ApiMeal, ApiMealAvailability } from "@/services/api/meals";
 import { apiMealToMeal, CUSTOMER_SIZE_OPTIONS, previewMealPriceOre } from "@/utils/pricing";
 import { formatPriceKr } from "@/utils/money";
+import { deriveDisplayName } from "@/utils/displayName";
+import { personalizeMealName } from "@/utils/personalizeMealName";
 import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import type { MealRecommendation } from "./mealRecommendation";
+import { usePersonalizedMeal } from "./personalizedMenu";
 
 /**
  * Meal card — mobile port of the web /meny page's MealCard. Logic (per-size
@@ -51,8 +55,17 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
   const { language } = useLanguage();
   const router = useRouter();
   const { addItem } = useCart();
+  const { user } = useAuth();
   const isFixed = meal.portionMode === "fixed";
   const [selectedSize, setSelectedSize] = useState<string>("medium");
+
+  // "[Namn]s Beef Power Bowl" — presentation only (release P11). The cart,
+  // the order payload and history keep meal.name untouched.
+  const displayTitle = personalizeMealName(
+    meal.name,
+    user ? deriveDisplayName(user, "") : null,
+    language,
+  );
 
   // Preselect the recommended size once it arrives — but never steal an
   // explicit user choice (only applies while the untouched default is
@@ -101,11 +114,34 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
 
   const effectiveSize = isFixed ? "medium" : selectedSize;
   const size = CUSTOMER_SIZE_OPTIONS.find((s) => s.id === effectiveSize) ?? CUSTOMER_SIZE_OPTIONS[0];
-  const calories = Math.round(meal.macros.calories * size.macroMultiplier);
-  const proteinG = Math.round(meal.macros.proteinG * size.macroMultiplier);
-  const carbsG = Math.round(meal.macros.carbsG * size.macroMultiplier);
-  const fatG = Math.round(meal.macros.fatG * size.macroMultiplier);
-  const priceOre = previewMealPriceOre(meal.basePrice, size.priceMultiplier);
+
+  // ── The personally computed meal (the real Anpassar engine) ──────────
+  //
+  // ready → grams/macros/price come from the BACKEND calculation for this
+  // customer's target at the selected size. Static values are shown only
+  // when personalization does not apply (logged out, fixed portion,
+  // incomplete profile) — never silently in place of a personal price.
+  const personal = usePersonalizedMeal(meal, effectiveSize);
+  const personalData = personal.status === "ready" ? personal.data : null;
+
+  const calories = personalData
+    ? Math.round(personalData.calc.totalKcal)
+    : Math.round(meal.macros.calories * size.macroMultiplier);
+  const proteinG = personalData
+    ? Math.round(personalData.calc.totalProteinG)
+    : Math.round(meal.macros.proteinG * size.macroMultiplier);
+  const carbsG = personalData
+    ? Math.round(personalData.calc.totalCarbsG)
+    : Math.round(meal.macros.carbsG * size.macroMultiplier);
+  const fatG = personalData
+    ? Math.round(personalData.calc.totalFatG)
+    : Math.round(meal.macros.fatG * size.macroMultiplier);
+  const priceOre = personalData
+    ? personalData.calc.totalPriceOre
+    : previewMealPriceOre(meal.basePrice, size.priceMultiplier);
+  // While the personal price is being computed the static price must not
+  // masquerade as it — the price slot shows a placeholder instead.
+  const priceHidden = personal.status === "loading";
 
   const hasRecommendation = !isFixed && recSizeId !== null;
   const recSizeLabel =
@@ -127,7 +163,36 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
 
     // Same cart mapping and selected-size contract as MealDetailScreen.
     addLockedRef.current = true;
-    addItem(apiMealToMeal(meal), effectiveSize);
+    if (personalData) {
+      // The personally computed line — the SAME tailored handoff the
+      // Anpassar wizard used: the server's macros and ingredient grams, and
+      // a surcharge that reconciles the cart preview to the server's
+      // öre-precise price. The order endpoint recomputes and validates the
+      // price server-side either way.
+      addItem(
+        apiMealToMeal(meal),
+        "medium",
+        1,
+        {
+          calories: Math.round(personalData.calc.totalKcal),
+          proteinG: Math.round(personalData.calc.totalProteinG),
+          carbsG: Math.round(personalData.calc.totalCarbsG),
+          fatG: Math.round(personalData.calc.totalFatG),
+          fiberG: Math.round(personalData.calc.totalFiberG),
+        },
+        personalData.ingredients.map((ing) => ({
+          ingredientId: ing.ingredientId,
+          name: ing.name,
+          amountG: ing.amountG,
+        })),
+        personalData.surchargeKr,
+        personalData.containerTypeId,
+        undefined,
+        meal.name,
+      );
+    } else {
+      addItem(apiMealToMeal(meal), effectiveSize);
+    }
     setAdded(true);
     if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
     addedTimerRef.current = setTimeout(() => {
@@ -172,10 +237,28 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
       <View style={styles.body}>
         <View style={styles.titleRow}>
           <ThemedText variant="bodyMedium" style={styles.title} numberOfLines={2}>
-            {meal.name}
+            {displayTitle}
           </ThemedText>
-          <ThemedText style={styles.price}>{formatPriceKr(priceOre, language)}</ThemedText>
+          <ThemedText style={styles.price}>
+            {priceHidden ? "…" : formatPriceKr(priceOre, language)}
+          </ThemedText>
         </View>
+
+        {/* Personal state, said outright: the badge marks a genuinely
+            computed portion; the error line says the ordinary price is
+            shown because the personal one could not be fetched. */}
+        {personalData ? (
+          <View style={styles.recRow}>
+            <Sparkles size={11} color={colors.accent} strokeWidth={2.25} />
+            <ThemedText style={styles.recBadgeText}>
+              {t("menu.personal.personalBadge").toUpperCase()}
+            </ThemedText>
+          </View>
+        ) : personal.status === "error" ? (
+          <ThemedText variant="caption" style={styles.personalError} numberOfLines={2}>
+            {t("menu.personal.calcError")} {t("menu.personal.staticPriceNote")}
+          </ThemedText>
+        ) : null}
 
         {meal.description ? (
           <ThemedText variant="caption" color="textTertiary" numberOfLines={1}>
@@ -204,7 +287,7 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
           <ThemedText style={styles.macroText}>{calories} kcal</ThemedText>
           <ThemedText style={styles.macroDot}>·</ThemedText>
           <ThemedText style={[styles.macroText, styles.macroAccent]}>{proteinG}g protein</ThemedText>
-          {hasRecommendation ? (
+          {hasRecommendation || personalData ? (
             <>
               <ThemedText style={styles.macroDot}>·</ThemedText>
               <ThemedText style={styles.macroText}>
@@ -430,6 +513,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: 11,
     lineHeight: 15,
+  },
+  personalError: {
+    color: "#ffb759",
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
   },
   sizeButtonRecommended: {
     borderWidth: 1,

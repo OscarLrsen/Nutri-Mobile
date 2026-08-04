@@ -42,6 +42,21 @@ export interface ApiDrink {
    * Optional so an older API simply yields no GoWell.
    */
   isGoWell?: boolean;
+  /**
+   * Translated copy (backend AddDrinkLanguageFields). `name` and
+   * `description` above stay the Swedish base copy and remain the canonical
+   * value business logic keys on — goWellFlavors.ts looks up its visuals by
+   * the Swedish name, so adding a translation must never move that lookup.
+   *
+   * Do not read these directly in a component: go through drinkName() /
+   * drinkDescription() in features/menu/drinkText.ts, which applies the
+   * app's shared fallback order. Optional, so an older API simply renders
+   * Swedish everywhere instead of blanking out.
+   */
+  nameEn?: string | null;
+  nameDa?: string | null;
+  descriptionEn?: string | null;
+  descriptionDa?: string | null;
 }
 
 /** GET /api/drinks — public. */

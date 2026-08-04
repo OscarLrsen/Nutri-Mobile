@@ -29,7 +29,7 @@ import { NUTRITION_ONBOARDING_ROUTE } from "@/features/onboarding/nutritionOnboa
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 import { buildNutriAdaptiveTarget } from "./buildNutriAdaptiveTarget";
-import type { NutriGoalType } from "./nutriAnpassarTypes";
+import { mapGoalType } from "./nutriAnpassarTypes";
 import { StepSlot, type WizardSlot } from "./StepSlot";
 import { StepMeals, type OptIngredient } from "./StepMeals";
 import { StepAdjust } from "./StepAdjust";
@@ -62,11 +62,6 @@ import { StepAdjust } from "./StepAdjust";
 
 type ErrorKind = "profile" | "network";
 
-function mapGoalType(primaryGoal: string): NutriGoalType {
-  if (primaryGoal === "FatLoss") return "fat_loss";
-  if (primaryGoal === "MuscleGain") return "muscle_gain";
-  return "balanced";
-}
 
 interface AnpassarData {
   today: ApiTodayNutrition;

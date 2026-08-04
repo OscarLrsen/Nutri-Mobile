@@ -49,11 +49,11 @@ export function PersonalMenuSection({ profileGap }: { profileGap: boolean }) {
         </View>
       ) : null}
 
-      {/* Patch 15: both cards are gated on the SAME signal — the backend's
-          profile completeness (404/422). They stay visible so the customer
-          can see what unlocks, but carry a written lock reason (never an
-          icon alone) and lead to onboarding instead of a screen that would
-          only 422. */}
+      {/* Release change: the "Anpassa en måltid" card is GONE from the
+          customer flow — the ordinary menu is already tailored to the
+          customer's goals, and a second customisation entrance read as a
+          competing product. The /nutri-anpassar route still exists and
+          works; nothing links to it. Only the day planner remains here. */}
       <View style={styles.cards}>
         <MenuPlanCard
           badge={t("menu.personal.planBadge")}
@@ -72,27 +72,6 @@ export function PersonalMenuSection({ profileGap }: { profileGap: boolean }) {
             profileGap
               ? router.navigate(NUTRITION_ONBOARDING_ROUTE)
               : router.push("/planera-dagen")
-          }
-        />
-        <MenuPlanCard
-          badge={t("menu.personal.customizeBadge")}
-          heading={t("menu.personal.customizeHeading")}
-          subheading={
-            profileGap
-              ? t("menu.personal.lockedSubheading")
-              : t("menu.personal.customizeSubheading")
-          }
-          ctaLabel={profileGap ? t("menu.personal.profileGapCta") : t("menu.personal.customizeCta")}
-          lockLabel={profileGap ? t("menu.personal.lockedLabel") : undefined}
-          accessibilityLabel={
-            profileGap
-              ? t("menu.personal.lockedAria", { feature: t("menu.personal.customizeHeading") })
-              : t("menu.personal.customizeHeading")
-          }
-          onPress={() =>
-            profileGap
-              ? router.navigate(NUTRITION_ONBOARDING_ROUTE)
-              : router.push("/nutri-anpassar")
           }
         />
       </View>

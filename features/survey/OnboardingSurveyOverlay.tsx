@@ -20,7 +20,7 @@ import {
   isAnyNudgeOverlayActive,
   subscribeNudgeOverlayActivity,
 } from "@/features/overlays/overlayActivity";
-import { useTranslation } from "@/i18n";
+import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -89,6 +89,9 @@ export function OnboardingSurveyOverlay() {
 
 function SurveyCard() {
   const { t } = useTranslation();
+  // Recorded with the answers so admin can read them in the language they
+  // were given in.
+  const { language } = useLanguage();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<1 | 2>(1);
   const [source, setSource] = useState<string | null>(null);
@@ -96,7 +99,7 @@ function SurveyCard() {
 
   const submitMutation = useMutation({
     mutationFn: () =>
-      submitOnboardingSurvey({ discoverySource: source!, choiceReasons: reasons }),
+      submitOnboardingSurvey({ discoverySource: source!, choiceReasons: reasons, language }),
     onSuccess: (data) => queryClient.setQueryData(["onboardingSurvey", "me"], data),
   });
   const skipMutation = useMutation({

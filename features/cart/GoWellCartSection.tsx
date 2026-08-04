@@ -153,12 +153,12 @@ export function GoWellCartSection() {
                 source={selectedDrink.image || undefined}
                 style={styles.summaryImage}
                 contentFit="contain"
-                accessibilityLabel={goWellFlavorLabel(selectedDrink)}
+                accessibilityLabel={goWellFlavorLabel(selectedDrink, language)}
               />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <ThemedText style={styles.summaryName}>
-                {goWellFlavorLabel(selectedDrink)}
+                {goWellFlavorLabel(selectedDrink, language)}
               </ThemedText>
               <View style={styles.summaryStateRow}>
                 <Check size={13} color={visual.accent} strokeWidth={3} />

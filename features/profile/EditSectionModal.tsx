@@ -31,12 +31,19 @@ import {
   EditNumField,
   FieldLabel,
   HelperText,
+  NumericDoneBar,
   OptionCard,
   PillPair,
   SelectRow,
 } from "./editFields";
 
-export type EditSection = "grunddata" | "aktivitet" | "mal";
+/**
+ * "profil" (release P13) is the COMBINED page — grunddata + aktivitet + mål
+ * in one scroll with section headings and one save, replacing the four
+ * small sub-modals. "vikt" (release P14) is the weight quick-edit: the one
+ * number, validated and saved through the exact same full-profile upsert.
+ */
+export type EditSection = "grunddata" | "aktivitet" | "mal" | "profil" | "vikt";
 
 export interface ProfileFormState {
   gender: "Male" | "Female";
@@ -91,7 +98,13 @@ export function EditSectionModal({
       ? t("profile.editBasicData")
       : section === "aktivitet"
         ? t("profile.editActivity")
-        : t("profile.editGoal");
+        : section === "profil"
+          ? t("profile.editProfile")
+          : section === "vikt"
+            ? t("profile.weightRow")
+            : t("profile.editGoal");
+
+  const combined = section === "profil";
 
   // 400ms-debounced live preview (web parity; planFocus is preserved by the
   // caller's buildDto, so the preview here omits it exactly like a fresh
@@ -147,7 +160,22 @@ export function EditSectionModal({
               contentContainerStyle={styles.sheetContent}
               keyboardShouldPersistTaps="handled"
             >
-              {(section === "grunddata" || isNewProfile) && (
+              {section === "vikt" && !isNewProfile && (
+                <View style={{ gap: spacing[4] }}>
+                  <HelperText>{t("profile.weightEditHelp")}</HelperText>
+                  <EditNumField
+                    label={t("profile.weight")}
+                    unit="kg"
+                    value={form.weightKg}
+                    onChange={(v) => onChange({ weightKg: v })}
+                    placeholder="75"
+                  />
+                </View>
+              )}
+
+              {combined && <SectionHeading text={t("profile.sectionBasics")} first />}
+
+              {(section === "grunddata" || combined || isNewProfile) && (
                 <View style={{ gap: spacing[4] }}>
                   <View style={{ gap: 6 }}>
                     <FieldLabel>{t("profile.gender")}</FieldLabel>
@@ -236,7 +264,9 @@ export function EditSectionModal({
                 </View>
               )}
 
-              {section === "aktivitet" && !isNewProfile && (
+              {combined && <SectionHeading text={t("profile.sectionActivity")} />}
+
+              {(section === "aktivitet" || combined) && !isNewProfile && (
                 <View style={{ gap: spacing[5] }}>
                   <HelperText>{t("profile.activityIntro")}</HelperText>
 
@@ -313,10 +343,15 @@ export function EditSectionModal({
                 </View>
               )}
 
-              {section === "mal" && !isNewProfile && (
+              {combined && <SectionHeading text={t("profile.sectionGoal")} />}
+
+              {(section === "mal" || combined) && !isNewProfile && (
                 <View style={{ gap: spacing[5] }}>
                   <View style={{ gap: 6 }}>
-                    <FieldLabel>{t("profile.primaryGoal")}</FieldLabel>
+                    {/* Release P15: no duplicated "Mål" label — the modal
+                        title already says it, so the helper line carries
+                        the explanation and the options speak for
+                        themselves. */}
                     <HelperText>{t("profile.primaryGoalHelp")}</HelperText>
                     <View style={{ gap: spacing[2], marginTop: 4 }}>
                       {PRIMARY_GOAL_OPTIONS.map((g) => (
@@ -402,13 +437,42 @@ export function EditSectionModal({
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+        {/* iOS "Klar" bar above the numeric pad (P8). */}
+        <NumericDoneBar />
       </View>
     </Modal>
   );
 }
 
+/** Calm section divider for the combined profile page (P13). */
+function SectionHeading({ text, first = false }: { text: string; first?: boolean }) {
+  return (
+    <View style={[styles.sectionHeading, first && styles.sectionHeadingFirst]}>
+      <ThemedText style={styles.sectionHeadingText}>{text.toUpperCase()}</ThemedText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "center" },
+  sectionHeading: {
+    marginTop: spacing[6],
+    marginBottom: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.06)",
+    paddingTop: spacing[4],
+  },
+  sectionHeadingFirst: {
+    marginTop: 0,
+    borderTopWidth: 0,
+    paddingTop: 0,
+  },
+  sectionHeadingText: {
+    fontSize: 11,
+    fontFamily: fontFamily.bodySemibold,
+    letterSpacing: 1.5,
+    color: "rgba(255,255,255,0.35)",
+  },
   sheetWrap: { flex: 1, justifyContent: "center", paddingHorizontal: spacing[4] },
   sheet: {
     maxHeight: "90%",

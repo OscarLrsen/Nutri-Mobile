@@ -21,7 +21,8 @@ import { WelcomeCouponModal } from "@/features/coupons/WelcomeCouponModal";
 import { SpinNudgeSheet } from "@/features/rewards/SpinNudgeSheet";
 import { ConsentGateModal } from "@/features/consents/ConsentGateModal";
 import { FirstRunOnboardingGate } from "@/features/onboarding/FirstRunOnboardingGate";
-import { OnboardingSurveyOverlay } from "@/features/survey/OnboardingSurveyOverlay";
+import { CartToast } from "@/components/feedback/CartToast";
+import { FoodFeedbackPrompt } from "@/features/feedback/FoodFeedbackPrompt";
 import { PushNotificationResponder } from "@/features/push/PushNotificationResponder";
 import { PushTokenSync } from "@/features/push/PushTokenSync";
 import { ErrorBoundary } from "@/components/feedback/ErrorBoundary";
@@ -164,12 +165,14 @@ export default function RootLayout() {
                               flags — mounted last so it stacks above the two
                               nudges whenever both would show. */}
                           <ConsentGateModal />
-                          {/* Onboarding survey (patch 4) — a plain View
-                              overlay, deliberately NOT an RN Modal: the
-                              consent gate and the welcome/spin modals
-                              above always render on top of it, and the
-                              first-run gate (mounted below) covers it. */}
-                          <OnboardingSurveyOverlay />
+                          {/* The onboarding survey no longer mounts here —
+                              release change: it belongs to the wait after
+                              the FIRST ORDER, so OrderStatusScreen mounts
+                              it on the active-order views instead. */}
+                          {/* Food feedback ("hur smakade maten?") on a later
+                              app open after a delivered order. Server-gated;
+                              renders nothing while an order is in flight. */}
+                          <FoodFeedbackPrompt />
                         </>
                       )}
                       {/* First-run intro (patch 3, session-gated by patch
@@ -179,6 +182,14 @@ export default function RootLayout() {
                           Home until done (consent modal still stacks
                           above; the survey waits for the intro signal). */}
                       <FirstRunOnboardingGate />
+                      {/* Cart confirmation ("Tillagd i varukorgen"). Mounted
+                          once here so any screen that adds to the cart gets
+                          the same feedback, and above RootNavigator so it
+                          floats over the tab bar. Non-blocking and
+                          pointerEvents="none" — it never eats a tap, which is
+                          why it can sit under the gates below rather than
+                          fighting them for the top of the stack. */}
+                      <CartToast />
                       {/* Animated startup screen on top of the booting app. */}
                       {!splashDone && (
                         <NutriSplashScreen

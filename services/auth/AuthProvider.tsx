@@ -3,6 +3,8 @@ import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "./supabase";
 import { deactivateCurrentDevicePush } from "@/services/push/pushNotifications";
+import { resetActiveOrderForAccountChange } from "@/utils/activeOrder";
+import { queryClient } from "@/lib/queryClient";
 
 /**
  * Session/user auth state only — mirrors the *auth* half of Nutri-Frontend's
@@ -47,6 +49,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // device stops getting the previous user's order pushes.
     await deactivateCurrentDevicePush();
     await supabase.auth.signOut();
+
+    // The followed order belongs to the account that just left. Cleared from
+    // memory AND storage, and the cached order dropped from React Query, so a
+    // banner on an already-mounted screen cannot keep showing the previous
+    // customer's order to whoever signs in next. Central, so every sign-out
+    // path is covered — not just the button on Profil.
+    await resetActiveOrderForAccountChange();
+    queryClient.removeQueries({ queryKey: ["orders"] });
   };
 
   return (

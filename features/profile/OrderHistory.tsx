@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import type { TFunction } from "i18next";
 import {
@@ -241,38 +242,33 @@ function OrderCard({ order }: { order: ApiOrder }) {
 
 export function OrderHistory({ email }: { email: string }) {
   const { t } = useTranslation();
-  const [orders, setOrders] = useState<ApiOrder[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [loaded, setLoaded] = useState(false);
 
-  const load = async () => {
-    if (loaded) return;
-    setLoading(true);
-    setError("");
-    try {
-      setOrders(await getOrdersByEmail(email));
-      setLoaded(true);
-    } catch {
-      setError(t("orderHistory.fetchError"));
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Release P12: the list loads THE MOMENT the section opens — the old
+  // extra "Visa" tap is gone. React-query gives it a cache, so reopening
+  // the section shows the previous list instantly while refreshing.
+  const ordersQuery = useQuery({
+    queryKey: ["orders", "history", email],
+    queryFn: () => getOrdersByEmail(email),
+    enabled: email.length > 0,
+    staleTime: 60_000,
+  });
+
+  const orders = ordersQuery.data ?? null;
 
   return (
     <View style={styles.container}>
-      <Pressable onPress={load} style={styles.loadRow} accessibilityRole="button">
+      <View style={styles.loadRow}>
         <ThemedText style={styles.loadTitle}>{t("orderHistory.title").toUpperCase()}</ThemedText>
-        {!loaded && !loading && (
-          <ThemedText style={styles.showLink}>{t("orderHistory.show")}</ThemedText>
-        )}
-        {loading && <LoadingIndicator />}
-      </Pressable>
+        {ordersQuery.isLoading && <LoadingIndicator />}
+      </View>
 
-      {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+      {ordersQuery.isError ? (
+        <Pressable onPress={() => ordersQuery.refetch()} accessibilityRole="button">
+          <ThemedText style={styles.errorText}>{t("orderHistory.fetchError")}</ThemedText>
+        </Pressable>
+      ) : null}
 
-      {loaded && orders !== null && (
+      {orders !== null && (
         <View style={{ marginTop: spacing[4], gap: spacing[3] }}>
           {orders.length === 0 ? (
             <ThemedText style={styles.emptyText}>{t("orderHistory.emptyInline")}</ThemedText>
