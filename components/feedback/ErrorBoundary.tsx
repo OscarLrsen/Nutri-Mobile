@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type PropsWithChildren } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { i18n } from "@/i18n";
 import { colors, spacing } from "@/theme";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { Button } from "@/components/ui/Button";
@@ -33,15 +34,17 @@ export class ErrorBoundary extends Component<PropsWithChildren, State> {
 
   render() {
     if (this.state.error) {
+      // Class component (no hooks) — read the shared i18n instance directly;
+      // it renders with the language active at crash time.
       return (
         <View style={styles.container}>
           <ThemedText variant="title" style={styles.title}>
-            Något gick fel
+            {i18n.t("common.somethingWentWrong")}
           </ThemedText>
           <ThemedText variant="body" color="textSecondary" style={styles.message}>
-            Ett oväntat fel inträffade. Försök igen.
+            {i18n.t("common.unexpectedError")}
           </ThemedText>
-          <Button label="Försök igen" onPress={this.reset} />
+          <Button label={i18n.t("common.retry")} onPress={this.reset} />
         </View>
       );
     }

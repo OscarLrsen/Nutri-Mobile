@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
@@ -9,10 +9,25 @@ import { ErrorState } from "@/components/feedback/ErrorState";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { getMeals, getAllAvailability, type ApiMeal, type ApiMealAvailability } from "@/services/api/meals";
 import { getDrinks, type ApiDrink } from "@/services/api/drinks";
-import { menuCopy } from "@/constants/copy";
+import { getLocation, getStoreStatus } from "@/services/api/store";
+import {
+  deriveLocationStatusKind,
+  getLocationStatusLabel,
+  STATUS_COLORS,
+} from "@/utils/locationStatus";
+import { ActiveOrderBanner } from "@/features/order/ActiveOrderBanner";
+import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { MealCard } from "./MealCard";
 import { DrinkCard } from "./DrinkCard";
+import { PersonalMenuSection } from "./PersonalMenuSection";
+import { GoWellFlavorCarousel } from "./GoWellFlavorCarousel";
+import { recommendSize, slotForCategory, slotTarget } from "./mealRecommendation";
+import {
+  isProfileGapError,
+  useTodayDayPlanQuery,
+  useTodayNutritionQuery,
+} from "@/services/api/nutritionQueries";
 
 /**
  * Meny — mobile port of the web /meny page's category/grouping logic
@@ -26,8 +41,9 @@ import { DrinkCard } from "./DrinkCard";
  * no items are hidden; default tab is Huvudmåltider with fallback to the
  * first non-empty category.
  *
- * Feature scope: browsing only — no cart, no detail navigation yet
- * (features 3–4).
+ * Meal cards open the existing detail route and can add the currently
+ * selected size through the shared CartContext. Drink cards retain their
+ * dedicated addDrinkItem path.
  */
 
 const BREAKFAST_TAG = "Breakfast";
@@ -40,8 +56,32 @@ type MenuItem =
   | { kind: "drink"; drink: ApiDrink };
 
 export function MenuScreen() {
+  const { t } = useTranslation();
+  // Store status — MOVED HERE FROM HEM (Patch 1 IA): Meny now owns the 30s
+  // poll. Same ["store","status"] key as before, so CartScreen's closed
+  // banner and MealDetail keep sharing this cache row. Tab screens stay
+  // mounted, so the poll runs for the whole session exactly like it did on
+  // the old Hem.
+  const statusQuery = useQuery({
+    queryKey: ["store", "status"],
+    queryFn: getStoreStatus,
+    refetchInterval: 30_000,
+  });
+  const locationQuery = useQuery({ queryKey: ["store", "location"], queryFn: getLocation });
+
   const mealsQuery = useQuery({ queryKey: ["meals"], queryFn: getMeals });
   const drinksQuery = useQuery({ queryKey: ["drinks"], queryFn: getDrinks });
+  // Personal portion recommendations (patch 12): ONE shared nutrition
+  // query for the whole menu — the same ["nutrition","today"] cache row
+  // Home uses, so this usually costs zero extra network calls and NEVER
+  // one per card. 404/422 = profile gap (honest CTA, no fake recs);
+  // any other error = null targets → cards render without recs.
+  const todayQuery = useTodayNutritionQuery();
+  const profileGap = todayQuery.isError && isProfileGapError(todayQuery.error);
+  // The user's SAVED day plan (one shared query, invalidated by the day
+  // planner on save) — its slot targets take priority over the automatic
+  // distribution, so "your goal and today's plan" is honest copy.
+  const dayPlanQuery = useTodayDayPlanQuery();
   // Availability failing must never block the menu — treat as unknown and
   // let backend order-time validation be the safety net (web parity).
   const availabilityQuery = useQuery({
@@ -57,30 +97,45 @@ export function MenuScreen() {
     return map;
   }, [availabilityQuery.data]);
 
-  const groups = useMemo(() => {
+  const { groups, goWellDrinks } = useMemo(() => {
     const meals = mealsQuery.data ?? [];
     const drinks = (drinksQuery.data ?? []).filter((d) => (d.stockQuantity ?? 0) > 0);
     const isBreakfast = (m: ApiMeal) => m.mealTimeTags?.includes(BREAKFAST_TAG) ?? false;
+    // GoWell (patch 11): the family renders as ONE carousel at the top of
+    // Dryck; its flavours are excluded from the regular card list so a
+    // flavour never appears twice. Water (LOKA) and any other drink keep
+    // the standard DrinkCard below the carousel.
+    const nonShakeDrinks = drinks.filter((d) => d.category !== "Shakes");
+    // The BACKEND flag decides, never the product name (patch 17B).
+    const goWell = nonShakeDrinks.filter((d) => d.isGoWell === true);
     return {
-      frukost: meals.filter(isBreakfast).map((meal): MenuItem => ({ kind: "meal", meal })),
-      huvudmaltider: meals
-        .filter((m) => m.category !== "Mellanmål" && !isBreakfast(m))
-        .map((meal): MenuItem => ({ kind: "meal", meal })),
-      mellanmal: meals
-        .filter((m) => m.category === "Mellanmål")
-        .map((meal): MenuItem => ({ kind: "meal", meal })),
-      shakes: drinks
-        .filter((d) => d.category === "Shakes")
-        .map((drink): MenuItem => ({ kind: "drink", drink })),
-      dryck: drinks
-        .filter((d) => d.category !== "Shakes")
-        .map((drink): MenuItem => ({ kind: "drink", drink })),
-    } satisfies Record<CategoryId, MenuItem[]>;
+      goWellDrinks: goWell,
+      groups: {
+        frukost: meals.filter(isBreakfast).map((meal): MenuItem => ({ kind: "meal", meal })),
+        huvudmaltider: meals
+          .filter((m) => m.category !== "Mellanmål" && !isBreakfast(m))
+          .map((meal): MenuItem => ({ kind: "meal", meal })),
+        mellanmal: meals
+          .filter((m) => m.category === "Mellanmål")
+          .map((meal): MenuItem => ({ kind: "meal", meal })),
+        shakes: drinks
+          .filter((d) => d.category === "Shakes")
+          .map((drink): MenuItem => ({ kind: "drink", drink })),
+        dryck: nonShakeDrinks
+          .filter((d) => d.isGoWell !== true)
+          .map((drink): MenuItem => ({ kind: "drink", drink })),
+      } satisfies Record<CategoryId, MenuItem[]>,
+    };
   }, [mealsQuery.data, drinksQuery.data]);
 
   const availableCategories = useMemo(
-    () => CATEGORY_IDS.filter((id) => groups[id].length > 0),
-    [groups]
+    // Dryck stays available when the GoWell carousel alone has content
+    // (e.g. every non-shake drink is a GoWell flavour).
+    () =>
+      CATEGORY_IDS.filter(
+        (id) => groups[id].length > 0 || (id === "dryck" && goWellDrinks.length > 0)
+      ),
+    [groups, goWellDrinks]
   );
 
   const [activeCategory, setActiveCategory] = useState<CategoryId>("huvudmaltider");
@@ -90,13 +145,86 @@ export function MenuScreen() {
     "huvudmaltider";
   const activeItems = groups[activeId];
 
+  // "Din personliga meny" (patch 12) renders only under Huvudmåltider so
+  // Shakes/Dryck browsing isn't pushed below the fold by planning cards.
+  const showOrderingEntries = activeId === "huvudmaltider";
+
+  // Slot target for the ACTIVE category — pure presentation of the
+  // backend's per-slot distribution (see mealRecommendation.ts).
+  const { language } = useLanguage();
+  const activeSlot =
+    activeId === "frukost" || activeId === "huvudmaltider" || activeId === "mellanmal"
+      ? slotForCategory(activeId, language)
+      : null;
+  const activeSlotTarget = activeSlot
+    ? slotTarget(todayQuery.data, dayPlanQuery.data ?? null, activeSlot)
+    : null;
+
+  // Header height differs per category now — reset scroll on chip switch so
+  // the list never lands mid-content under a differently-sized header.
+  const listRef = useRef<FlatList<MenuItem>>(null);
+  const switchCategory = (id: CategoryId) => {
+    setActiveCategory(id);
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
+
   const loading = mealsQuery.isLoading || drinksQuery.isLoading;
   const error = mealsQuery.isError || drinksQuery.isError;
+
+  // Status derivation ported verbatim from the old Hem hero (web
+  // StoreStatusContext parity: unreachable/unknown status counts as closed).
+  const storeStatus = statusQuery.data ?? null;
+  const locationData = locationQuery.data ?? null;
+  const storeLoading = statusQuery.isLoading || locationQuery.isLoading;
+  const isClosed = storeStatus ? storeStatus.status === "Closed" : !storeLoading;
+  const isPaused = storeStatus?.status === "Paused";
+  const statusKind = deriveLocationStatusKind({
+    isLoading: storeLoading,
+    isClosed,
+    isPaused,
+    location: locationData,
+  });
+  const locationName =
+    (locationData?.isVisible && locationData.locationName) ||
+    storeStatus?.location ||
+    t("hero.fallbackLocation");
+  const statusLabelText = getLocationStatusLabel(statusKind, locationData?.openTime, t).toUpperCase();
 
   return (
     <Screen>
       <View style={styles.header}>
-        <ThemedText variant="headline">Meny</ThemedText>
+        <ThemedText variant="headline">{t("common.tabMenu")}</ThemedText>
+        {/* PLATS · IDAG · STATUS — moved from Hem together with the poll */}
+        {!storeLoading && (
+          <ThemedText variant="caption" style={styles.statusText}>
+            <ThemedText variant="caption" style={styles.statusText}>
+              {locationName.toUpperCase()}
+            </ThemedText>
+            <ThemedText variant="caption" style={styles.statusDot}>
+              {"  ·  "}
+            </ThemedText>
+            <ThemedText variant="caption" style={styles.statusText}>
+              {t("hero.today")}
+            </ThemedText>
+            <ThemedText variant="caption" style={styles.statusDot}>
+              {"  ·  "}
+            </ThemedText>
+            <ThemedText
+              variant="caption"
+              style={[styles.statusText, { color: STATUS_COLORS[statusKind] }]}
+            >
+              {statusLabelText}
+            </ThemedText>
+          </ThemedText>
+        )}
+        {/* Admin broadcast (publicMessage) — shown with the status it belongs to */}
+        {!storeLoading && storeStatus?.publicMessage ? (
+          <View style={styles.publicMessageRow}>
+            <ThemedText variant="caption" style={styles.publicMessageText}>
+              📢 {storeStatus.publicMessage}
+            </ThemedText>
+          </View>
+        ) : null}
       </View>
 
       {loading ? (
@@ -106,7 +234,7 @@ export function MenuScreen() {
           message={
             (mealsQuery.error as { message?: string })?.message ??
             (drinksQuery.error as { message?: string })?.message ??
-            "Kunde inte ladda menyn."
+            t("menu.loadError")
           }
           onRetry={() => {
             mealsQuery.refetch();
@@ -115,7 +243,7 @@ export function MenuScreen() {
           }}
         />
       ) : availableCategories.length === 0 ? (
-        <EmptyState message={menuCopy.empty} />
+        <EmptyState message={t("menu.empty")} />
       ) : (
         <>
           {/* Category chips */}
@@ -130,13 +258,13 @@ export function MenuScreen() {
                 return (
                   <Pressable
                     key={id}
-                    onPress={() => setActiveCategory(id)}
+                    onPress={() => switchCategory(id)}
                     style={[styles.chip, active && styles.chipActive]}
                     accessibilityRole="button"
                     accessibilityState={{ selected: active }}
                   >
                     <ThemedText style={[styles.chipText, active && styles.chipTextActive]}>
-                      {menuCopy.categories[id]}
+                      {t(`menu.categories.${id}`)}
                     </ThemedText>
                   </Pressable>
                 );
@@ -145,19 +273,39 @@ export function MenuScreen() {
           </View>
 
           <FlatList
+            ref={listRef}
             data={activeItems}
             keyExtractor={(item) => (item.kind === "meal" ? item.meal.id : `drink-${item.drink.id}`)}
             contentContainerStyle={styles.list}
             ListHeaderComponent={
               <View style={styles.listHeader}>
+                {/* The live order follows the customer into the menu too —
+                    renders nothing without one. */}
+                <ActiveOrderBanner />
+                {/* "Din personliga meny" (patch 12, release-trimmed to the
+                    day planner only — see PersonalMenuSection).
+                    FlatList-correct header content — never a ScrollView
+                    around the list. Rendered only under Huvudmåltider
+                    (see showOrderingEntries). */}
+                {showOrderingEntries ? (
+                  <PersonalMenuSection profileGap={profileGap} />
+                ) : null}
+                {/* GoWell family (patch 11) — one swipeable component at
+                    the top of Dryck; water/other drinks follow as
+                    standard cards in the list below. */}
+                {activeId === "dryck" && goWellDrinks.length > 0 ? (
+                  <GoWellFlavorCarousel drinks={goWellDrinks} />
+                ) : null}
                 <ThemedText style={styles.sectionLabel}>
-                  {menuCopy.categories[activeId].toUpperCase()} ·{" "}
-                  {menuCopy.itemCount(activeItems.length).toUpperCase()}
+                  {t(`menu.categories.${activeId}`).toUpperCase()} ·{" "}
+                  {t("menu.itemCount", {
+                    count: activeItems.length + (activeId === "dryck" ? goWellDrinks.length : 0),
+                  }).toUpperCase()}
                 </ThemedText>
                 {activeId === "frukost" ? (
                   <View style={styles.breakfastBanner}>
                     <ThemedText variant="caption" style={styles.breakfastText}>
-                      {menuCopy.breakfastServed}
+                      {t("menu.breakfastServed")}
                     </ThemedText>
                   </View>
                 ) : null}
@@ -165,7 +313,13 @@ export function MenuScreen() {
             }
             renderItem={({ item }) =>
               item.kind === "meal" ? (
-                <MealCard meal={item.meal} availability={availabilityById?.get(item.meal.id) ?? null} />
+                <MealCard
+                  meal={item.meal}
+                  availability={availabilityById?.get(item.meal.id) ?? null}
+                  recommendation={
+                    activeSlot ? recommendSize(item.meal, activeSlotTarget, activeSlot) : null
+                  }
+                />
               ) : (
                 <DrinkCard drink={item.drink} />
               )
@@ -183,6 +337,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[5],
     paddingTop: spacing[3],
     paddingBottom: spacing[2],
+    gap: spacing[1],
+  },
+  statusText: {
+    fontSize: 11,
+    fontFamily: fontFamily.bodySemibold,
+    letterSpacing: 1.2,
+    color: colors.textSecondary,
+  },
+  statusDot: {
+    color: colors.textMuted,
+  },
+  publicMessageRow: {
+    marginTop: spacing[1],
+    borderRadius: radius.btn,
+    borderWidth: 1,
+    borderColor: "rgba(232,101,10,0.18)",
+    backgroundColor: "rgba(232,101,10,0.08)",
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  publicMessageText: {
+    color: "rgba(255,255,255,0.78)",
   },
   chipRow: {
     gap: spacing[2],

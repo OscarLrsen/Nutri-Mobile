@@ -9,7 +9,8 @@ import { ThemedText } from "@/components/ui/ThemedText";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { getRewardStatus } from "@/services/api/rewards";
 import { WELCOME_PROMPTED_KEY_PREFIX } from "@/features/coupons/WelcomeCouponModal";
-import { rewardsCopy as copy } from "@/constants/copy";
+import { setNudgeOverlayActive } from "@/features/overlays/overlayActivity";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
@@ -36,9 +37,18 @@ export function resetSpinNudgeForTests() {
 
 export function SpinNudgeSheet() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [visible, setVisible] = useState(false);
   const [welcomeHandled, setWelcomeHandled] = useState(false);
+
+  // Additive (patch 4 overlay control): report visibility so the
+  // onboarding survey never shows while this sheet is up. No show/defer
+  // logic changed.
+  useEffect(() => {
+    setNudgeOverlayActive("spinNudge", visible);
+    return () => setNudgeOverlayActive("spinNudge", false);
+  }, [visible]);
 
   const statusQuery = useQuery({
     queryKey: ["rewards", "status", user?.id ?? null],
@@ -90,8 +100,8 @@ export function SpinNudgeSheet() {
           style={styles.sheet}
         >
           <View style={styles.handle} />
-          <ThemedText style={styles.title}>{copy.nudgeTitle}</ThemedText>
-          <ThemedText style={styles.body}>{copy.nudgeBody}</ThemedText>
+          <ThemedText style={styles.title}>{t("rewards.nudgeTitle")}</ThemedText>
+          <ThemedText style={styles.body}>{t("rewards.nudgeBody")}</ThemedText>
           <Pressable
             onPress={goSpin}
             style={({ pressed }) => [
@@ -100,14 +110,14 @@ export function SpinNudgeSheet() {
             ]}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.primaryButtonText}>{copy.nudgeSpin}</ThemedText>
+            <ThemedText style={styles.primaryButtonText}>{t("rewards.nudgeSpin")}</ThemedText>
           </Pressable>
           <Pressable
             onPress={dismiss}
             style={({ pressed }) => [styles.secondaryButton, pressed && { opacity: 0.7 }]}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.secondaryButtonText}>{copy.nudgeLater}</ThemedText>
+            <ThemedText style={styles.secondaryButtonText}>{t("rewards.nudgeLater")}</ThemedText>
           </Pressable>
         </Animated.View>
       </Animated.View>

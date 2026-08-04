@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Image } from "expo-image";
@@ -10,16 +10,18 @@ import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/services/auth/AuthProvider";
-import { useOnboardingStatus } from "@/services/auth/useOnboardingStatus";
+import { useNutritionProfileGate } from "@/features/onboarding/useNutritionProfileGate";
 import { getMeals, type ApiMeal } from "@/services/api/meals";
 import { getIngredients, type ApiIngredient } from "@/services/api/ingredients";
 import { getContainerTypes, type ApiContainerType } from "@/services/api/containerTypes";
 import { getTodayNutrition, type ApiMealDistribution } from "@/services/api/nutrition";
+import { getTodayDayPlan } from "@/services/api/dayPlan";
 import { SLOT_TO_MEAL_TIME_TAG, type WizardSlot } from "@/features/anpassar/optimizer";
 import { OnboardingGate } from "@/features/anpassar/NutriAnpassarScreen";
 import { apiMealToMeal } from "@/utils/pricing";
-import { env } from "@/lib/env";
-import { heldagCopy as copy } from "@/constants/copy";
+import { formatPriceKr, krToOre } from "@/utils/money";
+import { NUTRITION_ONBOARDING_ROUTE } from "@/features/onboarding/nutritionOnboardingRoute";
+import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 import {
   buildFixedSlotResult,
@@ -30,6 +32,7 @@ import {
   getPackageWindowState,
   getStockholmHour,
   isPackageAvailable,
+  matchSlotLabel,
   SLOT_SERVES,
   SLOTS,
   type SlotResult,
@@ -69,12 +72,19 @@ const TEXT_DIM = "rgba(255,255,255,0.62)";
 const TEXT_MUTE = "rgba(255,255,255,0.34)";
 
 export function HeldagScreen() {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { addItem } = useCart();
   const { user, loading: authLoading } = useAuth();
-  const { loading: profileLoading, isOnboardingComplete } = useOnboardingStatus();
-  const needsGate = !authLoading && !profileLoading && !!user && isOnboardingComplete !== true;
+  // Patch 15: same backend-owned gate as Meny, Planera din dag and Anpassa
+  // en måltid — Supabase's is_onboarding_complete no longer decides whether
+  // a personal-nutrition feature may run, and a network failure is never
+  // reported as an unfinished profile.
+  const profileGate = useNutritionProfileGate();
+  const profileLoading = profileGate.isLoading;
+  const needsGate = !authLoading && !!user && profileGate.isProfileGap;
 
   const [results, setResults] = useState<SlotResult[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,11 +109,12 @@ export function HeldagScreen() {
     let cancelled = false;
     async function run() {
       try {
-        const [today, meals, library, containers] = await Promise.all([
+        const [today, meals, library, containers, savedPlan] = await Promise.all([
           getTodayNutrition(),
           getMeals(),
           getIngredients(),
           getContainerTypes(),
+          getTodayDayPlan().catch(() => null),
         ]);
         if (cancelled) return;
         if (!today || !today.adjustedTarget || today.adjustedTarget.calories <= 0) {
@@ -114,7 +125,30 @@ export function HeldagScreen() {
         setLoadedMeals(meals);
         setLoadedLibrary(library);
         setLoadedContainers(containers);
+        // Patch 13: the SAVED day plan's slot targets take priority over
+        // the automatic distribution — the same priority the menu, the
+        // day planner and Nutri Anpassar use, so the package optimises
+        // against the numbers every other surface shows. Only the TARGETS
+        // change; optimizer, snack handling and the ordering window are
+        // untouched.
         const targets = deriveTargets(today);
+        if (savedPlan && savedPlan.meals.length > 0) {
+          for (const slot of SLOTS) {
+            const saved = savedPlan.meals.find(
+              (m) => m.calories > 0 && matchSlotLabel(slot, m.label)
+            );
+            if (saved) {
+              targets[slot] = {
+                label: saved.label,
+                calories: saved.calories,
+                proteinG: saved.proteinG,
+                carbsG: saved.carbsG,
+                fatG: saved.fatG,
+                timingPurpose: targets[slot]?.timingPurpose ?? "",
+              };
+            }
+          }
+        }
         setLoadedTargets(targets);
         // Run sequentially so each slot can exclude already-chosen meal IDs
         const usedMealIds = new Set<string>();
@@ -234,7 +268,7 @@ export function HeldagScreen() {
   function addOne(r: SlotResult) {
     if (r.status !== "ready") return;
     // Slot-prefixed display name so the cart and kitchen see one clear package line per meal.
-    const originalMealName = `${r.slot} · ${copy.packageKitchenName} · ${r.meal.name}`;
+    const originalMealName = `${r.slot} · ${t("heldag.packageKitchenName")} · ${r.meal.name}`;
     addItem(
       apiMealToMeal(r.meal),
       "medium",
@@ -249,17 +283,21 @@ export function HeldagScreen() {
   }
 
   function addWholeDay() {
-    if (!results || !allReady || adding || !isPackageAvailable(getStockholmHour())) return;
+    if (!results || !allReady || adding || !isPackageAvailable(getStockholmHour(language))) return;
     setAdding(true);
     for (const r of results) addOne(r);
     router.push("/(tabs)/varukorg");
   }
 
   // Computed per render for CTA gate
-  const swHour = getStockholmHour();
+  const swHour = getStockholmHour(language);
   const available = isPackageAvailable(swHour);
   const windowState = getPackageWindowState(swHour);
-  const ctaLabel = available ? copy.ctaOrder : windowState === "after" ? copy.ctaAfter : copy.ctaBefore;
+  const ctaLabel = available
+    ? t("heldag.ctaOrder")
+    : windowState === "after"
+      ? t("heldag.ctaAfter")
+      : t("heldag.ctaBefore");
 
   const handleBack = () => (router.canGoBack() ? router.back() : router.navigate("/(tabs)"));
 
@@ -271,7 +309,8 @@ export function HeldagScreen() {
   if (needsGate) {
     return (
       <OnboardingGate
-        onPrimary={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/onboarding`).catch(() => {})}
+        // Patch 15: stay in the app — this used to open the web onboarding.
+        onPrimary={() => router.navigate(NUTRITION_ONBOARDING_ROUTE)}
         onSecondary={() => router.navigate("/(tabs)/meny")}
       />
     );
@@ -280,7 +319,7 @@ export function HeldagScreen() {
     return (
       <View style={[styles.root, styles.center]}>
         <LoadingIndicator />
-        <ThemedText style={styles.loadingText}>{copy.loadingPackage}</ThemedText>
+        <ThemedText style={styles.loadingText}>{t("heldag.loadingPackage")}</ThemedText>
       </View>
     );
   }
@@ -290,14 +329,14 @@ export function HeldagScreen() {
         <HeldagHeader onBack={handleBack} insetsTop={insets.top} />
         <View style={[styles.center, { flex: 1, paddingHorizontal: spacing[6] }]}>
           <ThemedText style={styles.errorEmoji}>🥗</ThemedText>
-          <ThemedText style={styles.errorTitle}>{copy.errorProfileTitle}</ThemedText>
-          <ThemedText style={styles.errorBody}>{copy.errorProfileBody}</ThemedText>
+          <ThemedText style={styles.errorTitle}>{t("heldag.errorProfileTitle")}</ThemedText>
+          <ThemedText style={styles.errorBody}>{t("heldag.errorProfileBody")}</ThemedText>
           <Pressable
             onPress={() => router.navigate("/(tabs)/konto")}
             style={({ pressed }) => [styles.errorCta, pressed && { backgroundColor: colors.accentHover }]}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.errorCtaText}>{copy.errorProfileCta}</ThemedText>
+            <ThemedText style={styles.errorCtaText}>{t("heldag.errorProfileCta")}</ThemedText>
           </Pressable>
         </View>
       </View>
@@ -310,7 +349,7 @@ export function HeldagScreen() {
         <View style={[styles.center, { flex: 1, paddingHorizontal: spacing[6] }]}>
           <AlertCircle size={28} color={colors.accent} />
           <ThemedText style={[styles.errorBody, { marginTop: spacing[3] }]}>
-            {copy.errorNetwork}
+            {t("heldag.errorNetwork")}
           </ThemedText>
         </View>
       </View>
@@ -338,12 +377,12 @@ export function HeldagScreen() {
           <View style={styles.heroContent}>
             <View style={styles.heroBadge}>
               <View style={styles.heroBadgeDot} />
-              <ThemedText style={styles.heroBadgeText}>{copy.badge}</ThemedText>
+              <ThemedText style={styles.heroBadgeText}>{t("heldag.badge")}</ThemedText>
             </View>
             <ThemedText style={styles.heroTitle}>
-              {copy.heroTitle1}
+              {t("heldag.heroTitle1")}
               {"\n"}
-              {copy.heroTitle2}
+              {t("heldag.heroTitle2")}
             </ThemedText>
           </View>
         </View>
@@ -351,9 +390,10 @@ export function HeldagScreen() {
         {/* HERO TEXT */}
         <View style={styles.heroTextWrap}>
           <ThemedText style={styles.heroBodyText}>
-            {copy.heroBodyPrefix} <ThemedText style={styles.heroBodyStrong}>{copy.heroBodyStrong}</ThemedText>
+            {t("heldag.heroBodyPrefix")}{" "}
+            <ThemedText style={styles.heroBodyStrong}>{t("heldag.heroBodyStrong")}</ThemedText>
           </ThemedText>
-          <ThemedText style={styles.heroNote}>{copy.heroNote}</ThemedText>
+          <ThemedText style={styles.heroNote}>{t("heldag.heroNote")}</ThemedText>
         </View>
 
         {/* Info note (availability window) */}
@@ -364,15 +404,15 @@ export function HeldagScreen() {
           <ThemedText style={styles.infoNoteText}>
             {windowState === "after" ? (
               <>
-                {copy.availabilityAfterPrefix}{" "}
-                <ThemedText style={styles.infoNoteStrong}>{copy.availabilityAfterTime}</ThemedText>.{" "}
-                {copy.availabilitySuffix}
+                {t("heldag.availabilityAfterPrefix")}{" "}
+                <ThemedText style={styles.infoNoteStrong}>{t("heldag.availabilityAfterTime")}</ThemedText>.{" "}
+                {t("heldag.availabilitySuffix")}
               </>
             ) : (
               <>
-                {copy.availabilityBeforePrefix}{" "}
-                <ThemedText style={styles.infoNoteStrong}>{copy.availabilityBeforeTime}</ThemedText>.{" "}
-                {copy.availabilitySuffix}
+                {t("heldag.availabilityBeforePrefix")}{" "}
+                <ThemedText style={styles.infoNoteStrong}>{t("heldag.availabilityBeforeTime")}</ThemedText>.{" "}
+                {t("heldag.availabilitySuffix")}
               </>
             )}
           </ThemedText>
@@ -380,38 +420,38 @@ export function HeldagScreen() {
 
         {/* SUMMARY — Din dag */}
         <View style={styles.sectionHeadRow}>
-          <ThemedText style={styles.sectionHead}>{copy.summaryDay}</ThemedText>
-          <ThemedText style={styles.sectionHeadMeta}>{copy.summaryOverview}</ThemedText>
+          <ThemedText style={styles.sectionHead}>{t("heldag.summaryDay")}</ThemedText>
+          <ThemedText style={styles.sectionHeadMeta}>{t("heldag.summaryOverview")}</ThemedText>
         </View>
 
         {totals && (
           <View style={styles.summaryCard}>
             <View style={styles.summaryGlow} pointerEvents="none" />
             <View style={styles.summaryHeadRow}>
-              <ThemedText style={styles.summaryHeadLabel}>{copy.summaryPackage}</ThemedText>
+              <ThemedText style={styles.summaryHeadLabel}>{t("heldag.summaryPackage")}</ThemedText>
               <View style={styles.readyBadge}>
                 <View style={styles.readyBadgeCheck}>
                   <Check size={7} strokeWidth={3} color="#fff" />
                 </View>
                 <ThemedText style={styles.readyBadgeText}>
-                  {copy.summaryReady(totals.readyCount, SLOTS.length)}
+                  {t("heldag.summaryReady", { ready: totals.readyCount, total: SLOTS.length })}
                 </ThemedText>
               </View>
             </View>
             <View style={styles.summaryGrid}>
-              <SummaryCell label={copy.summaryKcalTotal} value={totals.kcal.toLocaleString("sv-SE")} accent />
-              <SummaryCell label={copy.summaryProtein} value={String(totals.protein)} unit="g" valueColor={colors.accent} />
-              <SummaryCell label={copy.summaryMeals} value={String(SLOTS.length)} unit={copy.unitCount} accent />
-              <SummaryCell label={copy.summaryPrice} value={String(totals.kr)} unit="kr" />
+              <SummaryCell label={t("heldag.summaryKcalTotal")} value={formatNumber(totals.kcal, language)} accent />
+              <SummaryCell label={t("heldag.summaryProtein")} value={String(totals.protein)} unit="g" valueColor={colors.accent} />
+              <SummaryCell label={t("heldag.summaryMeals")} value={String(SLOTS.length)} unit={t("heldag.unitCount")} accent />
+              <SummaryCell label={t("heldag.summaryPrice")} value={formatNumber(totals.kr, language)} unit="kr" />
             </View>
           </View>
         )}
 
         {/* SLOT CARDS */}
         <View style={styles.sectionHeadRow}>
-          <ThemedText style={styles.sectionHead}>{copy.slotSectionTitle}</ThemedText>
+          <ThemedText style={styles.sectionHead}>{t("heldag.slotSectionTitle")}</ThemedText>
           <ThemedText style={styles.sectionHeadMeta}>
-            {SLOTS.length} {copy.unitCount}
+            {SLOTS.length} {t("heldag.unitCount")}
           </ThemedText>
         </View>
 
@@ -461,11 +501,13 @@ export function HeldagScreen() {
             </ThemedText>
           </View>
           {available && (
-            <ThemedText style={styles.ctaPrice}>{totals ? totals.kr : 0} kr</ThemedText>
+            <ThemedText style={styles.ctaPrice}>
+              {formatPriceKr(krToOre(totals ? totals.kr : 0), language)}
+            </ThemedText>
           )}
         </Pressable>
         {available && !allReady && (
-          <ThemedText style={styles.ctaNotReady}>{copy.ctaNotReady}</ThemedText>
+          <ThemedText style={styles.ctaNotReady}>{t("heldag.ctaNotReady")}</ThemedText>
         )}
       </LinearGradient>
     </View>
@@ -475,13 +517,14 @@ export function HeldagScreen() {
 /* ── Header (web HeldagHeader: back + centered logo) ────────── */
 
 function HeldagHeader({ onBack, insetsTop }: { onBack: () => void; insetsTop: number }) {
+  const { t } = useTranslation();
   return (
     <View style={[styles.header, { paddingTop: insetsTop + 10 }]}>
       <Pressable
         onPress={onBack}
         style={styles.backButton}
         accessibilityRole="button"
-        accessibilityLabel="Tillbaka"
+        accessibilityLabel={t("common.back")}
         hitSlop={8}
       >
         <ChevronLeft size={18} color="#fff" />
@@ -547,6 +590,8 @@ function SlotCard({
   onSwapClose: () => void;
   onSwapPick: (meal: ApiMeal) => void;
 }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const target = result.target;
 
   if (result.status === "missing") {
@@ -554,7 +599,7 @@ function SlotCard({
       <View style={styles.slotCard}>
         <SlotImage slot={result.slot} target={target} image={undefined} />
         <View style={{ padding: spacing[4] }}>
-          <ThemedText style={styles.slotMissingText}>{copy.slotMissing}</ThemedText>
+          <ThemedText style={styles.slotMissingText}>{t("heldag.slotMissing")}</ThemedText>
         </View>
       </View>
     );
@@ -566,7 +611,7 @@ function SlotCard({
         <SlotImage slot={result.slot} target={target} image={undefined} />
         <View style={{ padding: spacing[4] }}>
           <ThemedText style={styles.slotErrorText}>
-            {result.reason === "noContainer" ? copy.errorNoContainer : copy.errorCalculateMeal}
+            {result.reason === "noContainer" ? t("heldag.errorNoContainer") : t("heldag.errorCalculateMeal")}
           </ThemedText>
         </View>
       </View>
@@ -584,7 +629,7 @@ function SlotCard({
         <View style={styles.slotTitleRow}>
           <ThemedText style={styles.slotMealName}>{result.meal.name}</ThemedText>
           <ThemedText style={styles.slotPrice}>
-            {priceKr}
+            {formatNumber(priceKr, language)}
             <ThemedText style={styles.slotPriceUnit}> kr</ThemedText>
           </ThemedText>
         </View>
@@ -597,11 +642,11 @@ function SlotCard({
           <ThemedText style={styles.slotMacroText}>{result.customMacros.calories} kcal</ThemedText>
           <MacroDot />
           <ThemedText style={styles.slotMacroText}>
-            {result.customMacros.carbsG}g {copy.macroCarbsShort}
+            {result.customMacros.carbsG}g {t("heldag.macroCarbsShort")}
           </ThemedText>
           <MacroDot />
           <ThemedText style={styles.slotMacroText}>
-            {result.customMacros.fatG}g {copy.macroFatShort}
+            {result.customMacros.fatG}g {t("heldag.macroFatShort")}
           </ThemedText>
         </View>
 
@@ -621,7 +666,7 @@ function SlotCard({
             <View style={styles.includedCheck}>
               <Check size={7} strokeWidth={3} color={colors.accent} />
             </View>
-            <ThemedText style={styles.includedText}>{copy.slotIncluded}</ThemedText>
+            <ThemedText style={styles.includedText}>{t("heldag.slotIncluded")}</ThemedText>
           </View>
           <Pressable
             onPress={swapping ? onSwapClose : onSwapOpen}
@@ -629,7 +674,7 @@ function SlotCard({
             hitSlop={6}
           >
             <ThemedText style={[styles.swapToggle, swapping && { color: "rgba(255,255,255,0.35)" }]}>
-              {swapping ? copy.slotClose : copy.slotChange}
+              {swapping ? t("heldag.slotClose") : t("heldag.slotChange")}
             </ThemedText>
           </Pressable>
         </View>
@@ -637,13 +682,13 @@ function SlotCard({
         {/* Inline swap picker */}
         {swapping && (
           <View style={styles.swapPanel}>
-            <ThemedText style={styles.swapPanelHead}>{copy.slotChoose}</ThemedText>
+            <ThemedText style={styles.swapPanelHead}>{t("heldag.slotChoose")}</ThemedText>
             {swapLoading ? (
               <View style={{ alignItems: "center", paddingVertical: spacing[2] }}>
                 <LoadingIndicator />
               </View>
             ) : candidates.length === 0 ? (
-              <ThemedText style={styles.swapEmpty}>{copy.slotNoOptions}</ThemedText>
+              <ThemedText style={styles.swapEmpty}>{t("heldag.slotNoOptions")}</ThemedText>
             ) : (
               <View style={{ gap: 6 }}>
                 {candidates.map((meal) => (
@@ -681,7 +726,8 @@ function SlotImage({
   target: ApiMealDistribution;
   image: string | undefined;
 }) {
-  const serve = slot === "Mellanmål" ? copy.slotServeAnytime : SLOT_SERVES[slot];
+  const { t } = useTranslation();
+  const serve = slot === "Mellanmål" ? t("heldag.slotServeAnytime") : SLOT_SERVES[slot];
   return (
     <View style={styles.slotImageWrap}>
       {image ? (
@@ -707,7 +753,7 @@ function SlotImage({
         <ThemedText style={styles.serveBadgeText}>{serve}</ThemedText>
       </View>
       <View style={styles.targetRow}>
-        <ThemedText style={styles.targetLabel}>{copy.slotTarget.toUpperCase()} </ThemedText>
+        <ThemedText style={styles.targetLabel}>{t("heldag.slotTarget").toUpperCase()} </ThemedText>
         <ThemedText style={styles.targetText}>
           {target.calories} kcal <ThemedText style={styles.targetDot}>·</ThemedText> {target.proteinG}g
           protein

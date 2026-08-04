@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
+import type { TFunction } from "i18next";
 import {
   CheckCircle2,
   ChefHat,
@@ -20,7 +22,8 @@ import type { Meal } from "@/types/cart";
 import { getOrdersByEmail, type ApiOrder } from "@/services/api/orders";
 import { getMealById } from "@/services/api/meals";
 import { apiMealToMeal } from "@/utils/pricing";
-import { couponCopy, orderHistoryCopy as copy, orderStatusCopy } from "@/constants/copy";
+import { formatDate, useLanguage, useTranslation, type AppLanguage } from "@/i18n";
+import { formatPriceKr } from "@/utils/money";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { formatCategorySnapshot } from "./profileOptions";
 
@@ -45,12 +48,13 @@ const STATUS_ICONS: Record<string, { Icon: typeof Clock; color: string; bg: stri
 };
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const cfg = STATUS_ICONS[status] ?? {
     Icon: Package,
     color: "rgba(255,255,255,0.5)",
     bg: "rgba(255,255,255,0.06)",
   };
-  const label = copy.statusNames[status] ?? status;
+  const label = t(`orderHistory.statusNames.${status}`, { defaultValue: status });
   return (
     <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
       <cfg.Icon size={11} color={cfg.color} />
@@ -59,22 +63,17 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function formatOrderLabelDate(iso: string) {
-  return new Date(iso).toLocaleDateString("sv-SE", { month: "long", day: "numeric" });
+function formatOrderLabelDate(iso: string, language: AppLanguage) {
+  return formatDate(new Date(iso), language, { month: "long", day: "numeric" });
 }
 
-function formatKr(ore: number) {
-  return `${(ore / 100).toLocaleString("sv-SE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} kr`;
-}
-
-function sizeLabel(size: string): string {
-  return orderStatusCopy.sizeNames[size.toLowerCase()] ?? size;
+function sizeLabel(size: string, t: TFunction): string {
+  return t(`orderStatus.sizeNames.${size.toLowerCase()}`, { defaultValue: size });
 }
 
 function OrderCard({ order }: { order: ApiOrder }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [reorderError, setReorderError] = useState("");
@@ -104,7 +103,7 @@ function OrderCard({ order }: { order: ApiOrder }) {
               description: "",
               image: "",
               basePrice,
-              category: formatCategorySnapshot(item.categorySnapshot),
+              category: formatCategorySnapshot(item.categorySnapshot, t),
               available: false,
               macros: {
                 calories: item.calories,
@@ -125,7 +124,7 @@ function OrderCard({ order }: { order: ApiOrder }) {
             description: "",
             image: "",
             basePrice,
-            category: formatCategorySnapshot(item.categorySnapshot),
+            category: formatCategorySnapshot(item.categorySnapshot, t),
             available: false,
             macros: {
               calories: item.calories,
@@ -143,7 +142,7 @@ function OrderCard({ order }: { order: ApiOrder }) {
       }
       router.push("/(tabs)/varukorg");
     } catch {
-      setReorderError(copy.reorderError);
+      setReorderError(t("orderHistory.reorderError"));
     } finally {
       setReordering(false);
     }
@@ -161,12 +160,15 @@ function OrderCard({ order }: { order: ApiOrder }) {
           <Package size={18} color={colors.accent} />
           <ThemedText style={styles.orderTitle} numberOfLines={1}>
             Order #{order.orderNumber}
-            <ThemedText style={styles.orderDate}> • {formatOrderLabelDate(order.createdAt)}</ThemedText>
+            <ThemedText style={styles.orderDate}>
+              {" "}
+              • {formatOrderLabelDate(order.createdAt, language)}
+            </ThemedText>
           </ThemedText>
         </View>
         <View style={styles.orderHeaderRight}>
           <StatusBadge status={order.status} />
-          <ThemedText style={styles.orderTotal}>{formatKr(order.totalOre)}</ThemedText>
+          <ThemedText style={styles.orderTotal}>{formatPriceKr(order.totalOre, language)}</ThemedText>
           {expanded ? (
             <ChevronUp size={16} color="rgba(255,255,255,0.4)" />
           ) : (
@@ -185,10 +187,13 @@ function OrderCard({ order }: { order: ApiOrder }) {
                     {item.titleSnapshot}
                   </ThemedText>
                   <ThemedText style={styles.lineMeta}>
-                    {sizeLabel(item.size)} · {item.quantity} {copy.qtyUnit} · {item.calories} kcal
+                    {sizeLabel(item.size, t)} · {item.quantity} {t("orderHistory.qtyUnit")} ·{" "}
+                    {item.calories} kcal
                   </ThemedText>
                 </View>
-                <ThemedText style={styles.linePrice}>{formatKr(item.lineTotalOre)}</ThemedText>
+                <ThemedText style={styles.linePrice}>
+                  {formatPriceKr(item.lineTotalOre, language)}
+                </ThemedText>
               </View>
             ))}
           </View>
@@ -197,19 +202,21 @@ function OrderCard({ order }: { order: ApiOrder }) {
           {(order.discountAmountOre ?? 0) > 0 ? (
             <View style={styles.discountRow}>
               <ThemedText style={styles.discountLabel}>
-                {couponCopy.orderDiscountRow(order.discountPercent)}
+                {order.discountPercent
+                  ? t("coupon.orderDiscountRowPct", { pct: order.discountPercent })
+                  : t("coupon.orderDiscountRowPlain")}
               </ThemedText>
               <ThemedText style={styles.discountValue}>
-                −{formatKr(order.discountAmountOre ?? 0)}
+                −{formatPriceKr(order.discountAmountOre ?? 0, language)}
               </ThemedText>
             </View>
           ) : null}
 
           <View style={styles.orderFooter}>
             <ThemedText style={styles.footerTotal}>
-              {copy.total}:{" "}
+              {t("orderHistory.total")}:{" "}
               <ThemedText style={[styles.footerTotal, { color: "#4ade80" }]}>
-                {formatKr(order.totalOre)}
+                {formatPriceKr(order.totalOre, language)}
               </ThemedText>
             </ThemedText>
             <Pressable
@@ -223,7 +230,7 @@ function OrderCard({ order }: { order: ApiOrder }) {
               accessibilityRole="button"
             >
               <RefreshCw size={14} color={colors.textPrimary} />
-              <ThemedText style={styles.reorderText}>{copy.reorder}</ThemedText>
+              <ThemedText style={styles.reorderText}>{t("orderHistory.reorder")}</ThemedText>
             </Pressable>
           </View>
           {reorderError ? <ThemedText style={styles.errorText}>{reorderError}</ThemedText> : null}
@@ -234,39 +241,37 @@ function OrderCard({ order }: { order: ApiOrder }) {
 }
 
 export function OrderHistory({ email }: { email: string }) {
-  const [orders, setOrders] = useState<ApiOrder[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [loaded, setLoaded] = useState(false);
+  const { t } = useTranslation();
 
-  const load = async () => {
-    if (loaded) return;
-    setLoading(true);
-    setError("");
-    try {
-      setOrders(await getOrdersByEmail(email));
-      setLoaded(true);
-    } catch {
-      setError(copy.fetchError);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Release P12: the list loads THE MOMENT the section opens — the old
+  // extra "Visa" tap is gone. React-query gives it a cache, so reopening
+  // the section shows the previous list instantly while refreshing.
+  const ordersQuery = useQuery({
+    queryKey: ["orders", "history", email],
+    queryFn: () => getOrdersByEmail(email),
+    enabled: email.length > 0,
+    staleTime: 60_000,
+  });
+
+  const orders = ordersQuery.data ?? null;
 
   return (
     <View style={styles.container}>
-      <Pressable onPress={load} style={styles.loadRow} accessibilityRole="button">
-        <ThemedText style={styles.loadTitle}>{copy.title.toUpperCase()}</ThemedText>
-        {!loaded && !loading && <ThemedText style={styles.showLink}>{copy.show}</ThemedText>}
-        {loading && <LoadingIndicator />}
-      </Pressable>
+      <View style={styles.loadRow}>
+        <ThemedText style={styles.loadTitle}>{t("orderHistory.title").toUpperCase()}</ThemedText>
+        {ordersQuery.isLoading && <LoadingIndicator />}
+      </View>
 
-      {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+      {ordersQuery.isError ? (
+        <Pressable onPress={() => ordersQuery.refetch()} accessibilityRole="button">
+          <ThemedText style={styles.errorText}>{t("orderHistory.fetchError")}</ThemedText>
+        </Pressable>
+      ) : null}
 
-      {loaded && orders !== null && (
+      {orders !== null && (
         <View style={{ marginTop: spacing[4], gap: spacing[3] }}>
           {orders.length === 0 ? (
-            <ThemedText style={styles.emptyText}>{copy.emptyInline}</ThemedText>
+            <ThemedText style={styles.emptyText}>{t("orderHistory.emptyInline")}</ThemedText>
           ) : (
             orders.map((order) => <OrderCard key={order.id} order={order} />)
           )}

@@ -6,8 +6,9 @@ import { Check, CupSoda, Plus } from "lucide-react-native";
 import { ThemedText } from "@/components/ui/ThemedText";
 import type { ApiDrink } from "@/services/api/drinks";
 import { useCart } from "@/context/CartContext";
-import { mealDetailCopy, menuCopy } from "@/constants/copy";
+import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
+import { drinkDescription, drinkName } from "./drinkText";
 
 /**
  * Drink card — mobile port of the web /meny DrinkCard's always-visible
@@ -32,6 +33,8 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  * says otherwise. Preliminary design decision.
  */
 export function DrinkCard({ drink }: { drink: ApiDrink }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const { addDrinkItem } = useCart();
   const [imageFailed, setImageFailed] = useState(false);
   const [added, setAdded] = useState(false);
@@ -48,9 +51,16 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
   const showNutrition = drink.showNutrition ?? true;
   const outOfStock = !drink.isAvailable || drink.stockQuantity === 0;
 
+  // Catalogue copy is admin-written per product, so it cannot be a locale
+  // key — it comes back translated from the API and is resolved here.
+  const name = drinkName(drink, language);
+  const description = drinkDescription(drink, language);
+
   const handleAdd = () => {
     if (outOfStock || added) return;
-    addDrinkItem(drink);
+    // addDrinkItem owns the confirmation and returns false if it added
+    // nothing, so a rejected add can never leave the button claiming success.
+    if (!addDrinkItem(drink)) return;
     setAdded(true);
     if (addedTimerRef.current) clearTimeout(addedTimerRef.current);
     addedTimerRef.current = setTimeout(() => setAdded(false), 1800);
@@ -62,13 +72,13 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
     if ((drink.showProtein ?? true) && (drink.proteinG ?? 0) > 0)
       metadata.push(`${drink.proteinG}g protein`);
     if ((drink.showCarbs ?? false) && (drink.carbsG ?? 0) > 0)
-      metadata.push(`${drink.carbsG}g ${menuCopy.carbsShort}`);
+      metadata.push(`${drink.carbsG}g ${t("menu.carbsShort")}`);
     if ((drink.showFat ?? false) && (drink.fatG ?? 0) > 0)
-      metadata.push(`${drink.fatG}g ${menuCopy.fatShort}`);
+      metadata.push(`${drink.fatG}g ${t("menu.fatShort")}`);
     if ((drink.showFiber ?? false) && (drink.fiberG ?? 0) > 0)
       metadata.push(`${drink.fiberG}g fiber`);
     if ((drink.showCaffeine ?? true) && (drink.caffeineMg ?? 0) > 0)
-      metadata.push(`${drink.caffeineMg} mg ${menuCopy.caffeineShort}`);
+      metadata.push(`${drink.caffeineMg} mg ${t("menu.caffeineShort")}`);
   }
 
   return (
@@ -81,7 +91,7 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
             contentFit="cover"
             transition={150}
             onError={() => setImageFailed(true)}
-            accessibilityLabel={drink.name}
+            accessibilityLabel={name}
           />
         ) : (
           <View style={styles.imagePlaceholder}>
@@ -93,14 +103,14 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
       <View style={styles.body}>
         <View style={styles.titleRow}>
           <ThemedText variant="bodyMedium" style={styles.title} numberOfLines={2}>
-            {drink.name}
+            {name}
           </ThemedText>
-          <ThemedText style={styles.price}>{priceKr} kr</ThemedText>
+          <ThemedText style={styles.price}>{formatNumber(priceKr, language)} kr</ThemedText>
         </View>
 
-        {drink.description ? (
+        {description ? (
           <ThemedText variant="caption" color="textTertiary" numberOfLines={1}>
-            {drink.description}
+            {description}
           </ThemedText>
         ) : null}
 
@@ -123,22 +133,22 @@ export function DrinkCard({ drink }: { drink: ApiDrink }) {
           accessibilityRole="button"
           accessibilityState={{ disabled: outOfStock || added }}
           accessibilityLabel={
-            outOfStock ? menuCopy.soldOutToday : added ? menuCopy.added : mealDetailCopy.add
+            outOfStock ? t("menu.soldOutToday") : added ? t("menu.added") : t("mealDetail.add")
           }
         >
           {outOfStock ? (
-            <ThemedText style={styles.addLabelLocked}>{menuCopy.soldOutToday}</ThemedText>
+            <ThemedText style={styles.addLabelLocked}>{t("menu.soldOutToday")}</ThemedText>
           ) : added ? (
             <>
               <Check size={12} color={colors.accent} strokeWidth={2.5} />
               <ThemedText style={[styles.addLabel, { color: colors.accent }]}>
-                {menuCopy.added}
+                {t("menu.added")}
               </ThemedText>
             </>
           ) : (
             <>
               <Plus size={12} color={colors.textPrimary} strokeWidth={2.5} />
-              <ThemedText style={styles.addLabel}>{mealDetailCopy.add}</ThemedText>
+              <ThemedText style={styles.addLabel}>{t("mealDetail.add")}</ThemedText>
             </>
           )}
         </Pressable>
@@ -155,8 +165,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: "hidden",
   },
+  // Release P9: standard drinks (LOKA/water) step back visually — GoWell
+  // owns the section's stage, so this card is deliberately more compact.
   imageWrap: {
-    height: 150,
+    height: 96,
     backgroundColor: colors.cardAlt,
   },
   imagePlaceholder: {

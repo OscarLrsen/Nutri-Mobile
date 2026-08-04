@@ -5,7 +5,7 @@ import { Screen } from "@/components/ui/Screen";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { ProfileScreen } from "@/features/profile/ProfileScreen";
-import { authCopy } from "@/constants/copy";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 
 /**
@@ -14,6 +14,7 @@ import { colors, fontFamily, spacing } from "@/theme";
  * entry points (login / create account).
  */
 export default function KontoScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user, loading } = useAuth();
 
@@ -32,7 +33,7 @@ export default function KontoScreen() {
       <View style={styles.content}>
         <ThemedText variant="headline">Mina sidor</ThemedText>
         <ThemedText variant="body" color="textSecondary">
-          {authCopy.loginSubtitle}
+          {t("auth.loginSubtitle")}
         </ThemedText>
         <Pressable
           onPress={() => router.push("/logga-in")}
@@ -42,7 +43,7 @@ export default function KontoScreen() {
           ]}
           accessibilityRole="button"
         >
-          <ThemedText style={styles.primaryButtonText}>{authCopy.navLogin}</ThemedText>
+          <ThemedText style={styles.primaryButtonText}>{t("auth.navLogin")}</ThemedText>
         </Pressable>
         <Pressable
           onPress={() => router.push("/registrera")}
@@ -52,7 +53,7 @@ export default function KontoScreen() {
           ]}
           accessibilityRole="button"
         >
-          <ThemedText style={styles.secondaryButtonText}>{authCopy.createAccount}</ThemedText>
+          <ThemedText style={styles.secondaryButtonText}>{t("auth.createAccount")}</ThemedText>
         </Pressable>
       </View>
     </Screen>

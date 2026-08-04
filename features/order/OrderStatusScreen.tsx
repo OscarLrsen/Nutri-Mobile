@@ -1,8 +1,9 @@
+import type { TFunction } from "i18next";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -24,11 +25,22 @@ import {
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
+import { PushPrePromptCard } from "@/features/push/PushPrePromptCard";
+import { OnboardingSurveyOverlay } from "@/features/survey/OnboardingSurveyOverlay";
+import {
+  estimateWaitMinutes,
+  isTerminal,
+  stepIndex,
+  toCustomerStatus,
+  type CustomerStatus,
+} from "@/features/order/orderStatusShared";
 import { useCart } from "@/context/CartContext";
 import { getOrderById, type ApiOrder } from "@/services/api/orders";
+import { STAMP_CARD_QUERY_ROOT } from "@/services/api/stampCardQueries";
 import type { ApiError } from "@/types/api";
 import { consumePendingStripeClear } from "@/utils/activeOrder";
-import { checkoutCopy, couponCopy, orderStatusCopy as copy } from "@/constants/copy";
+import { formatDate, formatNumber, formatTime, useLanguage, useTranslation } from "@/i18n";
+import type { AppLanguage } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 
 /**
@@ -65,70 +77,15 @@ import { colors, fontFamily, spacing } from "@/theme";
  * shown in the summary card. The web page displays neither.
  */
 
-/* ── Status helpers (verbatim web ports) ── */
+/* ── Status helpers — moved to orderStatusShared.ts, shared with the
+      active-order banner so the two can never drift ── */
 
-type CustomerStatus =
-  | "awaiting_payment"
-  | "created"
-  | "inprogress"
-  | "ready"
-  | "completed"
-  | "cancelled"
-  | "expired"
-  | "terminal";
-
-function toCustomerStatus(s: string): CustomerStatus {
-  switch (s.toLowerCase()) {
-    case "pendingpayment":
-      return "awaiting_payment";
-    case "pending":
-      return "created";
-    case "confirmed":
-    case "preparing":
-      return "inprogress";
-    case "ready":
-      return "ready";
-    case "delivered":
-      return "completed";
-    case "cancelled":
-    case "canceled":
-      return "cancelled";
-    case "expired":
-      return "expired";
-    default:
-      return "terminal";
-  }
+function sizeLabel(size: string, t: TFunction): string {
+  return t(`orderStatus.sizeNames.${size.toLowerCase()}`, { defaultValue: size });
 }
 
-const KITCHEN_STATUSES = ["created", "inprogress", "ready"] as const;
-function stepIndex(s: CustomerStatus) {
-  return KITCHEN_STATUSES.indexOf(s as (typeof KITCHEN_STATUSES)[number]);
-}
-
-function isTerminal(cs: CustomerStatus) {
-  return cs === "terminal" || cs === "expired" || cs === "completed" || cs === "cancelled";
-}
-
-/** Rough customer-facing wait estimate per state (verbatim web values). */
-function estimateWaitMinutes(cs: CustomerStatus): number | null {
-  switch (cs) {
-    case "created":
-      return 12;
-    case "inprogress":
-      return 5;
-    case "ready":
-      return null;
-    default:
-      return null;
-  }
-}
-
-function sizeLabel(size: string): string {
-  return copy.sizeNames[size.toLowerCase()] ?? size;
-}
-
-/** "idag HH:MM" for same-day orders, "d mmm HH:MM" otherwise (web port, sv). */
-function formatPickupTime(iso: string): string | null {
+/** "idag HH:MM" for same-day orders, "d mmm HH:MM" otherwise (web port). */
+function formatPickupTime(iso: string, t: TFunction, language: AppLanguage): string | null {
   try {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return null;
@@ -137,9 +94,9 @@ function formatPickupTime(iso: string): string | null {
       d.getFullYear() === today.getFullYear() &&
       d.getMonth() === today.getMonth() &&
       d.getDate() === today.getDate();
-    const time = d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
-    if (sameDay) return copy.dateToday(time);
-    const date = d.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
+    const time = formatTime(d, language);
+    if (sameDay) return t("orderStatus.dateToday", { time });
+    const date = formatDate(d, language, { day: "numeric", month: "short" });
     return `${date} ${time}`;
   } catch {
     return null;
@@ -168,17 +125,19 @@ function useCountdown(reservedUntil: string | null | undefined) {
   return { remaining, label, expired };
 }
 
-/** Whole-kr rendering used by the web order page: (ore/100).toFixed(0) kr. */
-function lineKr(ore: number): string {
-  return `${(ore / 100).toFixed(0)} kr`;
+/** Whole-kr rendering used by the web order page (grouping per language). */
+function lineKr(ore: number, language: AppLanguage): string {
+  return `${formatNumber(Math.round(ore / 100), language)} kr`;
 }
 
 /* ── Screen ─────────────────────────────────────────────────── */
 
 export function OrderStatusScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { clearCart } = useCart();
+  const queryClient = useQueryClient();
 
   // REST polling every 5s (web parity); stops in terminal states. A failed
   // background refetch keeps the last known order in cache — that's the
@@ -223,6 +182,18 @@ export function OrderStatusScreen() {
     });
   }, [order, clearCart]);
 
+  // Stamp card (patch 16B): the poll above is the one place in the customer
+  // app that observes an order reaching Delivered, which is exactly when the
+  // backend writes the stamps. Invalidate once so the card is already correct
+  // when the customer navigates back to Home.
+  const stampedRef = useRef(false);
+  useEffect(() => {
+    if (!order || stampedRef.current) return;
+    if (toCustomerStatus(order.status) !== "completed") return;
+    stampedRef.current = true;
+    void queryClient.invalidateQueries({ queryKey: [STAMP_CARD_QUERY_ROOT] });
+  }, [order, queryClient]);
+
   if (orderQuery.isLoading) {
     return (
       <View style={[styles.root, styles.center]}>
@@ -236,9 +207,9 @@ export function OrderStatusScreen() {
     return (
       <View style={[styles.root, styles.center, { gap: spacing[3], paddingHorizontal: spacing[6] }]}>
         <AlertCircle size={40} color="#f87171" />
-        <ThemedText style={styles.deadTitle}>{copy.notFoundTitle}</ThemedText>
+        <ThemedText style={styles.deadTitle}>{t("orderStatus.notFoundTitle")}</ThemedText>
         <Pressable onPress={() => router.navigate("/(tabs)/meny")} accessibilityRole="link">
-          <ThemedText style={styles.link}>{copy.notFoundCta}</ThemedText>
+          <ThemedText style={styles.link}>{t("orderStatus.notFoundCta")}</ThemedText>
         </Pressable>
       </View>
     );
@@ -247,7 +218,18 @@ export function OrderStatusScreen() {
   const cs = toCustomerStatus(order.status);
 
   if (cs === "created" || cs === "inprogress" || cs === "ready") {
-    return <OrderActiveView order={order} fetchError={fetchError} />;
+    return (
+      <>
+        <OrderActiveView order={order} fetchError={fetchError} />
+        {/* Release change: the onboarding survey moved from app start to the
+            wait after the FIRST order. Mounted only on the active views, so
+            it can never appear before an order exists; its own server-truth
+            gating (shouldShow) makes it one-time — and finishing it simply
+            unmounts the overlay, landing the customer right back here on the
+            live order status. */}
+        <OnboardingSurveyOverlay />
+      </>
+    );
   }
   if (cs === "completed") {
     return <OrderCompletedView order={order} />;
@@ -258,6 +240,7 @@ export function OrderStatusScreen() {
 /* ── Shared chrome ──────────────────────────────────────────── */
 
 function StickyHeader() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   return (
@@ -266,7 +249,7 @@ function StickyHeader() {
         onPress={() => (router.canGoBack() ? router.back() : router.navigate("/(tabs)"))}
         style={styles.headerButton}
         accessibilityRole="button"
-        accessibilityLabel="Tillbaka"
+        accessibilityLabel={t("common.back")}
       >
         <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
       </Pressable>
@@ -355,11 +338,23 @@ function ProgressSteps({ labels, curStep }: { labels: string[]; curStep: number 
  * price, total row — plus the mobile additions (customer note, payment
  * method) built from verified ApiOrder fields and existing checkout copy. */
 function OrderLinesCard({ order }: { order: ApiOrder }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
+  // The line the stamp card reward covered, resolved from the id the server
+  // returned rather than by matching prices or names.
+  const stampCardMealName =
+    order.lines.find((l) => l.id === order.stampCardOrderLineId)?.titleSnapshot ?? null;
+  // Included GoWell (patch 17B). Matched on the real order line id the server
+  // returned — never on name or price, which cannot tell two drinks apart.
+  // If the line cannot be resolved the amount is still shown; only the
+  // flavour name is omitted.
+  const includedDrinkName =
+    order.lines.find((l) => l.id === order.includedDrinkOrderLineId)?.titleSnapshot ?? null;
   const paymentMethodLabel =
     order.paymentMethod === "stripe"
-      ? checkoutCopy.payOnline
+      ? t("checkout.payOnline")
       : order.paymentMethod === "pay_on_site"
-        ? checkoutCopy.payAtPickup
+        ? t("checkout.payAtPickup")
         : (order.paymentMethod ?? null);
   return (
     <View style={styles.card}>
@@ -371,11 +366,11 @@ function OrderLinesCard({ order }: { order: ApiOrder }) {
           <View style={{ flex: 1 }}>
             <ThemedText style={styles.lineTitle}>{line.titleSnapshot}</ThemedText>
             {line.size && line.size !== "Normal" ? (
-              <ThemedText style={styles.lineSize}>{sizeLabel(line.size)}</ThemedText>
+              <ThemedText style={styles.lineSize}>{sizeLabel(line.size, t)}</ThemedText>
             ) : null}
           </View>
           <ThemedText style={styles.lineQty}>{line.quantity}×</ThemedText>
-          <ThemedText style={styles.linePrice}>{lineKr(line.lineTotalOre)}</ThemedText>
+          <ThemedText style={styles.linePrice}>{lineKr(line.lineTotalOre, language)}</ThemedText>
         </View>
       ))}
       {order.customerNote ? (
@@ -385,7 +380,7 @@ function OrderLinesCard({ order }: { order: ApiOrder }) {
       ) : null}
       {paymentMethodLabel ? (
         <View style={[styles.lineRow, { borderTopWidth: 1, borderTopColor: colors.borderSoft }]}>
-          <ThemedText style={styles.paymentMethodLabel}>{checkoutCopy.paymentHeading}</ThemedText>
+          <ThemedText style={styles.paymentMethodLabel}>{t("checkout.paymentHeading")}</ThemedText>
           <ThemedText style={styles.paymentMethodValue}>{paymentMethodLabel}</ThemedText>
         </View>
       ) : null}
@@ -395,37 +390,83 @@ function OrderLinesCard({ order }: { order: ApiOrder }) {
       {(order.discountAmountOre ?? 0) > 0 ? (
         <>
           <View style={[styles.lineRow, { borderTopWidth: 1, borderTopColor: colors.borderSoft }]}>
-            <ThemedText style={styles.paymentMethodLabel}>{couponCopy.orderSubtotal}</ThemedText>
-            <ThemedText style={styles.paymentMethodValue}>{lineKr(order.subtotalOre)}</ThemedText>
+            <ThemedText style={styles.paymentMethodLabel}>{t("coupon.orderSubtotal")}</ThemedText>
+            <ThemedText style={styles.paymentMethodValue}>{lineKr(order.subtotalOre, language)}</ThemedText>
           </View>
           <View style={styles.lineRow}>
             <ThemedText style={styles.paymentMethodLabel}>
-              {couponCopy.orderDiscountRow(order.discountPercent)}
+              {/* A stamp card discount is a fixed amount, never a percentage —
+                  labelling it with one would print a rate nobody agreed to. */}
+              {(order.stampCardDiscountOre ?? 0) > 0
+                ? t("stampCardCheckout.orderDiscountRow")
+                : order.discountPercent
+                  ? t("coupon.orderDiscountRowPct", { pct: order.discountPercent })
+                  : t("coupon.orderDiscountRowPlain")}
             </ThemedText>
             <ThemedText style={styles.discountValue}>
-              −{lineKr(order.discountAmountOre ?? 0)}
+              −{lineKr(order.discountAmountOre ?? 0, language)}
             </ThemedText>
           </View>
+          {/* Which meal the reward covered — the amount alone does not say. */}
+          {(order.stampCardDiscountOre ?? 0) > 0 && stampCardMealName ? (
+            <View style={styles.lineRow}>
+              <ThemedText style={styles.paymentMethodLabel}>{stampCardMealName}</ThemedText>
+            </View>
+          ) : null}
+          {/* Included GoWell, as its own line so a customer with both a free
+              meal and a free drink can see which amount is which. */}
+          {(order.includedDrinkDiscountOre ?? 0) > 0 ? (
+            <View style={styles.lineRow}>
+              <ThemedText style={styles.paymentMethodLabel}>
+                {includedDrinkName
+                  ? t("goWell.orderIncludedNamed", {
+                      flavour: includedDrinkName,
+                      count: order.includedDrinkDiscountedQuantity ?? 1,
+                    })
+                  : t("goWell.orderIncluded")}
+              </ThemedText>
+              <ThemedText style={styles.discountValue}>
+                −{lineKr(order.includedDrinkDiscountOre ?? 0, language)}
+              </ThemedText>
+            </View>
+          ) : null}
         </>
       ) : null}
       <View style={styles.totalRow}>
-        <ThemedText style={styles.totalLabel}>{copy.total}</ThemedText>
-        <ThemedText style={styles.totalValue}>{lineKr(order.totalOre)}</ThemedText>
+        <ThemedText style={styles.totalLabel}>{t("orderStatus.total")}</ThemedText>
+        <ThemedText style={styles.totalValue}>{lineKr(order.totalOre, language)}</ThemedText>
       </View>
+
+      {/* Stamps (patch 16C2). The count is the SERVER's — a mixed order with
+          one discounted portion is exactly where a client-side guess goes
+          wrong. Before pickup it is a promise; after, a statement. */}
+      {(order.pendingStampCount ?? 0) > 0 ? (
+        <View style={styles.lineRow}>
+          <ThemedText style={styles.paymentMethodLabel}>
+            {t("stampCardCheckout.pendingStamps", { count: order.pendingStampCount ?? 0 })}
+          </ThemedText>
+        </View>
+      ) : null}
     </View>
   );
 }
 
 function ConfirmationSentText({ email }: { email: string }) {
-  return <ThemedText style={styles.confirmationSent}>{copy.confirmationSent(email)}</ThemedText>;
+  const { t } = useTranslation();
+  return (
+    <ThemedText style={styles.confirmationSent}>
+      {t("orderStatus.confirmationSent", { email })}
+    </ThemedText>
+  );
 }
 
 function FetchErrorNotice({ long }: { long?: boolean }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.fetchErrorBox}>
       <AlertCircle size={14} color="#f87171" />
       <ThemedText style={styles.fetchErrorText}>
-        {long ? copy.fetchErrorLong : copy.fetchErrorShort}
+        {long ? t("orderStatus.fetchErrorLong") : t("orderStatus.fetchErrorShort")}
       </ThemedText>
     </View>
   );
@@ -434,12 +475,13 @@ function FetchErrorNotice({ long }: { long?: boolean }) {
 /* ── Active kitchen flow (web OrderActiveVariationB) ────────── */
 
 function OrderActiveView({ order, fetchError }: { order: ApiOrder; fetchError: boolean }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const cs = toCustomerStatus(order.status);
   const curStep = stepIndex(cs);
-  const stepLabels = [copy.stepReceived, copy.stepPreparing, copy.stepReadyPickup];
-  const statusLabel = curStep >= 0 && curStep < stepLabels.length ? stepLabels[curStep] : copy.stepReceived;
+  const stepLabels = [t("orderStatus.stepReceived"), t("orderStatus.stepPreparing"), t("orderStatus.stepReadyPickup")];
+  const statusLabel = curStep >= 0 && curStep < stepLabels.length ? stepLabels[curStep] : t("orderStatus.stepReceived");
   const waitMin = estimateWaitMinutes(cs);
 
   return (
@@ -453,20 +495,22 @@ function OrderActiveView({ order, fetchError }: { order: ApiOrder; fetchError: b
               <Check size={16} color={colors.textPrimary} strokeWidth={2.5} />
             </View>
           </View>
-          <ThemedText style={styles.heroTitle}>{copy.activeTitle}</ThemedText>
+          <ThemedText style={styles.heroTitle}>{t("orderStatus.activeTitle")}</ThemedText>
           <ThemedText style={styles.heroSub}>
-            {copy.activeWaitLabel}{" "}
+            {t("orderStatus.activeWaitLabel")}{" "}
             <ThemedText style={styles.heroSubStrong}>
-              {waitMin !== null ? copy.activeWaitMinutes(waitMin) : copy.activeReadyToPickup}
+              {waitMin !== null
+                ? t("orderStatus.activeWaitMinutes", { minutes: waitMin })
+                : t("orderStatus.activeReadyToPickup")}
             </ThemedText>
           </ThemedText>
-          <ThemedText style={styles.heroNumberLabel}>{copy.orderNumber.toUpperCase()}</ThemedText>
+          <ThemedText style={styles.heroNumberLabel}>{t("orderStatus.orderNumber").toUpperCase()}</ThemedText>
           <ThemedText style={styles.heroNumber}>#{order.orderNumber}</ThemedText>
         </View>
 
         <View style={styles.body}>
           {/* Status card */}
-          <SectionHead>{copy.sectionStatus.toUpperCase()}</SectionHead>
+          <SectionHead>{t("orderStatus.sectionStatus").toUpperCase()}</SectionHead>
           <View style={styles.card}>
             <View style={[styles.statusRow, styles.rowBorder]}>
               <View style={styles.statusPill}>
@@ -477,10 +521,10 @@ function OrderActiveView({ order, fetchError }: { order: ApiOrder; fetchError: b
                 {waitMin !== null ? (
                   <>
                     <ThemedText style={styles.statusRightStrong}>{waitMin} min</ThemedText>{" "}
-                    {copy.activeRemaining}
+                    {t("orderStatus.activeRemaining")}
                   </>
                 ) : (
-                  <ThemedText style={styles.statusRightStrong}>{copy.activeReadyNow}</ThemedText>
+                  <ThemedText style={styles.statusRightStrong}>{t("orderStatus.activeReadyNow")}</ThemedText>
                 )}
               </ThemedText>
             </View>
@@ -489,19 +533,25 @@ function OrderActiveView({ order, fetchError }: { order: ApiOrder; fetchError: b
             </View>
           </View>
 
+          {/* Push pre-prompt (patch 10) — one-shot, only on the order the
+              cart just placed (order-success signal) and only while the OS
+              permission is still undetermined; the card sits right under
+              the live status it offers to notify about. */}
+          <PushPrePromptCard orderId={order.id} />
+
           {/* Order summary */}
-          <SectionHead>{copy.sectionOrderSummary.toUpperCase()}</SectionHead>
+          <SectionHead>{t("orderStatus.sectionOrderSummary").toUpperCase()}</SectionHead>
           <OrderLinesCard order={order} />
 
           {/* Pickup info */}
-          <SectionHead>{copy.sectionPickup.toUpperCase()}</SectionHead>
+          <SectionHead>{t("orderStatus.sectionPickup").toUpperCase()}</SectionHead>
           <View style={[styles.card, styles.pickupCard]}>
             <View style={styles.pickupIcon}>
               <Lock size={16} color="rgba(255,255,255,0.5)" strokeWidth={1.4} />
             </View>
             <View style={{ flex: 1 }}>
-              <ThemedText style={styles.pickupTitle}>{copy.pickupTitle}</ThemedText>
-              <ThemedText style={styles.pickupBody}>{copy.pickupBody}</ThemedText>
+              <ThemedText style={styles.pickupTitle}>{t("orderStatus.pickupTitle")}</ThemedText>
+              <ThemedText style={styles.pickupBody}>{t("orderStatus.pickupBody")}</ThemedText>
               <ThemedText style={styles.pickupNumber}>#{order.orderNumber}</ThemedText>
             </View>
           </View>
@@ -522,7 +572,7 @@ function OrderActiveView({ order, fetchError }: { order: ApiOrder; fetchError: b
           accessibilityRole="button"
         >
           <Menu size={14} color="rgba(255,255,255,0.5)" strokeWidth={1.5} />
-          <ThemedText style={styles.secondaryCtaText}>{copy.toMenu}</ThemedText>
+          <ThemedText style={styles.secondaryCtaText}>{t("orderStatus.toMenu")}</ThemedText>
         </Pressable>
       </View>
     </View>
@@ -532,14 +582,16 @@ function OrderActiveView({ order, fetchError }: { order: ApiOrder; fetchError: b
 /* ── Completed / picked-up (web OrderCompletedVariationB) ───── */
 
 function OrderCompletedView({ order }: { order: ApiOrder }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const orderProtein = order.lines.reduce(
     (s, l) => s + (l.proteinG || l.macros?.proteinG || 0) * l.quantity,
     0
   );
-  const pickupTime = formatPickupTime(order.createdAt);
-  const stepLabels = [copy.stepReceived, copy.stepPreparing, copy.stepPickedUp];
+  const pickupTime = formatPickupTime(order.createdAt, t, language);
+  const stepLabels = [t("orderStatus.stepReceived"), t("orderStatus.stepPreparing"), t("orderStatus.stepPickedUp")];
 
   return (
     <View style={styles.root}>
@@ -554,10 +606,10 @@ function OrderCompletedView({ order }: { order: ApiOrder }) {
               </View>
             </View>
           </View>
-          <ThemedText style={styles.heroTitle}>{copy.completedTitle}</ThemedText>
-          <ThemedText style={styles.heroSub}>{copy.completedBody(order.orderNumber)}</ThemedText>
+          <ThemedText style={styles.heroTitle}>{t("orderStatus.completedTitle")}</ThemedText>
+          <ThemedText style={styles.heroSub}>{t("orderStatus.completedBody", { number: order.orderNumber })}</ThemedText>
           <View style={styles.completedNumberRow}>
-            <ThemedText style={styles.heroNumberLabel}>{copy.sectionOrder.toUpperCase()}</ThemedText>
+            <ThemedText style={styles.heroNumberLabel}>{t("orderStatus.sectionOrder").toUpperCase()}</ThemedText>
             <ThemedText style={styles.completedNumber}>#{order.orderNumber}</ThemedText>
           </View>
           {pickupTime ? <ThemedText style={styles.completedTime}>{pickupTime}</ThemedText> : null}
@@ -565,14 +617,14 @@ function OrderCompletedView({ order }: { order: ApiOrder }) {
 
         <View style={styles.body}>
           {/* Status card — all done, no pulse */}
-          <SectionHead>{copy.sectionStatus.toUpperCase()}</SectionHead>
+          <SectionHead>{t("orderStatus.sectionStatus").toUpperCase()}</SectionHead>
           <View style={styles.card}>
             <View style={[styles.statusRow, styles.rowBorder]}>
               <View style={styles.pickedUpPill}>
                 <View style={styles.pickedUpCheck}>
                   <Check size={8} color={colors.textPrimary} strokeWidth={3} />
                 </View>
-                <ThemedText style={styles.pickedUpPillText}>{copy.stepPickedUp}</ThemedText>
+                <ThemedText style={styles.pickedUpPillText}>{t("orderStatus.stepPickedUp")}</ThemedText>
               </View>
               {pickupTime ? (
                 <ThemedText style={styles.statusRight}>{pickupTime}</ThemedText>
@@ -586,15 +638,15 @@ function OrderCompletedView({ order }: { order: ApiOrder }) {
           {/* Compact protein logged (order-derived, web parity) */}
           {orderProtein > 0 && (
             <>
-              <SectionHead>{copy.sectionLogged.toUpperCase()}</SectionHead>
+              <SectionHead>{t("orderStatus.sectionLogged").toUpperCase()}</SectionHead>
               <View style={[styles.card, styles.loggedCard]}>
                 <View style={styles.loggedLeft}>
                   <ThemedText style={styles.loggedValue}>+{orderProtein}g</ThemedText>
-                  <ThemedText style={styles.loggedText}>{copy.proteinLoggedToday}</ThemedText>
+                  <ThemedText style={styles.loggedText}>{t("orderStatus.proteinLoggedToday")}</ThemedText>
                 </View>
                 <View style={styles.loggedBadge}>
                   <ThemedText style={styles.loggedBadgeText}>
-                    {copy.loggedBadge.toUpperCase()}
+                    {t("orderStatus.loggedBadge").toUpperCase()}
                   </ThemedText>
                 </View>
               </View>
@@ -602,7 +654,7 @@ function OrderCompletedView({ order }: { order: ApiOrder }) {
           )}
 
           {/* Order summary */}
-          <SectionHead>{copy.sectionOrder.toUpperCase()}</SectionHead>
+          <SectionHead>{t("orderStatus.sectionOrder").toUpperCase()}</SectionHead>
           <OrderLinesCard order={order} />
 
           <ConfirmationSentText email={order.customerEmail} />
@@ -619,7 +671,7 @@ function OrderCompletedView({ order }: { order: ApiOrder }) {
           ]}
           accessibilityRole="button"
         >
-          <ThemedText style={styles.primaryCtaText}>{copy.orderAgain}</ThemedText>
+          <ThemedText style={styles.primaryCtaText}>{t("orderStatus.orderAgain")}</ThemedText>
         </Pressable>
       </View>
     </View>
@@ -637,6 +689,7 @@ function OrderPendingTerminalView({
   cs: CustomerStatus;
   fetchError: boolean;
 }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { label: countdownLabel, expired: countdownExpired } = useCountdown(order.reservedUntil);
@@ -662,8 +715,8 @@ function OrderPendingTerminalView({
             <View style={styles.deadIconWrap}>
               <AlertCircle size={26} color="#f87171" />
             </View>
-            <ThemedText style={styles.deadTitle}>{copy.expiredTitle}</ThemedText>
-            <ThemedText style={styles.deadBody}>{copy.expiredBody}</ThemedText>
+            <ThemedText style={styles.deadTitle}>{t("orderStatus.expiredTitle")}</ThemedText>
+            <ThemedText style={styles.deadBody}>{t("orderStatus.expiredBody")}</ThemedText>
             <View style={styles.deadActions}>
               <Pressable
                 onPress={() => router.navigate("/(tabs)/meny")}
@@ -673,7 +726,7 @@ function OrderPendingTerminalView({
                 ]}
                 accessibilityRole="button"
               >
-                <ThemedText style={styles.primaryCtaText}>{copy.expiredNewOrder}</ThemedText>
+                <ThemedText style={styles.primaryCtaText}>{t("orderStatus.expiredNewOrder")}</ThemedText>
               </Pressable>
               <Pressable
                 onPress={() => router.navigate("/(tabs)")}
@@ -683,7 +736,7 @@ function OrderPendingTerminalView({
                 ]}
                 accessibilityRole="button"
               >
-                <ThemedText style={styles.secondaryCtaText}>{copy.expiredHome}</ThemedText>
+                <ThemedText style={styles.secondaryCtaText}>{t("orderStatus.expiredHome")}</ThemedText>
               </Pressable>
             </View>
           </>
@@ -693,8 +746,8 @@ function OrderPendingTerminalView({
             <View style={styles.deadIconWrap}>
               <AlertCircle size={26} color="#888888" />
             </View>
-            <ThemedText style={styles.deadTitle}>{copy.cancelledTitle}</ThemedText>
-            <ThemedText style={styles.deadBody}>{copy.cancelledBody}</ThemedText>
+            <ThemedText style={styles.deadTitle}>{t("orderStatus.cancelledTitle")}</ThemedText>
+            <ThemedText style={styles.deadBody}>{t("orderStatus.cancelledBody")}</ThemedText>
             <View style={styles.deadActions}>
               <Pressable
                 onPress={() => router.navigate("/(tabs)/meny")}
@@ -704,7 +757,7 @@ function OrderPendingTerminalView({
                 ]}
                 accessibilityRole="button"
               >
-                <ThemedText style={styles.primaryCtaText}>{copy.toMenu}</ThemedText>
+                <ThemedText style={styles.primaryCtaText}>{t("orderStatus.toMenu")}</ThemedText>
               </Pressable>
               <Pressable
                 onPress={() => router.navigate("/(tabs)")}
@@ -714,7 +767,7 @@ function OrderPendingTerminalView({
                 ]}
                 accessibilityRole="button"
               >
-                <ThemedText style={styles.secondaryCtaText}>{copy.expiredHome}</ThemedText>
+                <ThemedText style={styles.secondaryCtaText}>{t("orderStatus.expiredHome")}</ThemedText>
               </Pressable>
             </View>
           </>
@@ -724,18 +777,18 @@ function OrderPendingTerminalView({
             <View style={styles.pendingIconWrap}>
               <Clock size={24} color={colors.accent} strokeWidth={2} />
             </View>
-            <ThemedText style={styles.deadTitle}>{copy.stripePendingTitle}</ThemedText>
-            <ThemedText style={styles.deadBody}>{copy.stripePendingBody}</ThemedText>
+            <ThemedText style={styles.deadTitle}>{t("orderStatus.stripePendingTitle")}</ThemedText>
+            <ThemedText style={styles.deadBody}>{t("orderStatus.stripePendingBody")}</ThemedText>
             <View style={styles.numberBlock}>
               <ThemedText style={styles.heroNumberLabel}>
-                {copy.orderNumber.toUpperCase()}
+                {t("orderStatus.orderNumber").toUpperCase()}
               </ThemedText>
               <ThemedText style={styles.bigNumber}>#{order.orderNumber}</ThemedText>
             </View>
             <CountdownCard
               expired={countdownExpired}
               label={countdownLabel}
-              sublabel={copy.stripePendingReservation}
+              sublabel={t("orderStatus.stripePendingReservation")}
             />
             {fetchError && <FetchErrorNotice />}
           </>
@@ -747,19 +800,19 @@ function OrderPendingTerminalView({
             </View>
             <View style={styles.numberBlock}>
               <ThemedText style={styles.heroNumberLabel}>
-                {copy.orderNumber.toUpperCase()}
+                {t("orderStatus.orderNumber").toUpperCase()}
               </ThemedText>
               <ThemedText style={styles.hugeNumber}>#{order.orderNumber}</ThemedText>
-              <ThemedText style={styles.numberHint}>{copy.showNumber}</ThemedText>
+              <ThemedText style={styles.numberHint}>{t("orderStatus.showNumber")}</ThemedText>
             </View>
             <CountdownCard
               expired={countdownExpired}
               label={countdownLabel}
-              sublabel={copy.countdownLeft}
+              sublabel={t("orderStatus.countdownLeft")}
             />
             {/* Vertical pay stepper — first step always active while pending */}
             <View style={[styles.card, styles.payStepper]}>
-              {[copy.payStepAwaiting, copy.payStepPreparing, copy.payStepReady].map(
+              {[t("orderStatus.payStepAwaiting"), t("orderStatus.payStepPreparing"), t("orderStatus.payStepReady")].map(
                 (label, i, arr) => {
                   const isActive = i === 0;
                   const isLast = i === arr.length - 1;
@@ -800,20 +853,20 @@ function OrderPendingTerminalView({
             </View>
             <View style={styles.numberBlock}>
               <ThemedText style={styles.heroNumberLabel}>
-                {copy.orderNumber.toUpperCase()}
+                {t("orderStatus.orderNumber").toUpperCase()}
               </ThemedText>
               <ThemedText style={styles.bigNumber}>#{order.orderNumber}</ThemedText>
             </View>
             <View style={[styles.card, { padding: spacing[4] }]}>
               <View style={styles.statusPill}>
                 <PulsingDot />
-                <ThemedText style={styles.statusPillText}>{copy.statusUnknown}</ThemedText>
+                <ThemedText style={styles.statusPillText}>{t("orderStatus.statusUnknown")}</ThemedText>
               </View>
               <View style={{ marginTop: spacing[4], flexDirection: "row", gap: spacing[2] }}>
                 {[
-                  { label: copy.stepReceived, Icon: ShoppingBag },
-                  { label: copy.stepPreparing, Icon: ChefHat },
-                  { label: copy.stepPickup, Icon: Check },
+                  { label: t("orderStatus.stepReceived"), Icon: ShoppingBag },
+                  { label: t("orderStatus.stepPreparing"), Icon: ChefHat },
+                  { label: t("orderStatus.stepPickup"), Icon: Check },
                 ].map(({ label, Icon }) => (
                   <View key={label} style={styles.terminalStep}>
                     <View style={styles.terminalStepIcon}>
@@ -832,7 +885,7 @@ function OrderPendingTerminalView({
         {!isExpired && !isCancelled && (
           <>
             <ThemedText style={[styles.sectionHead, { marginTop: spacing[4] }]}>
-              {copy.orderDetails.toUpperCase()}
+              {t("orderStatus.orderDetails").toUpperCase()}
             </ThemedText>
             <OrderLinesCard order={order} />
             <ConfirmationSentText email={order.customerEmail} />
@@ -852,10 +905,11 @@ function CountdownCard({
   label: string;
   sublabel: string;
 }) {
+  const { t } = useTranslation();
   return (
     <View style={[styles.card, styles.countdownCard]}>
       {expired ? (
-        <ThemedText style={styles.countdownExpired}>{copy.countdownExpired}</ThemedText>
+        <ThemedText style={styles.countdownExpired}>{t("orderStatus.countdownExpired")}</ThemedText>
       ) : (
         <>
           <ThemedText style={styles.countdownValue}>{label}</ThemedText>

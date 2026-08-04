@@ -1,20 +1,29 @@
-import { QueryClient } from "@tanstack/react-query";
+import { AppState, Platform } from "react-native";
+import { QueryClient, focusManager } from "@tanstack/react-query";
 
 /**
  * Shared TanStack Query client. Defaults chosen for a food-truck ordering
- * app on a possibly-flaky connection (spec §21's "offline cache" gap):
- * short retry count (fail fast, let the UI show a retry action rather than
- * spin silently).
+ * app on a possibly-flaky connection: short retry count (fail fast, let the
+ * UI show a retry action rather than spin silently) and a 30 s default
+ * staleTime so navigating between tabs renders cached data instantly.
  *
- * NOT YET WIRED (a real gap, not a stylistic choice — flag before shipping
- * a feature phase that depends on background refetch): TanStack Query's
- * React Native integration for refetch-on-app-foreground/reconnect needs
- * `onlineManager`/`focusManager` wired to `@react-native-community/netinfo`
- * and `AppState`, per TanStack Query's own React Native setup docs. Without
- * it, queries only refetch when a component re-mounts or staleTime expires
- * — foregrounding the app after being backgrounded will NOT trigger an
- * automatic refetch yet.
+ * FOREGROUND REFETCH IS WIRED HERE (release fix). `focusManager` follows
+ * AppState, so reopening the app marks every mounted query focused and stale
+ * ones refetch. This is what makes a stamp earned while the app was pocketed
+ * actually APPEAR when the customer looks — the backend had written it; the
+ * app just never asked again. Per-query staleTime still governs how eager
+ * each dataset is, so wiring focus does not stampede the API.
+ *
+ * `onlineManager`/NetInfo remains unwired on purpose: the package is not a
+ * dependency, and reconnect-refetch matters less than foreground-refetch for
+ * a counter-service app. Revisit if offline use grows.
  */
+if (Platform.OS !== "web") {
+  AppState.addEventListener("change", (status) => {
+    focusManager.setFocused(status === "active");
+  });
+}
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

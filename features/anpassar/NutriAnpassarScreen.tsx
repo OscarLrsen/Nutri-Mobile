@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -8,7 +8,7 @@ import { ArrowLeft, Clock } from "lucide-react-native";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
 import { useAuth } from "@/services/auth/AuthProvider";
-import { useOnboardingStatus } from "@/services/auth/useOnboardingStatus";
+import { useNutritionProfileGate } from "@/features/onboarding/useNutritionProfileGate";
 import { useCart } from "@/context/CartContext";
 import { getMeals, type ApiMeal } from "@/services/api/meals";
 import { getIngredients, type ApiIngredient } from "@/services/api/ingredients";
@@ -25,11 +25,11 @@ import { getTodayDayPlan, type SavedDayPlanResponse } from "@/services/api/dayPl
 import type { CustomMealCalculateResponse } from "@/services/api/customMeal";
 import type { ApiError } from "@/types/api";
 import { apiMealToMeal } from "@/utils/pricing";
-import { env } from "@/lib/env";
-import { nutriAnpassarCopy as copy, onboardingGateCopy } from "@/constants/copy";
+import { NUTRITION_ONBOARDING_ROUTE } from "@/features/onboarding/nutritionOnboardingRoute";
+import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 import { buildNutriAdaptiveTarget } from "./buildNutriAdaptiveTarget";
-import type { NutriGoalType } from "./nutriAnpassarTypes";
+import { mapGoalType } from "./nutriAnpassarTypes";
 import { StepSlot, type WizardSlot } from "./StepSlot";
 import { StepMeals, type OptIngredient } from "./StepMeals";
 import { StepAdjust } from "./StepAdjust";
@@ -62,11 +62,6 @@ import { StepAdjust } from "./StepAdjust";
 
 type ErrorKind = "profile" | "network";
 
-function mapGoalType(primaryGoal: string): NutriGoalType {
-  if (primaryGoal === "FatLoss") return "fat_loss";
-  if (primaryGoal === "MuscleGain") return "muscle_gain";
-  return "balanced";
-}
 
 interface AnpassarData {
   today: ApiTodayNutrition;
@@ -78,13 +73,21 @@ interface AnpassarData {
 }
 
 export function NutriAnpassarScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, loading: authLoading } = useAuth();
-  const { loading: profileLoading, isOnboardingComplete } = useOnboardingStatus();
   const { addItem } = useCart();
 
-  const needsGate = !authLoading && !profileLoading && !!user && isOnboardingComplete !== true;
+  // Patch 15: the gate is the BACKEND's profile status, not Supabase's
+  // is_onboarding_complete — a complete profile must never be blocked by a
+  // stale flag, and an incomplete one must never slip through a true one.
+  // A network failure is NOT a profile gap and falls through to the
+  // screen's own error state.
+  const profileGate = useNutritionProfileGate();
+  const profileLoading = profileGate.isLoading;
+
+  const needsGate = !authLoading && !!user && profileGate.isProfileGap;
   const checking = authLoading || profileLoading || needsGate;
 
   // Logged out → login with return path (web reaches this page auth'd).
@@ -223,7 +226,9 @@ export function NutriAnpassarScreen() {
   if (needsGate) {
     return (
       <OnboardingGate
-        onPrimary={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/onboarding`)}
+        // Patch 15: onboarding is completed IN THE APP — this used to send
+        // the customer out to the web app mid-flow.
+        onPrimary={() => router.navigate(NUTRITION_ONBOARDING_ROUTE)}
         onSecondary={() => router.navigate("/(tabs)/meny")}
       />
     );
@@ -241,10 +246,10 @@ export function NutriAnpassarScreen() {
     return (
       <ErrorScreen
         emoji="🥗"
-        title={copy.errorProfileTitle}
-        body={copy.errorProfileBody}
-        ctaLabel={copy.errorProfileCta}
-        onCta={() => Linking.openURL(`${env.EXPO_PUBLIC_WEB_URL}/profil`)}
+        title={t("nutriAnpassar.errorProfileTitle")}
+        body={t("nutriAnpassar.errorProfileBody")}
+        ctaLabel={t("nutriAnpassar.errorProfileCta")}
+        onCta={() => router.navigate(NUTRITION_ONBOARDING_ROUTE)}
         onBack={handleBack}
       />
     );
@@ -253,9 +258,9 @@ export function NutriAnpassarScreen() {
     return (
       <ErrorScreen
         emoji="⚡"
-        title={copy.errorNetworkTitle}
-        body={copy.errorNetworkBody}
-        ctaLabel={copy.errorRetry}
+        title={t("nutriAnpassar.errorNetworkTitle")}
+        body={t("nutriAnpassar.errorNetworkBody")}
+        ctaLabel={t("nutriAnpassar.errorRetry")}
         onCta={() => {
           setErrorKind(null);
           setLoading(true);
@@ -336,13 +341,14 @@ export function NutriAnpassarScreen() {
 /* ── Header (web: AppPageHeader — back + wordmark) ─────────── */
 
 function Header({ onBack, insetsTop }: { onBack: () => void; insetsTop: number }) {
+  const { t } = useTranslation();
   return (
     <View style={[styles.header, { paddingTop: insetsTop }]}>
       <Pressable
         onPress={onBack}
         style={styles.headerButton}
         accessibilityRole="button"
-        accessibilityLabel="Tillbaka"
+        accessibilityLabel={t("common.back")}
       >
         <ArrowLeft size={16} color={colors.textPrimary} strokeWidth={2.25} />
       </Pressable>
@@ -363,6 +369,7 @@ export function OnboardingGate({
   onPrimary: () => void;
   onSecondary: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.gateBackdrop}>
       <View style={styles.gateSheet}>
@@ -370,21 +377,21 @@ export function OnboardingGate({
         <View style={styles.gateIcon}>
           <Clock size={20} color={colors.accent} strokeWidth={1.8} />
         </View>
-        <ThemedText style={styles.gateTitle}>{onboardingGateCopy.title}</ThemedText>
-        <ThemedText style={styles.gateBody}>{onboardingGateCopy.body}</ThemedText>
+        <ThemedText style={styles.gateTitle}>{t("onboardingGate.title")}</ThemedText>
+        <ThemedText style={styles.gateBody}>{t("onboardingGate.body")}</ThemedText>
         <Pressable
           onPress={onPrimary}
           style={({ pressed }) => [styles.gatePrimary, pressed && { backgroundColor: colors.accentHover }]}
           accessibilityRole="button"
         >
-          <ThemedText style={styles.gatePrimaryText}>{onboardingGateCopy.primary}</ThemedText>
+          <ThemedText style={styles.gatePrimaryText}>{t("onboardingGate.primary")}</ThemedText>
         </Pressable>
         <Pressable
           onPress={onSecondary}
           style={({ pressed }) => [styles.gateSecondary, pressed && { backgroundColor: "rgba(255,255,255,0.06)" }]}
           accessibilityRole="button"
         >
-          <ThemedText style={styles.gateSecondaryText}>{onboardingGateCopy.secondary}</ThemedText>
+          <ThemedText style={styles.gateSecondaryText}>{t("onboardingGate.secondary")}</ThemedText>
         </Pressable>
       </View>
     </View>

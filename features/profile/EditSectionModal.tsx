@@ -17,7 +17,7 @@ import {
   type ApiNutritionResult,
   type UpsertNutritionProfileDto,
 } from "@/services/api/nutrition";
-import { profileCopy as copy } from "@/constants/copy";
+import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 import {
   ACTIVITY_TYPE_OPTIONS,
@@ -31,12 +31,19 @@ import {
   EditNumField,
   FieldLabel,
   HelperText,
+  NumericDoneBar,
   OptionCard,
   PillPair,
   SelectRow,
 } from "./editFields";
 
-export type EditSection = "grunddata" | "aktivitet" | "mal";
+/**
+ * "profil" (release P13) is the COMBINED page — grunddata + aktivitet + mål
+ * in one scroll with section headings and one save, replacing the four
+ * small sub-modals. "vikt" (release P14) is the weight quick-edit: the one
+ * number, validated and saved through the exact same full-profile upsert.
+ */
+export type EditSection = "grunddata" | "aktivitet" | "mal" | "profil" | "vikt";
 
 export interface ProfileFormState {
   gender: "Male" | "Female";
@@ -83,12 +90,21 @@ export function EditSectionModal({
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
+  const { language } = useLanguage();
+
   const title =
     section === "grunddata"
-      ? copy.editBasicData
+      ? t("profile.editBasicData")
       : section === "aktivitet"
-        ? copy.editActivity
-        : copy.editGoal;
+        ? t("profile.editActivity")
+        : section === "profil"
+          ? t("profile.editProfile")
+          : section === "vikt"
+            ? t("profile.weightRow")
+            : t("profile.editGoal");
+
+  const combined = section === "profil";
 
   // 400ms-debounced live preview (web parity; planFocus is preserved by the
   // caller's buildDto, so the preview here omits it exactly like a fresh
@@ -133,7 +149,7 @@ export function EditSectionModal({
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
               <ThemedText style={styles.sheetTitle}>
-                {isNewProfile ? copy.editBasicData : title}
+                {isNewProfile ? t("profile.editBasicData") : title}
               </ThemedText>
               <Pressable onPress={onCancel} style={styles.closeButton} accessibilityRole="button">
                 <X size={15} color={colors.accent} />
@@ -144,14 +160,29 @@ export function EditSectionModal({
               contentContainerStyle={styles.sheetContent}
               keyboardShouldPersistTaps="handled"
             >
-              {(section === "grunddata" || isNewProfile) && (
+              {section === "vikt" && !isNewProfile && (
+                <View style={{ gap: spacing[4] }}>
+                  <HelperText>{t("profile.weightEditHelp")}</HelperText>
+                  <EditNumField
+                    label={t("profile.weight")}
+                    unit="kg"
+                    value={form.weightKg}
+                    onChange={(v) => onChange({ weightKg: v })}
+                    placeholder="75"
+                  />
+                </View>
+              )}
+
+              {combined && <SectionHeading text={t("profile.sectionBasics")} first />}
+
+              {(section === "grunddata" || combined || isNewProfile) && (
                 <View style={{ gap: spacing[4] }}>
                   <View style={{ gap: 6 }}>
-                    <FieldLabel>{copy.gender}</FieldLabel>
+                    <FieldLabel>{t("profile.gender")}</FieldLabel>
                     <PillPair
                       options={[
-                        { value: "Male", label: copy.genderMale },
-                        { value: "Female", label: copy.genderFemale },
+                        { value: "Male", label: t("profile.genderMale") },
+                        { value: "Female", label: t("profile.genderFemale") },
                       ]}
                       value={form.gender}
                       onChange={(g) => {
@@ -168,21 +199,21 @@ export function EditSectionModal({
                     />
                   </View>
                   <EditNumField
-                    label={copy.age}
-                    unit={copy.yearsUnit}
+                    label={t("profile.age")}
+                    unit={t("profile.yearsUnit")}
                     value={form.ageYears}
                     onChange={(v) => onChange({ ageYears: v })}
                     placeholder="25"
                   />
                   <EditNumField
-                    label={copy.weight}
+                    label={t("profile.weight")}
                     unit="kg"
                     value={form.weightKg}
                     onChange={(v) => onChange({ weightKg: v })}
                     placeholder="75"
                   />
                   <EditNumField
-                    label={copy.height}
+                    label={t("profile.height")}
                     unit="cm"
                     value={form.heightCm}
                     onChange={(v) => onChange({ heightCm: v })}
@@ -191,8 +222,8 @@ export function EditSectionModal({
 
                   {!isNewProfile && (
                     <View style={{ gap: 6 }}>
-                      <FieldLabel optionalText={copy.optional}>{copy.bodyFat}</FieldLabel>
-                      <HelperText>{copy.bodyFatHelper}</HelperText>
+                      <FieldLabel optionalText={t("profile.optional")}>{t("profile.bodyFat")}</FieldLabel>
+                      <HelperText>{t("profile.bodyFatHelper")}</HelperText>
                       <View style={styles.chipRow}>
                         <Pressable
                           onPress={() =>
@@ -204,7 +235,9 @@ export function EditSectionModal({
                           accessibilityRole="link"
                         >
                           <ThemedText style={styles.linkChipText}>
-                            {form.gender === "Male" ? copy.bodyFatGuideMale : copy.bodyFatGuideFemale}
+                            {form.gender === "Male"
+                              ? t("profile.bodyFatGuideMale")
+                              : t("profile.bodyFatGuideFemale")}
                           </ThemedText>
                         </Pressable>
                         <Pressable
@@ -212,7 +245,7 @@ export function EditSectionModal({
                           style={styles.linkChip}
                           accessibilityRole="button"
                         >
-                          <ThemedText style={styles.linkChipText}>{copy.dontKnowSkip}</ThemedText>
+                          <ThemedText style={styles.linkChipText}>{t("profile.dontKnowSkip")}</ThemedText>
                         </Pressable>
                       </View>
                       <View style={{ gap: spacing[2], marginTop: spacing[2] }}>
@@ -220,7 +253,7 @@ export function EditSectionModal({
                           <SelectRow
                             key={opt.value}
                             label={opt.label}
-                            rightText={opt.desc}
+                            rightText={t(`profileOptions.bodyFatDesc.${opt.value}`)}
                             active={form.bodyFatLevel === opt.value}
                             onPress={() => onChange({ bodyFatLevel: opt.value })}
                           />
@@ -231,18 +264,20 @@ export function EditSectionModal({
                 </View>
               )}
 
-              {section === "aktivitet" && !isNewProfile && (
+              {combined && <SectionHeading text={t("profile.sectionActivity")} />}
+
+              {(section === "aktivitet" || combined) && !isNewProfile && (
                 <View style={{ gap: spacing[5] }}>
-                  <HelperText>{copy.activityIntro}</HelperText>
+                  <HelperText>{t("profile.activityIntro")}</HelperText>
 
                   <View style={{ gap: 6 }}>
-                    <FieldLabel>{copy.dailyActivity}</FieldLabel>
+                    <FieldLabel>{t("profile.dailyActivity")}</FieldLabel>
                     <View style={{ gap: spacing[2] }}>
                       {ACTIVITY_TYPE_OPTIONS.map((o) => (
                         <OptionCard
                           key={o.value}
-                          label={o.label}
-                          description={o.description}
+                          label={t(`profileOptions.activityType.${o.value}.label`)}
+                          description={t(`profileOptions.activityType.${o.value}.description`)}
                           active={form.activityType === o.value}
                           onPress={() => onChange({ activityType: o.value })}
                         />
@@ -252,7 +287,7 @@ export function EditSectionModal({
 
                   <View style={{ gap: 6 }}>
                     <View style={styles.labelRow}>
-                      <FieldLabel optionalText={copy.optional}>{copy.stepsPerDay}</FieldLabel>
+                      <FieldLabel optionalText={t("profile.optional")}>{t("profile.stepsPerDay")}</FieldLabel>
                       <Pressable
                         onPress={() => onChange({ stepsRange: null })}
                         disabled={form.stepsRange == null}
@@ -261,16 +296,16 @@ export function EditSectionModal({
                         <ThemedText
                           style={[styles.skipLink, form.stepsRange == null && { opacity: 0.4 }]}
                         >
-                          {copy.skip}
+                          {t("profile.skip")}
                         </ThemedText>
                       </Pressable>
                     </View>
-                    <HelperText>{copy.unsureSkip}</HelperText>
+                    <HelperText>{t("profile.unsureSkip")}</HelperText>
                     <View style={{ gap: spacing[2], marginTop: 4 }}>
                       {STEPS_OPTIONS.map((o) => (
                         <SelectRow
                           key={o.value}
-                          label={o.label}
+                          label={t(`profileOptions.steps.${o.value}`)}
                           active={form.stepsRange === o.value}
                           onPress={() => onChange({ stepsRange: o.value })}
                         />
@@ -280,7 +315,7 @@ export function EditSectionModal({
 
                   <View style={{ gap: 6 }}>
                     <View style={styles.labelRow}>
-                      <FieldLabel optionalText={copy.optional}>{copy.trainingSessions}</FieldLabel>
+                      <FieldLabel optionalText={t("profile.optional")}>{t("profile.trainingSessions")}</FieldLabel>
                       <Pressable
                         onPress={() => onChange({ trainingSessions: null })}
                         disabled={form.trainingSessions == null}
@@ -289,16 +324,16 @@ export function EditSectionModal({
                         <ThemedText
                           style={[styles.skipLink, form.trainingSessions == null && { opacity: 0.4 }]}
                         >
-                          {copy.skip}
+                          {t("profile.skip")}
                         </ThemedText>
                       </Pressable>
                     </View>
-                    <HelperText>{copy.trainingHelp}</HelperText>
+                    <HelperText>{t("profile.trainingHelp")}</HelperText>
                     <View style={{ gap: spacing[2], marginTop: 4 }}>
                       {TRAINING_OPTIONS.map((o) => (
                         <SelectRow
                           key={o.value}
-                          label={o.label}
+                          label={t(`profileOptions.training.${o.value}`)}
                           active={form.trainingSessions === o.value}
                           onPress={() => onChange({ trainingSessions: o.value })}
                         />
@@ -308,17 +343,22 @@ export function EditSectionModal({
                 </View>
               )}
 
-              {section === "mal" && !isNewProfile && (
+              {combined && <SectionHeading text={t("profile.sectionGoal")} />}
+
+              {(section === "mal" || combined) && !isNewProfile && (
                 <View style={{ gap: spacing[5] }}>
                   <View style={{ gap: 6 }}>
-                    <FieldLabel>{copy.primaryGoal}</FieldLabel>
-                    <HelperText>{copy.primaryGoalHelp}</HelperText>
+                    {/* Release P15: no duplicated "Mål" label — the modal
+                        title already says it, so the helper line carries
+                        the explanation and the options speak for
+                        themselves. */}
+                    <HelperText>{t("profile.primaryGoalHelp")}</HelperText>
                     <View style={{ gap: spacing[2], marginTop: 4 }}>
                       {PRIMARY_GOAL_OPTIONS.map((g) => (
                         <OptionCard
                           key={g.value}
-                          label={g.label}
-                          description={g.description}
+                          label={t(`profileOptions.goal.${g.value}.label`)}
+                          description={t(`profileOptions.goal.${g.value}.description`)}
                           active={form.primaryGoal === g.value}
                           onPress={() => {
                             const v = g.value as ProfileFormState["primaryGoal"];
@@ -342,14 +382,18 @@ export function EditSectionModal({
 
                   {form.primaryGoal !== "Maintain" ? (
                     <View style={{ gap: 6 }}>
-                      <FieldLabel>{copy.pace}</FieldLabel>
+                      <FieldLabel>{t("profile.pace")}</FieldLabel>
                       <View style={{ gap: spacing[2], marginTop: 4 }}>
                         {(GOAL_PACE_OPTIONS[form.primaryGoal] ?? []).map((p) => (
                           <OptionCard
                             key={p.value}
-                            label={p.label}
-                            description={p.description}
-                            note={p.note}
+                            label={t(`profileOptions.goalPace.${p.value}.label`)}
+                            description={t(`profileOptions.goalPace.${p.value}.description`)}
+                            note={
+                              p.hasNote
+                                ? t(`profileOptions.goalPace.${p.value}.note`, { defaultValue: "" })
+                                : undefined
+                            }
                             active={form.goalPace === p.value}
                             onPress={() => onChange({ goalPace: p.value })}
                           />
@@ -359,7 +403,7 @@ export function EditSectionModal({
                   ) : (
                     <View style={styles.maintainNote}>
                       <View style={styles.maintainDot} />
-                      <ThemedText style={styles.maintainNoteText}>{copy.maintainNote}</ThemedText>
+                      <ThemedText style={styles.maintainNoteText}>{t("profile.maintainNote")}</ThemedText>
                     </View>
                   )}
                 </View>
@@ -368,8 +412,8 @@ export function EditSectionModal({
               {/* Live preview line (adaptation of the web's behind-modal plan card) */}
               {preview && preview.calorieTarget > 0 ? (
                 <ThemedText style={styles.previewLine}>
-                  {preview.calorieTarget.toLocaleString("sv-SE")} {copy.kcalPerDay} ·{" "}
-                  {copy.macroProtein} {preview.proteinG}g
+                  {formatNumber(preview.calorieTarget, language)} {t("profile.kcalPerDay")} ·{" "}
+                  {t("profile.macroProtein")} {preview.proteinG}g
                 </ThemedText>
               ) : null}
 
@@ -387,19 +431,48 @@ export function EditSectionModal({
               >
                 <Check size={15} color={colors.textPrimary} strokeWidth={2.5} />
                 <ThemedText style={styles.saveButtonText}>
-                  {saveDone ? copy.saved : saving ? copy.saving : copy.save}
+                  {saveDone ? t("profile.saved") : saving ? t("profile.saving") : t("profile.save")}
                 </ThemedText>
               </Pressable>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+        {/* iOS "Klar" bar above the numeric pad (P8). */}
+        <NumericDoneBar />
       </View>
     </Modal>
   );
 }
 
+/** Calm section divider for the combined profile page (P13). */
+function SectionHeading({ text, first = false }: { text: string; first?: boolean }) {
+  return (
+    <View style={[styles.sectionHeading, first && styles.sectionHeadingFirst]}>
+      <ThemedText style={styles.sectionHeadingText}>{text.toUpperCase()}</ThemedText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.65)", justifyContent: "center" },
+  sectionHeading: {
+    marginTop: spacing[6],
+    marginBottom: spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.06)",
+    paddingTop: spacing[4],
+  },
+  sectionHeadingFirst: {
+    marginTop: 0,
+    borderTopWidth: 0,
+    paddingTop: 0,
+  },
+  sectionHeadingText: {
+    fontSize: 11,
+    fontFamily: fontFamily.bodySemibold,
+    letterSpacing: 1.5,
+    color: "rgba(255,255,255,0.35)",
+  },
   sheetWrap: { flex: 1, justifyContent: "center", paddingHorizontal: spacing[4] },
   sheet: {
     maxHeight: "90%",

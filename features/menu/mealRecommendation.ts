@@ -1,0 +1,126 @@
+import type { ApiMeal } from "@/services/api/meals";
+import type { ApiMealDistribution, ApiTodayNutrition } from "@/services/api/nutrition";
+import type { SavedDayPlanResponse } from "@/services/api/dayPlan";
+import type { AppLanguage } from "@/i18n/languages";
+import { CUSTOMER_SIZE_OPTIONS } from "@/utils/pricing";
+import {
+  FALLBACK_SHARE_FOR_SLOT,
+  getStockholmHour,
+  matchSlotLabel,
+} from "@/features/heldag/heldagBuilder";
+import type { WizardSlot } from "@/features/anpassar/optimizer";
+
+/**
+ * Personal portion recommendation for menu cards (patch 12).
+ *
+ * PRESENTATION-ONLY SELECTION BETWEEN BACKEND-DEFINED MEAL SIZES.
+ * Daily targets, meal nutrition, prices and size multipliers remain
+ * server-authoritative. This module NEVER:
+ * - computes a new daily target, BMR or energy need,
+ * - defines new portion limits or sizes,
+ * - replaces or mutates the server-saved day plan,
+ * - sends any client-computed price to the backend,
+ * - changes ingredient grams on a regular menu meal.
+ * The only local decision is WHICH of the backend's already-defined size
+ * options (the MEAL_SIZES contract mirrored from SizeHelper.cs) lies
+ * closest to the server's target for the current slot.
+ *
+ * Target priority (patch 12 final check):
+ * 1. the user's SAVED day plan (GET /day-plan/today — server source of
+ *    truth; the copy "your goal and today's plan" must reflect a manual
+ *    plan when one exists),
+ * 2. otherwise the backend's automatic distribution
+ *    (/nutrition-profile/today `meals[]`),
+ * 3. otherwise the Heldag fallback share of the daily target,
+ * 4. no data at all → null → the card renders without a recommendation.
+ * Both sources come from ONE shared React Query row each — never a call
+ * per card.
+ *
+ * The scoring rule is the Heldag builder's, verbatim
+ * (|Δkcal| + |Δprotein|·4). Fixed-portion meals get no size
+ * recommendation (nothing to choose); errors never block ordering.
+ */
+
+export interface MealRecommendation {
+  /** Recommended CUSTOMER size ("medium" | "large"). */
+  sizeId: string;
+  /** The backend slot the target came from (for a11y/debug copy). */
+  slot: WizardSlot;
+}
+
+/** Which slot a menu category speaks to. Huvudmåltider follows the Heldag
+ * serving windows (Stockholm time): lunch until 15, dinner after. */
+export function slotForCategory(
+  categoryId: "frukost" | "huvudmaltider" | "mellanmal",
+  language: AppLanguage
+): WizardSlot {
+  if (categoryId === "frukost") return "Frukost";
+  if (categoryId === "mellanmal") return "Mellanmål";
+  return getStockholmHour(language) < 15 ? "Lunch" : "Middag";
+}
+
+/** The server's target for a slot, in priority order: the user's SAVED
+ * day plan first (a valid slot row with calories > 0), then the backend's
+ * automatic distribution, then the Heldag fallback share. Null without
+ * any server data. */
+export function slotTarget(
+  today: ApiTodayNutrition | undefined,
+  savedPlan: SavedDayPlanResponse | null | undefined,
+  slot: WizardSlot
+): ApiMealDistribution | null {
+  // 1. Saved plan wins — it is the server-persisted, possibly manually
+  //    edited plan the day planner wrote (and Nutri Anpassar reads).
+  const savedSlot = savedPlan?.meals?.find(
+    (m) => m.calories > 0 && matchSlotLabel(slot, m.label)
+  );
+  if (savedSlot) {
+    return {
+      label: savedSlot.label,
+      calories: savedSlot.calories,
+      proteinG: savedSlot.proteinG,
+      carbsG: savedSlot.carbsG,
+      fatG: savedSlot.fatG,
+      timingPurpose: "",
+    };
+  }
+
+  // 2–3. Automatic distribution, then fallback share.
+  if (!today) return null;
+  const matched = today.meals.find((m) => matchSlotLabel(slot, m.label));
+  if (matched) return matched;
+  const share = FALLBACK_SHARE_FOR_SLOT[slot];
+  const adj = today.adjustedTarget;
+  return {
+    label: slot,
+    calories: Math.round(adj.calories * share),
+    proteinG: Math.round(adj.proteinG * share),
+    carbsG: Math.round(adj.carbsG * share),
+    fatG: Math.round(adj.fatG * share),
+    timingPurpose: "",
+  };
+}
+
+/** Heldag's scoring rule, verbatim: |Δkcal| + |Δprotein|·4. */
+function score(calories: number, proteinG: number, target: ApiMealDistribution): number {
+  return Math.abs(calories - target.calories) + Math.abs(proteinG - target.proteinG) * 4;
+}
+
+export function recommendSize(
+  meal: ApiMeal,
+  target: ApiMealDistribution | null,
+  slot: WizardSlot
+): MealRecommendation | null {
+  if (!target) return null;
+  if (meal.portionMode === "fixed") return null; // nothing to choose
+
+  let best: { sizeId: string; s: number } | null = null;
+  for (const size of CUSTOMER_SIZE_OPTIONS) {
+    const s = score(
+      meal.macros.calories * size.macroMultiplier,
+      meal.macros.proteinG * size.macroMultiplier,
+      target
+    );
+    if (!best || s < best.s) best = { sizeId: size.id, s };
+  }
+  return best ? { sizeId: best.sizeId, slot } : null;
+}

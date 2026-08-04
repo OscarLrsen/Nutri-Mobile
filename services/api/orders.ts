@@ -34,6 +34,23 @@ export interface ApiOrder {
   discountAmountOre?: number;
   /** Order-level free-text comment from the customer to the kitchen. Null when empty. */
   customerNote?: string | null;
+  // ── Stamp card redemption (patch 16C, additive) ─────────────────
+  /** Amount the free meal took off, in öre. 0 or absent when unused. */
+  stampCardDiscountOre?: number;
+  /** The line it applied to, so the receipt can name the meal. */
+  stampCardOrderLineId?: string | null;
+  /** Portions covered — 1 when a reward was used. */
+  stampCardDiscountedQuantity?: number;
+  /** Stamps this order adds at pickup. Server-computed, because the client
+   * would get a mixed order with one discounted portion subtly wrong. */
+  pendingStampCount?: number;
+  // ── Included GoWell drink (patch 17A/B, additive) ───────────────
+  /** Amount the included drink took off, in öre. 0 or absent when unused. */
+  includedDrinkDiscountOre?: number;
+  /** The drink line it applied to. Match on this id, never on name or price. */
+  includedDrinkOrderLineId?: string | null;
+  /** Portions included — 1 when used. */
+  includedDrinkDiscountedQuantity?: number;
 }
 
 export interface ApiOrderLine {
@@ -76,7 +93,20 @@ export interface CreateOrderInput {
    * only ever points at a coupon, never sends amounts. Requires a JWT with a
    * sub claim; the backend 401s a couponId from an email-only session. */
   couponId?: string;
+  /** Stamp card reward to spend (patch 16C). Mutually exclusive with
+   * couponId — the backend 400s a request carrying both. The client only
+   * points at a reward; the server computes the discount. */
+  stampCardRewardId?: string;
+  /** clientLineId of the line the free meal applies to. Required whenever
+   * stampCardRewardId is set. */
+  stampCardLineId?: string;
+  /** clientLineId of the GoWell line the customer wants included (patch
+   * 17B). Omitted means no included drink — the server never picks a
+   * flavour, and neither does this client. */
+  includedDrinkLineId?: string;
   items: {
+    /** Stable per-line id so a reward can name exactly one line. */
+    clientLineId?: string;
     mealId: string | null;
     size: string;
     quantity: number;
@@ -119,6 +149,11 @@ export async function createOrder(order: CreateOrderInput): Promise<ApiOrder> {
       supabaseUserId: supabaseUserId ?? null,
       paymentMethod: rest.paymentMethod ?? "pay_on_site",
       couponId: rest.couponId ?? null,
+      // One reward per order. Sending both is a 400 server-side, so the client
+      // must never construct that request in the first place.
+      stampCardRewardId: rest.stampCardRewardId ?? null,
+      stampCardLineId: rest.stampCardLineId ?? null,
+      includedDrinkLineId: rest.includedDrinkLineId ?? null,
       lines: items.map(
         ({ isTailored, customMacros: _unused, customIngredients, containerTypeId, ...line }) => ({
           ...line,

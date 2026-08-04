@@ -12,6 +12,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { CartItem, Meal, MealSlot } from "@/types/cart";
 import type { ApiDrink } from "@/services/api/drinks";
+import { useLanguage } from "@/i18n";
+import { drinkName } from "@/features/menu/drinkText";
 import { MEAL_SIZES, previewMealPriceOre } from "@/utils/pricing";
 import { normalizeMacroSnapshot } from "@/utils/macroMath";
 import { getItemMacros, getItemWeightG } from "@/utils/cartMath";
@@ -42,11 +44,37 @@ export const SIZE_MULTIPLIERS: Record<MealSize, number> = Object.fromEntries(
   MEAL_SIZES.map((s) => [s.id, s.priceMultiplier])
 ) as Record<MealSize, number>;
 
+/**
+ * A cart confirmation to render, carried as a translation KEY rather than a
+ * finished sentence. Resolving it in the renderer is what lets a language
+ * switch retranslate a toast that is already on screen, with no restart.
+ *
+ * `id` is monotonic: a repeat add replaces the visible toast and restarts its
+ * timer instead of queueing another one, so hammering the add button can
+ * never build a backlog of identical messages.
+ */
+/**
+ * The messages the cart may raise. A closed union rather than `string`
+ * because t() is typed against sv.json — a typo here is a build error, not a
+ * raw key rendered to a customer.
+ */
+export type CartToastKey = "cart.toastAdded" | "cart.toastAddedNamed" | "cart.toastAddFailed";
+
+export interface CartToastState {
+  id: number;
+  messageKey: CartToastKey;
+  params?: Record<string, string>;
+  variant: "success" | "error";
+}
+
 interface CartContextType {
   items: CartItem[];
   /** True once the AsyncStorage restore has completed (empty cart included). */
   hydrated: boolean;
-  showToast: boolean;
+  /** The cart confirmation to render, or null when nothing is showing. */
+  toast: CartToastState | null;
+  /** Dismisses the current toast (the renderer calls this when it times out). */
+  dismissToast: () => void;
   addItem: (
     meal: Meal,
     sizeId: string,
@@ -61,7 +89,13 @@ interface CartContextType {
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   updateSize: (id: string, sizeId: string) => void;
-  addDrinkItem: (drink: ApiDrink, quantity?: number) => void;
+  /**
+   * Adds a drink and shows the confirmation itself. Returns false — and adds
+   * nothing, and shows an error instead of a success — when the drink is
+   * unavailable or out of stock, so no caller can produce a confirmation for
+   * an add that did not happen.
+   */
+  addDrinkItem: (drink: ApiDrink, quantity?: number) => boolean;
   updateDrinkQuantity: (drinkId: string, quantity: number) => void;
   clearCart: () => void;
   /** Kronor (float) — web-identical name and computation. */
@@ -88,11 +122,114 @@ const CartContext = createContext<CartContextType | null>(null);
 /** Same storage key as the web's localStorage cart (spec §11.1/§22.7). */
 const CART_KEY = "nutri-cart";
 
+/** How long a cart confirmation stays on screen. */
+const TOAST_MS = 2200;
+
+/**
+ * Stable per-line id sent to the backend as ClientLineId (patch 16C), so a
+ * stamp card reward can point at exactly one cart line.
+ *
+ * Uses the same crypto.randomUUID-with-fallback the custom-meal id already
+ * relies on. The fallback combines a timestamp with a random suffix rather
+ * than random alone, so two lines created in the same millisecond still
+ * differ — a collision here would mean discounting the wrong meal.
+ */
+function newClientLineId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+
+  // The fallback must still be a REAL uuid: the backend column is a uuid, so
+  // anything else fails the request, and the repair pass below would discard
+  // it and mint a new id on every launch. Not cryptographically strong, which
+  // does not matter — this only has to be unique within one cart.
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EMPTY_UUID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * A line id the backend will actually accept. It rejects an all-zero guid and
+ * anything that is not a uuid, so a cart carrying one would fail checkout with
+ * an error the customer cannot act on — better to repair it on the way in.
+ */
+function isUsableClientLineId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim() === value &&
+    UUID_RE.test(value) &&
+    value.toLowerCase() !== EMPTY_UUID
+  );
+}
+
+/**
+ * Repairs stored line ids exactly once, on hydrate.
+ *
+ * Fixes missing, blank, all-zero, non-uuid and DUPLICATE ids. Duplicates
+ * matter most: two lines sharing an id make the reward ambiguous, and the
+ * backend refuses rather than guessing — so the customer would be stuck until
+ * they emptied the cart. Valid unique ids are preserved, because regenerating
+ * them would silently invalidate a selection the customer already made.
+ */
+function repairClientLineIds(items: CartItem[]): CartItem[] {
+  const seen = new Set<string>();
+  return items.map((item) => {
+    const current = item.clientLineId;
+    if (isUsableClientLineId(current) && !seen.has(current)) {
+      seen.add(current);
+      return item;
+    }
+    let replacement = newClientLineId();
+    while (seen.has(replacement)) replacement = newClientLineId();
+    seen.add(replacement);
+    return { ...item, clientLineId: replacement };
+  });
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
+  const { language } = useLanguage();
   const [items, setItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
-  const [showToast, setShowToast] = useState(false);
+  const [toast, setToast] = useState<CartToastState | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastIdRef = useRef(0);
+
+  const dismissToast = useCallback(() => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = null;
+    setToast(null);
+  }, []);
+
+  /**
+   * Replaces whatever is showing and restarts the timer — deliberately not a
+   * queue. Repeated taps should confirm the latest add, not make the customer
+   * sit through one toast per tap.
+   */
+  const showToast = useCallback(
+    (
+      messageKey: CartToastKey,
+      params?: Record<string, string>,
+      variant: "success" | "error" = "success"
+    ) => {
+      toastIdRef.current += 1;
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setToast({ id: toastIdRef.current, messageKey, params, variant });
+      toastTimerRef.current = setTimeout(() => setToast(null), TOAST_MS);
+    },
+    []
+  );
+
+  // A timer that outlives the provider would call setState on an unmounted
+  // component; the provider is app-lifetime today, but that is not a reason
+  // to leave the leak in place.
+  useEffect(
+    () => () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    },
+    []
+  );
 
   // Restore from AsyncStorage on mount — the async equivalent of the web's
   // after-mount localStorage read (which exists there to avoid SSR/hydration
@@ -105,10 +242,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
         if (stored && mounted) {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed)) {
-            // Migration: items without `kind` are meal items (pre-drink-upsell
-            // data) — same migration the web applies on hydrate.
+            // Migrations, applied once on hydrate. The persist effect below
+            // writes the migrated cart straight back, so a stored cart is
+            // upgraded exactly once rather than re-migrated every launch.
+            //
+            // - `kind`: items without it are meal items (pre-drink-upsell
+            //   data) — the same migration the web applies on hydrate.
+            // - `clientLineId`: carts stored before patch 16C have none.
+            //   Assigning it here (not at checkout) is what makes the id
+            //   stable — generating it per order attempt would hand the
+            //   backend a different line id on every retry.
             setItems(
-              parsed.map((item: CartItem) => ("kind" in item ? item : { ...item, kind: "meal" as const }))
+              repairClientLineIds(
+                parsed.map((item: CartItem) => ({
+                  ...item,
+                  kind: item.kind ?? ("meal" as const),
+                }))
+              )
             );
           }
         }
@@ -172,6 +322,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           ...prev,
           {
             id,
+            clientLineId: newClientLineId(),
             meal,
             sizeId,
             quantity,
@@ -186,11 +337,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
         ];
       });
 
-      // Show toast for 4 seconds, reset timer if called again (web parity —
-      // consumed by a future sticky-cart-bar port).
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-      setShowToast(true);
-      toastTimerRef.current = setTimeout(() => setShowToast(false), 4000);
+      // Meals deliberately do NOT raise the cart toast: MealCard already
+      // confirms inline on the button itself, and stacking a second
+      // confirmation on top of it was not asked for. The toast mechanism
+      // below is shared and ready if that changes — this is a product
+      // decision, not a missing wire-up.
     },
     []
   );
@@ -232,6 +383,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addDrinkItem = useCallback((drink: ApiDrink, quantity = 1) => {
+    // Guard here rather than in the caller: this is the only place that can
+    // promise the cart actually changed, so it is the only honest place to
+    // decide between a success confirmation and an error. stockQuantity is
+    // publicly obfuscated to 0/1 — compared, never displayed.
+    if (!drink.isAvailable || drink.stockQuantity === 0) {
+      showToast("cart.toastAddFailed", undefined, "error");
+      return false;
+    }
+
     setItems((prev) => {
       const id = `drink-${drink.id}`;
       const existing = prev.find((i) => i.id === id);
@@ -242,6 +402,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         ...prev,
         {
           id,
+          clientLineId: newClientLineId(),
           kind: "drink" as const,
           drink,
           // Synthetic Meal wrapper — byte-for-byte the same mapping the web
@@ -264,7 +425,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
         },
       ];
     });
-  }, []);
+
+    // Queued in the same event as the setItems above, so React commits the
+    // cart update and the confirmation together — the toast can never appear
+    // ahead of the state it is confirming.
+    showToast("cart.toastAddedNamed", { name: drinkName(drink, language) });
+    return true;
+  }, [language, showToast]);
 
   const updateDrinkQuantity = useCallback(
     (drinkId: string, quantity: number) => {
@@ -319,7 +486,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       value={{
         items,
         hydrated,
-        showToast,
+        toast,
+        dismissToast,
         addItem,
         removeItem,
         updateQuantity,
