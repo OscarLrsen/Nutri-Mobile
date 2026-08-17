@@ -5,8 +5,8 @@ import { Sparkles } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { useAuth } from "@/services/auth/AuthProvider";
+import { useDisplayName } from "@/services/auth/useDisplayName";
 import { getRewardStatus } from "@/services/api/rewards";
-import { deriveDisplayName } from "@/utils/displayName";
 import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
@@ -22,7 +22,9 @@ export function GreetingHeader() {
   const { language } = useLanguage();
   const router = useRouter();
   const { user } = useAuth();
-  const name = deriveDisplayName(user, t("profile.fallbackName"));
+  // Never the raw e-mail while the name is still resolving (bug 5) — real
+  // name → cached name → neutral fallback; e-mail only once settled no-name.
+  const name = useDisplayName(t("profile.fallbackName"));
 
   const rewardQuery = useQuery({
     queryKey: ["rewards", "status", user?.id ?? null],

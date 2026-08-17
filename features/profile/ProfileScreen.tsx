@@ -37,7 +37,8 @@ import {
   plannedDeviatesFromTarget,
 } from "@/features/nutrition/activeDailyNutrition";
 
-import { deriveDisplayName, deriveInitials } from "@/utils/displayName";
+import { deriveInitials } from "@/utils/displayName";
+import { useDisplayName } from "@/services/auth/useDisplayName";
 import { openPolicy } from "@/utils/webUrls";
 import { ActiveOrderBanner } from "@/features/order/ActiveOrderBanner";
 import { TRAINING_DAYS_ENABLED } from "./featureFlags";
@@ -646,6 +647,11 @@ export function ProfileScreen() {
     await signOut();
   };
 
+  // Shared with Hem's greeting (bug 5): real name → cached name → neutral
+  // fallback while resolving; the e-mail only after a settled no-name.
+  // Called BEFORE the loading early-return — hooks must run unconditionally.
+  const displayName = useDisplayName(t("profile.fallbackName"));
+
   if (nutritionLoading) {
     return (
       <View style={styles.center}>
@@ -658,9 +664,9 @@ export function ProfileScreen() {
   const np = nutritionProfile;
   const displayResult = nutritionResult;
   const accountEmail = user?.email ?? "";
-  // Name/initials derivation lives in utils/displayName so Hem's greeting
-  // uses the exact same fallback chain (full_name → email → fallback copy).
-  const displayName = deriveDisplayName(user, t("profile.fallbackName"));
+  // displayName comes from useDisplayName above (same source as Hem's
+  // greeting); initials keep the pure util (two letters can't flash a
+  // full address).
   const initials = deriveInitials(user);
   const identitySub = (() => {
     const goal = np?.primaryGoal
