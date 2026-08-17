@@ -21,6 +21,7 @@ import { sortIngredientsByAmount } from "@/utils/ingredientOrder";
 import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { usePersonalizedMeal } from "./personalizedMenu";
+import { arePersonalSizesEquivalent } from "./portionEquivalence";
 
 /**
  * Meal detail — mobile port of the web (customer)/meal/[id]/page.tsx,
@@ -140,6 +141,24 @@ export function MealDetailScreen() {
     return state.status === "ready" ? state.data : null;
   };
 
+  // Same shared rule as MealCard: L is hidden only when both personal sizes
+  // are computed AND their ingredient grams are exactly identical — a second
+  // option for the same recipe is a fake choice. Confirmed equivalence only;
+  // totals are never compared (the price floor can equalize prices of
+  // genuinely different portions, and those must both stay offered).
+  const sizesEquivalent = arePersonalSizesEquivalent(personalMedium, personalLarge);
+
+  useEffect(() => {
+    if (sizesEquivalent && selectedSize === "large") setSelectedSize("medium");
+  }, [sizesEquivalent, selectedSize]);
+
+  // While the SELECTED size's personal result is in flight the CTA pauses —
+  // it would otherwise add the static recipe portion as if it were the
+  // personal one. "error" does not pause: the screen states outright that
+  // static values are shown, so adding them is honest. Non-personalized
+  // customers ("off"/"incomplete") are unaffected.
+  const personalAddPending = personal.status === "loading";
+
   const macros = useMemo(() => {
     if (!meal) return null;
     if (personalData) {
@@ -196,7 +215,7 @@ export function MealDetailScreen() {
 
   // Same guard + call + 1.8s confirmation as the web page's handleAdd.
   const handleAdd = () => {
-    if (!meal || stockLocked) return;
+    if (!meal || stockLocked || personalAddPending) return;
     if (personalData) {
       // Server macros and grams, and the server's EXACT öre price
       // (customPriceOre) — the same number this page displays, so the cart
@@ -205,7 +224,9 @@ export function MealDetailScreen() {
       // recomputes and validates the price server-side.
       addItem(
         apiMealToMeal(meal),
-        "medium",
+        // The size the customer actually chose — a personal L used to be
+        // stored (and ordered) as "medium".
+        effectiveSize,
         quantity,
         {
           calories: Math.round(personalData.calc.totalKcal),
@@ -412,7 +433,7 @@ export function MealDetailScreen() {
               <Divider />
               <SectionHead>{t("mealDetail.chooseSize")}</SectionHead>
               <View style={styles.sizeList}>
-                {CUSTOMER_SIZE_OPTIONS.map((s) => {
+                {CUSTOMER_SIZE_OPTIONS.filter((s) => !(sizesEquivalent && s.id === "large")).map((s) => {
                   const isSel = selectedSize === s.id;
                   const sStock = stockBySize[s.id as "medium" | "large"];
                   const sSoldOut = sStock?.soldOut ?? false;
@@ -587,13 +608,14 @@ export function MealDetailScreen() {
 
         <Pressable
           onPress={handleAdd}
-          disabled={stockLocked}
+          disabled={stockLocked || personalAddPending}
           style={({ pressed }) => [
             styles.cta,
-            stockLocked && styles.ctaLocked,
-            pressed && !stockLocked && { backgroundColor: colors.accentHover },
+            (stockLocked || personalAddPending) && styles.ctaLocked,
+            pressed && !stockLocked && !personalAddPending && { backgroundColor: colors.accentHover },
           ]}
           accessibilityRole="button"
+          accessibilityState={{ disabled: stockLocked || personalAddPending }}
           accessibilityLabel={t("mealDetail.add")}
         >
           {allSoldOut ? (

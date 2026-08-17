@@ -273,6 +273,9 @@ export function HeldagScreen() {
     const originalMealName = `${r.slot} · ${t("heldag.packageKitchenName")} · ${r.meal.name}`;
     addItem(
       apiMealToMeal(r.meal),
+      // Semantically correct: the day package offers no M/L choice — each slot
+      // is tailored at its own 1.0× slot target, which is the medium size by
+      // definition. The menu's M/L flow passes the real selection instead.
       "medium",
       1,
       r.customMacros,
