@@ -21,6 +21,7 @@ import { sortIngredientsByAmount } from "@/utils/ingredientOrder";
 import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { usePersonalizedMeal } from "./personalizedMenu";
+import { arePersonalSizesEquivalent } from "./portionEquivalence";
 
 /**
  * Meal detail — mobile port of the web (customer)/meal/[id]/page.tsx,
@@ -133,10 +134,30 @@ export function MealDetailScreen() {
   const personalLarge = usePersonalizedMeal(meal, "large");
   const personal = effectiveSize === "large" ? personalLarge : personalMedium;
   const personalData = personal.status === "ready" ? personal.data : null;
+  const personalStateFor = (sizeId: string) =>
+    sizeId === "large" ? personalLarge : personalMedium;
   const personalFor = (sizeId: string) => {
-    const state = sizeId === "large" ? personalLarge : personalMedium;
+    const state = personalStateFor(sizeId);
     return state.status === "ready" ? state.data : null;
   };
+
+  // Same shared rule as MealCard: L is hidden only when both personal sizes
+  // are computed AND their ingredient grams are exactly identical — a second
+  // option for the same recipe is a fake choice. Confirmed equivalence only;
+  // totals are never compared (the price floor can equalize prices of
+  // genuinely different portions, and those must both stay offered).
+  const sizesEquivalent = arePersonalSizesEquivalent(personalMedium, personalLarge);
+
+  useEffect(() => {
+    if (sizesEquivalent && selectedSize === "large") setSelectedSize("medium");
+  }, [sizesEquivalent, selectedSize]);
+
+  // While the SELECTED size's personal result is in flight the CTA pauses —
+  // it would otherwise add the static recipe portion as if it were the
+  // personal one. "error" does not pause: the screen states outright that
+  // static values are shown, so adding them is honest. Non-personalized
+  // customers ("off"/"incomplete") are unaffected.
+  const personalAddPending = personal.status === "loading";
 
   const macros = useMemo(() => {
     if (!meal) return null;
@@ -174,12 +195,15 @@ export function MealDetailScreen() {
   }, [meal, ingredientsQuery.data]);
 
   // Öre all the way; formatted only at render (web computes the same product).
-  // The personal price (backend-computed) wins whenever it exists.
+  // The personal price (backend-computed) wins whenever it exists, and while
+  // it is being computed the CTA shows a placeholder instead of letting the
+  // static price pose as the personal one (same rule as MealCard).
   const totalOre = meal
     ? (personalData
         ? personalData.calc.totalPriceOre
         : previewMealPriceOre(meal.basePrice, sizeDef.priceMultiplier)) * quantity
     : 0;
+  const totalPriceLoading = personal.status === "loading";
 
   const selected = stockBySize[effectiveSize as "medium" | "large"] ?? { soldOut: false, count: null };
   const showLowStock =
@@ -191,14 +215,18 @@ export function MealDetailScreen() {
 
   // Same guard + call + 1.8s confirmation as the web page's handleAdd.
   const handleAdd = () => {
-    if (!meal || stockLocked) return;
+    if (!meal || stockLocked || personalAddPending) return;
     if (personalData) {
-      // The tailored handoff the Anpassar wizard used: server macros and
-      // grams, surcharge reconciling to the server's öre price. The order
-      // endpoint recomputes and validates the price server-side.
+      // Server macros and grams, and the server's EXACT öre price
+      // (customPriceOre) — the same number this page displays, so the cart
+      // total always equals the price the customer accepted here. surchargeKr
+      // rides along for legacy compatibility only; the order endpoint
+      // recomputes and validates the price server-side.
       addItem(
         apiMealToMeal(meal),
-        "medium",
+        // The size the customer actually chose — a personal L used to be
+        // stored (and ordered) as "medium".
+        effectiveSize,
         quantity,
         {
           calories: Math.round(personalData.calc.totalKcal),
@@ -216,6 +244,7 @@ export function MealDetailScreen() {
         personalData.containerTypeId,
         undefined,
         meal.name,
+        personalData.calc.totalPriceOre,
       );
     } else {
       addItem(apiMealToMeal(meal), effectiveSize, quantity);
@@ -404,7 +433,7 @@ export function MealDetailScreen() {
               <Divider />
               <SectionHead>{t("mealDetail.chooseSize")}</SectionHead>
               <View style={styles.sizeList}>
-                {CUSTOMER_SIZE_OPTIONS.map((s) => {
+                {CUSTOMER_SIZE_OPTIONS.filter((s) => !(sizesEquivalent && s.id === "large")).map((s) => {
                   const isSel = selectedSize === s.id;
                   const sStock = stockBySize[s.id as "medium" | "large"];
                   const sSoldOut = sStock?.soldOut ?? false;
@@ -412,8 +441,13 @@ export function MealDetailScreen() {
                   const sShowLow =
                     !sSoldOut && sCount !== null && sCount > 0 && sCount <= LOW_STOCK_THRESHOLD;
                   // The personally computed price/weight for THIS size when
-                  // the engine has it — the static preview only otherwise.
+                  // the engine has it. While a size's personal price is still
+                  // being computed its row shows a placeholder — the static
+                  // price must never masquerade as a definitive personal one,
+                  // and mixing personal-M with static-L on one screen is
+                  // exactly the confusion that rule exists to prevent.
                   const sizePersonal = personalFor(s.id);
+                  const sizePriceLoading = personalStateFor(s.id).status === "loading";
                   const sizePriceOre = sizePersonal
                     ? sizePersonal.calc.totalPriceOre
                     : previewMealPriceOre(meal.basePrice, s.priceMultiplier);
@@ -472,7 +506,7 @@ export function MealDetailScreen() {
                           sSoldOut && { opacity: 0.5 },
                         ]}
                       >
-                        {formatPriceKr(sizePriceOre, language)}
+                        {sizePriceLoading ? "…" : formatPriceKr(sizePriceOre, language)}
                       </ThemedText>
                     </Pressable>
                   );
@@ -574,13 +608,14 @@ export function MealDetailScreen() {
 
         <Pressable
           onPress={handleAdd}
-          disabled={stockLocked}
+          disabled={stockLocked || personalAddPending}
           style={({ pressed }) => [
             styles.cta,
-            stockLocked && styles.ctaLocked,
-            pressed && !stockLocked && { backgroundColor: colors.accentHover },
+            (stockLocked || personalAddPending) && styles.ctaLocked,
+            pressed && !stockLocked && !personalAddPending && { backgroundColor: colors.accentHover },
           ]}
           accessibilityRole="button"
+          accessibilityState={{ disabled: stockLocked || personalAddPending }}
           accessibilityLabel={t("mealDetail.add")}
         >
           {allSoldOut ? (
@@ -603,7 +638,9 @@ export function MealDetailScreen() {
                   ? t("mealDetail.addWithStock", { count: selected.count })
                   : t("mealDetail.add")}
               </ThemedText>
-              <ThemedText style={styles.ctaPrice}>{formatPriceKr(totalOre, language)}</ThemedText>
+              <ThemedText style={styles.ctaPrice}>
+                {totalPriceLoading ? "…" : formatPriceKr(totalOre, language)}
+              </ThemedText>
             </>
           )}
         </Pressable>

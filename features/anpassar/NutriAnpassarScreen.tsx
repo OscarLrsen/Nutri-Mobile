@@ -181,7 +181,11 @@ export function NutriAnpassarScreen() {
     calcResult: CustomMealCalculateResponse
   ) {
     const meal = apiMealToMeal(apiMeal);
-    const sizeId = "medium"; // Anpassar always tailors at the medium (1.0×) size
+    // Semantically correct, not a hardcode-in-disguise: the wizard has no M/L
+    // choice — it tailors exactly one portion at the 1.0× (medium) target, so
+    // "medium" IS the size of the portion it builds. The menu's M/L flow
+    // passes the customer's actual selection instead.
+    const sizeId = "medium";
     const customMacros = {
       calories: Math.round(calcResult.totalKcal),
       proteinG: Math.round(calcResult.totalProteinG),
@@ -194,8 +198,9 @@ export function NutriAnpassarScreen() {
       name: i.name,
       amountG: i.amountG,
     }));
-    // Cart price formula is basePrice * multiplier + surcharge.
-    // medium multiplier = 1.0, so surcharge reconciles to calcResult.totalPriceOre.
+    // Legacy reconciliation term only — the cart prices this line from the
+    // EXACT customPriceOre below; the rounded surcharge remains for carts
+    // persisted before that field existed.
     const ingredientSurchargeKr = Math.round(calcResult.totalPriceOre / 100) - meal.basePrice;
 
     addItem(
@@ -207,7 +212,8 @@ export function NutriAnpassarScreen() {
       ingredientSurchargeKr,
       containerTypeId,
       undefined,
-      meal.name
+      meal.name,
+      calcResult.totalPriceOre
     );
     router.push("/(tabs)/varukorg");
   }

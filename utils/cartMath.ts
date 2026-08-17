@@ -1,5 +1,5 @@
 import type { CartItem } from "@/types/cart";
-import { MEAL_SIZES } from "@/utils/pricing";
+import { MEAL_SIZES, previewMealPriceOre } from "@/utils/pricing";
 
 /**
  * Per-item cart math, ported from the helpers in Nutri-Frontend's
@@ -57,4 +57,53 @@ export function getItemWeightG(item: CartItem): number {
   const mult = size?.macroMultiplier ?? 1;
   const baseGrams = item.meal.ingredients.reduce((sum, ing) => sum + (ing.amountG ?? 0), 0);
   return Math.round(baseGrams * mult) * item.quantity;
+}
+
+/**
+ * The unit price of a cart line, in öre — THE single pricing authority for
+ * cart display and summation. CartContext's totals and CartScreen's line
+ * rendering both call this, so a price can never differ between the row and
+ * the summary.
+ *
+ * WHY IT EXISTS. The same formula used to live in two places, and for
+ * custom/personalized lines both reconstructed the price from a
+ * whole-kronor surcharge — so the server's öre-precise 18586 became 18600 on
+ * screen and in the total. Rules, in order:
+ *
+ *  - drink lines: the drink's own öre price, unchanged;
+ *  - custom lines that carry customPriceOre: EXACTLY that number — this is
+ *    the backend's /custom-meal/calculate result and the whole point;
+ *  - legacy custom/surcharge lines (persisted carts from before
+ *    customPriceOre existed): the historical basePrice×multiplier+surcharge
+ *    formula, unchanged so an old stored cart prices as it always did;
+ *  - fixed meals: the backend's whole-SEK rounding via previewMealPriceOre,
+ *    unchanged.
+ *
+ * The order payload still carries no price and the backend recomputes from
+ * ingredient grams — this is honest display, not price authority.
+ */
+export function getItemUnitPriceOre(item: CartItem): number {
+  if (item.kind === "drink" && item.drink) {
+    return item.drink.priceOre;
+  }
+
+  if (item.isCustom && item.customPriceOre !== undefined) {
+    return item.customPriceOre;
+  }
+
+  const size = MEAL_SIZES.find((s) => s.id === item.sizeId);
+  const multiplier = size?.priceMultiplier ?? 1;
+  const surcharge = item.ingredientSurchargeKr ?? 0;
+
+  if (!item.isCustom && surcharge === 0) {
+    return previewMealPriceOre(item.meal.basePrice, multiplier);
+  }
+
+  // Legacy path — kronor float, rounded to öre exactly as krToOre always did.
+  return Math.round((item.meal.basePrice * multiplier + surcharge) * 100);
+}
+
+/** Line total in öre: integer unit price × integer quantity — no float leg. */
+export function getItemLineTotalOre(item: CartItem): number {
+  return getItemUnitPriceOre(item) * item.quantity;
 }

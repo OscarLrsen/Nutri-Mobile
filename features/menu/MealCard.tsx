@@ -16,6 +16,7 @@ import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import type { MealRecommendation } from "./mealRecommendation";
 import { usePersonalizedMeal } from "./personalizedMenu";
+import { arePersonalSizesEquivalent } from "./portionEquivalence";
 
 /**
  * Meal card — mobile port of the web /meny page's MealCard. Logic (per-size
@@ -121,8 +122,37 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
   // customer's target at the selected size. Static values are shown only
   // when personalization does not apply (logged out, fixed portion,
   // incomplete profile) — never silently in place of a personal price.
-  const personal = usePersonalizedMeal(meal, effectiveSize);
+  //
+  // BOTH sizes are computed (not just the selected one) because the card
+  // must know whether L is genuinely a different portion before offering
+  // it: when every ingredient is already saturated at max for M, the L
+  // optimization returns the exact same grams and "L" would be a fake
+  // upgrade. The queries are cached per (user, target, meal, size) with a
+  // 5-min staleTime and shared with MealDetailScreen, so this is one extra
+  // calculate call per card, not per render.
+  const personalMedium = usePersonalizedMeal(meal, "medium");
+  const personalLarge = usePersonalizedMeal(meal, "large");
+  const personal = effectiveSize === "large" ? personalLarge : personalMedium;
   const personalData = personal.status === "ready" ? personal.data : null;
+
+  // L is hidden only on CONFIRMED equivalence (both sizes computed and the
+  // ingredient grams exactly equal) — never on a guess while one loads.
+  const sizesEquivalent = arePersonalSizesEquivalent(personalMedium, personalLarge);
+
+  // If the customer had L selected when the results proved L identical to M,
+  // move them to M — the option they were on no longer exists, and M's data
+  // is byte-identical anyway. Deliberately ignores userTouchedSizeRef: this
+  // is not a recommendation stealing a choice, it is removing a non-choice.
+  useEffect(() => {
+    if (sizesEquivalent && selectedSize === "large") setSelectedSize("medium");
+  }, [sizesEquivalent, selectedSize]);
+
+  // While the SELECTED size's personal computation is in flight, adding is
+  // paused: the button would otherwise add the static recipe portion as if
+  // it were the personal one. "error" deliberately does NOT pause — the card
+  // says outright that the ordinary price is shown, so adding the static
+  // portion is honest there.
+  const personalAddPending = personal.status === "loading";
 
   const calories = personalData
     ? Math.round(personalData.calc.totalKcal)
@@ -159,19 +189,22 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
   const showImage = !imageFailed && meal.image.trim().length > 0;
 
   const handleAdd = () => {
-    if (stockLocked || addLockedRef.current) return;
+    if (stockLocked || addLockedRef.current || personalAddPending) return;
 
     // Same cart mapping and selected-size contract as MealDetailScreen.
     addLockedRef.current = true;
     if (personalData) {
-      // The personally computed line — the SAME tailored handoff the
-      // Anpassar wizard used: the server's macros and ingredient grams, and
-      // a surcharge that reconciles the cart preview to the server's
-      // öre-precise price. The order endpoint recomputes and validates the
-      // price server-side either way.
+      // The personally computed line: the server's macros and grams, and the
+      // server's EXACT öre price (customPriceOre) — the same number this card
+      // displays, so the cart can never show a different total than the menu
+      // promised. surchargeKr rides along for legacy compatibility only. The
+      // order endpoint recomputes and validates the price server-side.
       addItem(
         apiMealToMeal(meal),
-        "medium",
+        // The size the customer actually chose — a personal L used to be
+        // stored (and ordered) as "medium", which the kitchen then plated
+        // as an M.
+        effectiveSize,
         1,
         {
           calories: Math.round(personalData.calc.totalKcal),
@@ -189,6 +222,7 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
         personalData.containerTypeId,
         undefined,
         meal.name,
+        personalData.calc.totalPriceOre,
       );
     } else {
       addItem(apiMealToMeal(meal), effectiveSize);
@@ -336,7 +370,10 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
       <View style={styles.footer}>
         {!isFixed ? (
           <View style={styles.sizeGroup}>
-            {CUSTOMER_SIZE_OPTIONS.map((s) => {
+            {/* When personal M and L are provably the same portion, L is not
+                rendered — a second button for the identical recipe would be a
+                fake choice. Static (non-personalized) cards never filter. */}
+            {CUSTOMER_SIZE_OPTIONS.filter((s) => !(sizesEquivalent && s.id === "large")).map((s) => {
               const isSelected = selectedSize === s.id;
               const sSoldOut = stockBySize[s.id as "medium" | "large"].soldOut;
               const isRec = hasRecommendation && s.id === recSizeId;
@@ -384,15 +421,15 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
 
         <Pressable
           onPress={handleAdd}
-          disabled={stockLocked || added}
+          disabled={stockLocked || added || personalAddPending}
           style={({ pressed }) => [
             styles.addButton,
             added && styles.addButtonAdded,
-            stockLocked && styles.addButtonLocked,
-            pressed && !added && !stockLocked && styles.addButtonPressed,
+            (stockLocked || personalAddPending) && styles.addButtonLocked,
+            pressed && !added && !stockLocked && !personalAddPending && styles.addButtonPressed,
           ]}
           accessibilityRole="button"
-          accessibilityState={{ disabled: stockLocked || added }}
+          accessibilityState={{ disabled: stockLocked || added || personalAddPending }}
           accessibilityLabel={
             stockLocked ? t("menu.soldOutToday") : added ? t("menu.added") : t("mealDetail.add")
           }
