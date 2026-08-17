@@ -19,7 +19,7 @@ import { getTodayDayPlan } from "@/services/api/dayPlan";
 import { SLOT_TO_MEAL_TIME_TAG, type WizardSlot } from "@/features/anpassar/optimizer";
 import { OnboardingGate } from "@/features/anpassar/NutriAnpassarScreen";
 import { apiMealToMeal } from "@/utils/pricing";
-import { formatPriceKr, krToOre } from "@/utils/money";
+import { formatPriceKr } from "@/utils/money";
 import { NUTRITION_ONBOARDING_ROUTE } from "@/features/onboarding/nutritionOnboardingRoute";
 import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
@@ -186,17 +186,19 @@ export function HeldagScreen() {
     if (!results) return null;
     let kcal = 0,
       protein = 0,
-      kr = 0;
+      // Summed in exact öre — rounding each slot to kronor first let the
+      // package header disagree with the cart total by up to 3×50 öre.
+      ore = 0;
     let readyCount = 0;
     for (const r of results) {
       if (r.status === "ready") {
         kcal += r.customMacros.calories;
         protein += r.customMacros.proteinG;
-        kr += Math.round(r.calcResult.totalPriceOre / 100);
+        ore += r.calcResult.totalPriceOre;
         readyCount++;
       }
     }
-    return { kcal, protein, kr, readyCount };
+    return { kcal, protein, ore, readyCount };
   }, [results]);
 
   const allReady = !!results && results.every((r) => r.status === "ready");
@@ -278,7 +280,12 @@ export function HeldagScreen() {
       r.ingredientSurchargeKr,
       r.containerTypeId,
       r.slot,
-      originalMealName
+      originalMealName,
+      // The slot's EXACT backend price. Notably the legacy surcharge above is
+      // clamped with Math.max(0, …), so a personal portion cheaper than the
+      // base price used to be silently priced UP to base — this fixes that
+      // case too, not just the öre rounding.
+      r.calcResult.totalPriceOre
     );
   }
 
@@ -442,7 +449,7 @@ export function HeldagScreen() {
               <SummaryCell label={t("heldag.summaryKcalTotal")} value={formatNumber(totals.kcal, language)} accent />
               <SummaryCell label={t("heldag.summaryProtein")} value={String(totals.protein)} unit="g" valueColor={colors.accent} />
               <SummaryCell label={t("heldag.summaryMeals")} value={String(SLOTS.length)} unit={t("heldag.unitCount")} accent />
-              <SummaryCell label={t("heldag.summaryPrice")} value={formatNumber(totals.kr, language)} unit="kr" />
+              <SummaryCell label={t("heldag.summaryPrice")} value={formatPriceKr(totals.ore, language).replace(" kr", "")} unit="kr" />
             </View>
           </View>
         )}
@@ -502,7 +509,7 @@ export function HeldagScreen() {
           </View>
           {available && (
             <ThemedText style={styles.ctaPrice}>
-              {formatPriceKr(krToOre(totals ? totals.kr : 0), language)}
+              {formatPriceKr(totals ? totals.ore : 0, language)}
             </ThemedText>
           )}
         </Pressable>
@@ -618,7 +625,9 @@ function SlotCard({
     );
   }
 
-  const priceKr = Math.round(result.calcResult.totalPriceOre / 100);
+  // Exact backend öre — the same number the cart line will carry. The " kr"
+  // suffix is stripped because this layout renders the unit in its own style.
+  const priceValue = formatPriceKr(result.calcResult.totalPriceOre, language).replace(" kr", "");
   const image = result.meal.image && result.meal.image.trim().length > 0 ? result.meal.image : undefined;
 
   return (
@@ -629,7 +638,7 @@ function SlotCard({
         <View style={styles.slotTitleRow}>
           <ThemedText style={styles.slotMealName}>{result.meal.name}</ThemedText>
           <ThemedText style={styles.slotPrice}>
-            {formatNumber(priceKr, language)}
+            {priceValue}
             <ThemedText style={styles.slotPriceUnit}> kr</ThemedText>
           </ThemedText>
         </View>

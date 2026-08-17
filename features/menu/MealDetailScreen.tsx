@@ -133,8 +133,10 @@ export function MealDetailScreen() {
   const personalLarge = usePersonalizedMeal(meal, "large");
   const personal = effectiveSize === "large" ? personalLarge : personalMedium;
   const personalData = personal.status === "ready" ? personal.data : null;
+  const personalStateFor = (sizeId: string) =>
+    sizeId === "large" ? personalLarge : personalMedium;
   const personalFor = (sizeId: string) => {
-    const state = sizeId === "large" ? personalLarge : personalMedium;
+    const state = personalStateFor(sizeId);
     return state.status === "ready" ? state.data : null;
   };
 
@@ -174,12 +176,15 @@ export function MealDetailScreen() {
   }, [meal, ingredientsQuery.data]);
 
   // Öre all the way; formatted only at render (web computes the same product).
-  // The personal price (backend-computed) wins whenever it exists.
+  // The personal price (backend-computed) wins whenever it exists, and while
+  // it is being computed the CTA shows a placeholder instead of letting the
+  // static price pose as the personal one (same rule as MealCard).
   const totalOre = meal
     ? (personalData
         ? personalData.calc.totalPriceOre
         : previewMealPriceOre(meal.basePrice, sizeDef.priceMultiplier)) * quantity
     : 0;
+  const totalPriceLoading = personal.status === "loading";
 
   const selected = stockBySize[effectiveSize as "medium" | "large"] ?? { soldOut: false, count: null };
   const showLowStock =
@@ -193,9 +198,11 @@ export function MealDetailScreen() {
   const handleAdd = () => {
     if (!meal || stockLocked) return;
     if (personalData) {
-      // The tailored handoff the Anpassar wizard used: server macros and
-      // grams, surcharge reconciling to the server's öre price. The order
-      // endpoint recomputes and validates the price server-side.
+      // Server macros and grams, and the server's EXACT öre price
+      // (customPriceOre) — the same number this page displays, so the cart
+      // total always equals the price the customer accepted here. surchargeKr
+      // rides along for legacy compatibility only; the order endpoint
+      // recomputes and validates the price server-side.
       addItem(
         apiMealToMeal(meal),
         "medium",
@@ -216,6 +223,7 @@ export function MealDetailScreen() {
         personalData.containerTypeId,
         undefined,
         meal.name,
+        personalData.calc.totalPriceOre,
       );
     } else {
       addItem(apiMealToMeal(meal), effectiveSize, quantity);
@@ -412,8 +420,13 @@ export function MealDetailScreen() {
                   const sShowLow =
                     !sSoldOut && sCount !== null && sCount > 0 && sCount <= LOW_STOCK_THRESHOLD;
                   // The personally computed price/weight for THIS size when
-                  // the engine has it — the static preview only otherwise.
+                  // the engine has it. While a size's personal price is still
+                  // being computed its row shows a placeholder — the static
+                  // price must never masquerade as a definitive personal one,
+                  // and mixing personal-M with static-L on one screen is
+                  // exactly the confusion that rule exists to prevent.
                   const sizePersonal = personalFor(s.id);
+                  const sizePriceLoading = personalStateFor(s.id).status === "loading";
                   const sizePriceOre = sizePersonal
                     ? sizePersonal.calc.totalPriceOre
                     : previewMealPriceOre(meal.basePrice, s.priceMultiplier);
@@ -472,7 +485,7 @@ export function MealDetailScreen() {
                           sSoldOut && { opacity: 0.5 },
                         ]}
                       >
-                        {formatPriceKr(sizePriceOre, language)}
+                        {sizePriceLoading ? "…" : formatPriceKr(sizePriceOre, language)}
                       </ThemedText>
                     </Pressable>
                   );
@@ -603,7 +616,9 @@ export function MealDetailScreen() {
                   ? t("mealDetail.addWithStock", { count: selected.count })
                   : t("mealDetail.add")}
               </ThemedText>
-              <ThemedText style={styles.ctaPrice}>{formatPriceKr(totalOre, language)}</ThemedText>
+              <ThemedText style={styles.ctaPrice}>
+                {totalPriceLoading ? "…" : formatPriceKr(totalOre, language)}
+              </ThemedText>
             </>
           )}
         </Pressable>

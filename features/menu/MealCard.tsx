@@ -164,11 +164,11 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
     // Same cart mapping and selected-size contract as MealDetailScreen.
     addLockedRef.current = true;
     if (personalData) {
-      // The personally computed line — the SAME tailored handoff the
-      // Anpassar wizard used: the server's macros and ingredient grams, and
-      // a surcharge that reconciles the cart preview to the server's
-      // öre-precise price. The order endpoint recomputes and validates the
-      // price server-side either way.
+      // The personally computed line: the server's macros and grams, and the
+      // server's EXACT öre price (customPriceOre) — the same number this card
+      // displays, so the cart can never show a different total than the menu
+      // promised. surchargeKr rides along for legacy compatibility only. The
+      // order endpoint recomputes and validates the price server-side.
       addItem(
         apiMealToMeal(meal),
         "medium",
@@ -189,6 +189,7 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
         personalData.containerTypeId,
         undefined,
         meal.name,
+        personalData.calc.totalPriceOre,
       );
     } else {
       addItem(apiMealToMeal(meal), effectiveSize);

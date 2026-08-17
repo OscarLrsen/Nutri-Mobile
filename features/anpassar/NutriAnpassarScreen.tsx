@@ -194,8 +194,9 @@ export function NutriAnpassarScreen() {
       name: i.name,
       amountG: i.amountG,
     }));
-    // Cart price formula is basePrice * multiplier + surcharge.
-    // medium multiplier = 1.0, so surcharge reconciles to calcResult.totalPriceOre.
+    // Legacy reconciliation term only — the cart prices this line from the
+    // EXACT customPriceOre below; the rounded surcharge remains for carts
+    // persisted before that field existed.
     const ingredientSurchargeKr = Math.round(calcResult.totalPriceOre / 100) - meal.basePrice;
 
     addItem(
@@ -207,7 +208,8 @@ export function NutriAnpassarScreen() {
       ingredientSurchargeKr,
       containerTypeId,
       undefined,
-      meal.name
+      meal.name,
+      calcResult.totalPriceOre
     );
     router.push("/(tabs)/varukorg");
   }

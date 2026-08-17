@@ -14,9 +14,9 @@ import type { CartItem, Meal, MealSlot } from "@/types/cart";
 import type { ApiDrink } from "@/services/api/drinks";
 import { useLanguage } from "@/i18n";
 import { drinkName } from "@/features/menu/drinkText";
-import { MEAL_SIZES, previewMealPriceOre } from "@/utils/pricing";
+import { MEAL_SIZES } from "@/utils/pricing";
 import { normalizeMacroSnapshot } from "@/utils/macroMath";
-import { getItemMacros, getItemWeightG } from "@/utils/cartMath";
+import { getItemLineTotalOre, getItemMacros, getItemWeightG } from "@/utils/cartMath";
 
 /**
  * Cart store — a port of Nutri-Frontend's src/context/CartContext.tsx, NOT a
@@ -84,7 +84,9 @@ interface CartContextType {
     ingredientSurchargeKr?: number,
     containerTypeId?: string,
     slot?: MealSlot,
-    originalMealName?: string
+    originalMealName?: string,
+    /** Exact backend öre price for a custom line — see CartItem.customPriceOre. */
+    customPriceOre?: number
   ) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
@@ -299,7 +301,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       ingredientSurchargeKr?: number,
       containerTypeId?: string,
       slot?: MealSlot,
-      originalMealName?: string
+      originalMealName?: string,
+      customPriceOre?: number
     ) => {
       setItems((prev) => {
         const normalizedCustomMacros = customMacros ? normalizeMacroSnapshot(customMacros) : undefined;
@@ -330,6 +333,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
             customMacros: normalizedCustomMacros,
             customIngredients,
             ingredientSurchargeKr,
+            // Only meaningful on custom lines: a fixed meal's price comes from
+            // basePrice × size and must never be overridden by a caller.
+            customPriceOre: isCustom ? customPriceOre : undefined,
             containerTypeId,
             slot,
             originalMealName,
@@ -442,22 +448,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = useCallback(() => setItems([]), []);
 
-  // Web-identical totals. Fixed meals (no custom builder, no surcharge) use
-  // the backend's whole-SEK öre rounding so the cart total matches
-  // LineTotalOre on the receipt; custom lines keep the float approximation —
-  // backend recomputes pricing for those flows.
-  const totalPrice = items.reduce((sum, item) => {
-    if (item.kind === "drink" && item.drink) {
-      return sum + (item.drink.priceOre / 100) * item.quantity;
-    }
-    const size = MEAL_SIZES.find((s) => s.id === item.sizeId);
-    const multiplier = size?.priceMultiplier ?? 1;
-    const surcharge = item.ingredientSurchargeKr ?? 0;
-    if (!item.isCustom && surcharge === 0) {
-      return sum + (previewMealPriceOre(item.meal.basePrice, multiplier) * item.quantity) / 100;
-    }
-    return sum + (item.meal.basePrice * multiplier + surcharge) * item.quantity;
-  }, 0);
+  // One pricing authority: getItemLineTotalOre (utils/cartMath) prices every
+  // line in integer öre — fixed meals via the backend's whole-SEK rounding,
+  // drinks via their öre price, and custom/personalized lines via the EXACT
+  // backend customPriceOre (18586 stays 18586, never 18600). Legacy persisted
+  // custom lines without the field keep the historical surcharge formula.
+  // Summing integers means the subtotal can no longer drift from the lines.
+  const cartTotalOre = items.reduce((sum, item) => sum + getItemLineTotalOre(item), 0);
+  /** Kronor (float) — kept for the web-identical API surface; derived from
+   * the exact öre sum rather than summed in kronor. */
+  const totalPrice = cartTotalOre / 100;
 
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -479,7 +479,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return { macro, weightG };
   }, [items]);
 
-  const subtotalOre = Math.round(totalPrice * 100);
+  // Already an exact integer — no float round-trip.
+  const subtotalOre = cartTotalOre;
 
   return (
     <CartContext.Provider

@@ -35,7 +35,8 @@ import { getStoreStatus } from "@/services/api/store";
 import { createOrder, createCheckoutSession } from "@/services/api/orders";
 import { getMyCoupons, isCouponUsable, type ApiCoupon } from "@/services/api/coupons";
 import type { CartItem } from "@/types/cart";
-import { CUSTOMER_SIZE_OPTIONS, MEAL_SIZES, previewMealPriceOre } from "@/utils/pricing";
+import { CUSTOMER_SIZE_OPTIONS, MEAL_SIZES } from "@/utils/pricing";
+import { getItemLineTotalOre, getItemUnitPriceOre } from "@/utils/cartMath";
 import { formatPriceKr, krToOre } from "@/utils/money";
 import { applyDiscountPreview } from "@/utils/discountMath";
 import { normalizeMacroSnapshot } from "@/utils/macroMath";
@@ -893,7 +894,6 @@ function CartItemCard({ item }: { item: CartItem }) {
 
   const isDrink = item.kind === "drink";
   const size = isDrink ? undefined : MEAL_SIZES.find((s) => s.id === item.sizeId);
-  const multiplier = size?.priceMultiplier ?? 1;
 
   // The synthetic Meal wrapper on a drink line snapshots the Swedish name at
   // add time, so rendering item.meal.name directly would freeze the language
@@ -903,19 +903,12 @@ function CartItemCard({ item }: { item: CartItem }) {
   const displayName = isDrink && item.drink ? drinkName(item.drink, language) : item.meal.name;
   const macroMult = size?.macroMultiplier ?? 1;
   const surcharge = item.ingredientSurchargeKr ?? 0;
-  // Fixed meal: keep the cart preview in lockstep with the backend's öre
-  // rounding. Custom/Nutri Anpassar keeps its float approximation since the
-  // backend recomputes that path. (Verbatim web logic.)
-  const isFixedMeal = !isDrink && !item.isCustom && surcharge === 0;
-  const unitPriceKr =
-    isDrink && item.drink
-      ? item.drink.priceOre / 100
-      : isFixedMeal
-        ? previewMealPriceOre(item.meal.basePrice, multiplier) / 100
-        : item.meal.basePrice * multiplier + surcharge;
-  const linePriceKr = isFixedMeal
-    ? (previewMealPriceOre(item.meal.basePrice, multiplier) * item.quantity) / 100
-    : unitPriceKr * item.quantity;
+  // One pricing authority (utils/cartMath): the row and CartContext's summary
+  // price every line through the same function, so they cannot disagree.
+  // Custom/personalized lines carry the backend's exact öre price; fixed
+  // meals keep the backend's whole-SEK rounding; drinks their öre price.
+  const unitPriceOre = getItemUnitPriceOre(item);
+  const linePriceOre = getItemLineTotalOre(item);
 
   const macros =
     item.isCustom && item.customMacros
@@ -999,10 +992,10 @@ function CartItemCard({ item }: { item: CartItem }) {
             </View>
 
             <View style={styles.itemPriceRow}>
-              <ThemedText style={styles.linePrice}>{formatPriceKr(krToOre(linePriceKr), language)}</ThemedText>
+              <ThemedText style={styles.linePrice}>{formatPriceKr(linePriceOre, language)}</ThemedText>
               {item.quantity > 1 && (
                 <ThemedText style={styles.unitPrice}>
-                  {formatPriceKr(krToOre(unitPriceKr), language)} × {item.quantity}
+                  {formatPriceKr(unitPriceOre, language)} × {item.quantity}
                 </ThemedText>
               )}
             </View>

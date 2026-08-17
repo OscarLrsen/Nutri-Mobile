@@ -71,6 +71,26 @@ export interface CartItem {
   };
   customIngredients?: { ingredientId: string; name: string; amountG: number }[];
   ingredientSurchargeKr?: number;
+  /**
+   * The EXACT backend price for a custom/personalized line, in öre, straight
+   * from /api/custom-meal/calculate's totalPriceOre.
+   *
+   * WHY THIS EXISTS. The cart used to reconstruct a custom line's price as
+   * basePrice + ingredientSurchargeKr, where the surcharge had been rounded
+   * to whole kronor — so a server price of 18586 öre displayed and summed as
+   * 18600, and the cart total could differ from what the backend charges at
+   * order time. Every money computation for a custom line must use this
+   * field when present; ingredientSurchargeKr remains only so carts
+   * persisted before this field existed keep pricing exactly as they did.
+   *
+   * Display/summation only: the order payload still carries no price, and
+   * the backend recomputes from ingredient grams regardless.
+   *
+   * Mobile-only addition to the shared cart shape for now — the web cart has
+   * the same rounding flaw and needs the same field; until it gets it, this
+   * optional field is ignored by any web-parity tooling.
+   */
+  customPriceOre?: number;
   containerTypeId?: string;
   /** Frontend-only meal-slot tag for Heldag flows. Not sent to backend in V1. */
   slot?: MealSlot;
