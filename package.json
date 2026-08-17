@@ -59,6 +59,7 @@
     "pricing:check": "node scripts/check-custom-meal-pricing.mjs",
     "sizes:check": "node scripts/check-portion-sizes.mjs",
     "limits:check": "node scripts/check-ingredient-limits.mjs",
+    "feedback:check": "node scripts/check-food-feedback.mjs",
     "doctor": "expo-doctor"
   },
   "private": true

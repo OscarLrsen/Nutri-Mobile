@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -89,14 +89,50 @@ export function FoodFeedbackPrompt() {
   const [error, setError] = useState(false);
   const sendingRef = useRef(false);
 
-  const finish = () => {
+  // ── Modal close lifecycle ─────────────────────────────────────────────
+  // The sheet must NEVER be unmounted while the native modal is still
+  // presented: flipping the session store immediately re-renders this
+  // component to null, and tearing down a visible transparent Modal
+  // mid-presentation leaves its window eating every touch — the app looks
+  // frozen. So closing is two-phase: visible={false} starts the native
+  // dismissal, and ONLY when it has finished (onDismiss on iOS, the timer
+  // everywhere as fallback — Android has no onDismiss) does completeClose
+  // flip the session store and let the component unmount.
+  const [closing, setClosing] = useState(false);
+  const closeReasonRef = useRef<"dismiss" | "submitted" | null>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const completeClose = () => {
+    if (closeReasonRef.current === null) return; // already completed
+    const reason = closeReasonRef.current;
+    closeReasonRef.current = null;
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    if (reason === "submitted") {
+      void queryClient.invalidateQueries({ queryKey: ["orderReviews"] });
+    }
     dismissFeedbackForSession();
-    void queryClient.invalidateQueries({ queryKey: ["orderReviews"] });
   };
+
+  const beginClose = (reason: "dismiss" | "submitted") => {
+    if (closing) return; // double-taps close once
+    closeReasonRef.current = reason;
+    setClosing(true);
+    closeTimerRef.current = setTimeout(completeClose, Platform.OS === "ios" ? 600 : 120);
+  };
+
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    },
+    []
+  );
 
   const submitMutation = useMutation({
     mutationFn: submitOrderReview,
-    onSuccess: finish,
+    onSuccess: () => beginClose("submitted"),
     onError: () => {
       sendingRef.current = false;
       setError(true);
@@ -108,7 +144,7 @@ export function FoodFeedbackPrompt() {
   // what "not now" says. The next app session simply asks again (until the
   // 14-day server window closes).
   const notNow = () => {
-    dismissFeedbackForSession();
+    beginClose("dismiss");
   };
 
   if (!user || session.dismissed || hasActiveOrder || !prompt || !deliveredBeforeSession) {
@@ -116,7 +152,7 @@ export function FoodFeedbackPrompt() {
   }
 
   const submit = () => {
-    if (rating < 1 || sendingRef.current) return;
+    if (rating < 1 || sendingRef.current || closing) return;
     sendingRef.current = true;
     setError(false);
     submitMutation.mutate({
@@ -129,7 +165,13 @@ export function FoodFeedbackPrompt() {
   };
 
   return (
-    <Modal transparent animationType="slide" onRequestClose={notNow}>
+    <Modal
+      visible={!closing}
+      transparent
+      animationType="slide"
+      onRequestClose={notNow}
+      onDismiss={completeClose}
+    >
       <View style={styles.backdrop}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -167,7 +209,7 @@ export function FoodFeedbackPrompt() {
                     style={styles.starBtn}
                   >
                     <Star
-                      size={34}
+                      size={28}
                       color={value <= rating ? colors.accent : colors.textMuted}
                       fill={value <= rating ? colors.accent : "transparent"}
                       strokeWidth={1.75}
@@ -253,13 +295,16 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   avoider: { width: "100%" },
+  // Compact on purpose: title, stars, comment, both switches, Submit and
+  // "Inte nu" must all fit a normal iPhone height WITHOUT scrolling (the
+  // ScrollView stays only as a keyboard/small-screen fallback).
   sheet: {
     backgroundColor: colors.card,
     borderTopLeftRadius: radius.card * 2,
     borderTopRightRadius: radius.card * 2,
     paddingHorizontal: spacing[5],
-    paddingTop: spacing[5],
-    paddingBottom: spacing[8],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[6],
     maxHeight: "88%",
   },
   headRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing[3] },
@@ -277,11 +322,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     gap: spacing[2],
-    marginVertical: spacing[5],
+    marginVertical: spacing[3],
   },
   starBtn: { padding: spacing[1] },
   input: {
-    minHeight: 76,
+    minHeight: 60,
     borderRadius: radius.btn,
     borderWidth: 1,
     borderColor: colors.border,
@@ -289,13 +334,13 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     padding: spacing[3],
     textAlignVertical: "top",
-    marginBottom: spacing[4],
+    marginBottom: spacing[3],
   },
   switchRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[3],
-    paddingVertical: spacing[2],
+    paddingVertical: spacing[1],
   },
   switchText: { flex: 1 },
   switchLabel: { fontSize: 14 },
@@ -306,10 +351,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.btn,
     alignItems: "center",
     paddingVertical: spacing[3],
-    marginTop: spacing[4],
+    marginTop: spacing[3],
   },
   submitDisabled: { opacity: 0.45 },
   submitText: { color: "#FFFFFF" },
-  laterBtn: { alignItems: "center", paddingVertical: spacing[3] },
+  laterBtn: { alignItems: "center", paddingVertical: spacing[2] },
   laterText: { color: colors.textSecondary },
 });
