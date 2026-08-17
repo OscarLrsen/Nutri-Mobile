@@ -82,11 +82,24 @@ check("submit-fel återställer utan att stänga",
   /onError:\s*\(\)\s*=>\s*\{\s*sendingRef\.current = false;\s*setError\(true\);/s.test(src));
 check("submit blockeras under stängning", src.includes("sendingRef.current || closing"));
 
+// ── Once-per-order (låst produktregel) ──────────────────────────────────
+check("Inte nu skrivs server-side per order (skipOrderReview)", (() => {
+  const complete = src.slice(src.indexOf("const completeClose"), src.indexOf("const beginClose"));
+  return complete.includes("skipOrderReview(orderId)");
+})());
+check("skip-anropet sker EFTER native-stängningen, aldrig i beginClose",
+  !src.slice(src.indexOf("const beginClose"), src.indexOf("const submitMutation")).includes("skipOrderReview"));
+check("order-id fångas när stängningen börjar", src.includes("closeOrderIdRef.current = prompt?.orderId"));
+check("skip-fel sväljs utan att frysa UI", src.includes("skipOrderReview(orderId).catch(() => {})"));
+
 // ── Compact layout pins ─────────────────────────────────────────────────
-check("stjärnor är kompakta (28, inte 34)", src.includes("size={28}") && !src.includes("size={34}"));
-check("kommentarsfältet är 60pt", /minHeight:\s*60/.test(src));
+check("CTA-footern ligger UTANFÖR scrollen (alltid synlig)",
+  /<\/ScrollView>\s*<View style=\{styles\.footer\}>/s.test(src)
+  && /body:\s*\{\s*flexShrink:\s*1\s*\}/.test(src));
+check("stjärnor är kompakta (26)", src.includes("size={26}") && !src.includes("size={34}"));
+check("kommentarsfältet är 48pt", /minHeight:\s*48/.test(src));
 check("sheeten har inte den gamla jättepaddingen", !src.includes("paddingBottom: spacing[8]"));
-check("stjärnraden har kompakt marginal", /starsRow:[\s\S]*?marginVertical:\s*spacing\[3\]/.test(src));
+check("stjärnraden har kompakt marginal", /starsRow:[\s\S]*?marginVertical:\s*spacing\[2\]/.test(src));
 
 // ── Rapport ─────────────────────────────────────────────────────────────
 if (failures.length > 0) {

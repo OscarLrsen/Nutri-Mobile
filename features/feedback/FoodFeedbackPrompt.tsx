@@ -16,7 +16,7 @@ import { Star, X } from "lucide-react-native";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { useAuth } from "@/hooks/useAuth";
 import { getMyConsents } from "@/services/api/consents";
-import { getOrderReviewPrompt, submitOrderReview } from "@/services/api/orderReviews";
+import { getOrderReviewPrompt, skipOrderReview, submitOrderReview } from "@/services/api/orderReviews";
 import { useActiveOrder } from "@/features/order/useActiveOrder";
 import { dismissFeedbackForSession, useFeedbackSession } from "./feedbackSession";
 import { useTranslation } from "@/i18n";
@@ -34,10 +34,13 @@ import { colors, radius, spacing } from "@/theme";
  *    (feedbackSession.ts: cold start or background→foreground), so the
  *    sheet never chases the customer straight out of pickup and always
  *    waits for a later opening,
- *  - "Inte nu" dismisses for THIS SESSION ONLY — nothing is stored
- *    server-side, so the next app session may ask again. (The permanent
- *    skip endpoint still exists server-side; it is deliberately NOT wired
- *    to "Inte nu", whose wording promises another chance.)
+ *  - "Inte nu" is remembered PER ORDER, server-side (locked product rule:
+ *    max one prompt per order). The idempotent skip endpoint writes a
+ *    Skipped row, so the same order never asks again — on any device or
+ *    after any restart. Only a NEW qualifying delivered order can prompt.
+ *    The session store remains as the same-session guard and as the
+ *    network-failure fallback: if the skip call fails, this session stays
+ *    silent and the server may offer the order once more next session.
  *
  * Marketing consent is a separate switch and starts OFF. Always.
  */
@@ -100,25 +103,35 @@ export function FoodFeedbackPrompt() {
   // flip the session store and let the component unmount.
   const [closing, setClosing] = useState(false);
   const closeReasonRef = useRef<"dismiss" | "submitted" | null>(null);
+  const closeOrderIdRef = useRef<string | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const completeClose = () => {
     if (closeReasonRef.current === null) return; // already completed
     const reason = closeReasonRef.current;
+    const orderId = closeOrderIdRef.current;
     closeReasonRef.current = null;
+    closeOrderIdRef.current = null;
     if (closeTimerRef.current) {
       clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
     }
-    if (reason === "submitted") {
-      void queryClient.invalidateQueries({ queryKey: ["orderReviews"] });
+    if (reason === "dismiss" && orderId) {
+      // Locked product rule: max ONE prompt per order. "Inte nu" is written
+      // server-side via the idempotent per-order skip, so this order never
+      // prompts again on any device. Fire-and-forget AFTER the native modal
+      // has closed — a network failure only means the next app session may
+      // ask once more; the session dismissal below still silences this one.
+      void skipOrderReview(orderId).catch(() => {});
     }
+    void queryClient.invalidateQueries({ queryKey: ["orderReviews"] });
     dismissFeedbackForSession();
   };
 
   const beginClose = (reason: "dismiss" | "submitted") => {
     if (closing) return; // double-taps close once
     closeReasonRef.current = reason;
+    closeOrderIdRef.current = prompt?.orderId ?? null;
     setClosing(true);
     closeTimerRef.current = setTimeout(completeClose, Platform.OS === "ios" ? 600 : 120);
   };
@@ -178,7 +191,9 @@ export function FoodFeedbackPrompt() {
           style={styles.avoider}
         >
           <View style={styles.sheet}>
-            <ScrollView keyboardShouldPersistTaps="handled" bounces={false}>
+            {/* Body scrolls ONLY as a small-screen/keyboard fallback; the
+                footer with both CTAs lives OUTSIDE it and is always visible. */}
+            <ScrollView style={styles.body} keyboardShouldPersistTaps="handled" bounces={false}>
               <View style={styles.headRow}>
                 <View style={styles.headText}>
                   <ThemedText variant="title">{t("foodReview.title")}</ThemedText>
@@ -209,7 +224,7 @@ export function FoodFeedbackPrompt() {
                     style={styles.starBtn}
                   >
                     <Star
-                      size={28}
+                      size={26}
                       color={value <= rating ? colors.accent : colors.textMuted}
                       fill={value <= rating ? colors.accent : "transparent"}
                       strokeWidth={1.75}
@@ -249,6 +264,9 @@ export function FoodFeedbackPrompt() {
                 <Switch value={allowMarketingUse} onValueChange={setAllowMarketingUse} />
               </View>
 
+            </ScrollView>
+
+            <View style={styles.footer}>
               {error && (
                 <ThemedText variant="caption" style={styles.error}>
                   {t("foodReview.error")}
@@ -280,7 +298,7 @@ export function FoodFeedbackPrompt() {
                   {t("foodReview.notNow")}
                 </ThemedText>
               </Pressable>
-            </ScrollView>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -304,9 +322,13 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.card * 2,
     paddingHorizontal: spacing[5],
     paddingTop: spacing[4],
-    paddingBottom: spacing[6],
+    paddingBottom: spacing[5],
     maxHeight: "88%",
   },
+  // flexShrink lets the footer keep its full height on every screen — only
+  // the body ever scrolls, and only when it genuinely does not fit.
+  body: { flexShrink: 1 },
+  footer: { paddingTop: spacing[2] },
   headRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing[3] },
   headText: { flex: 1, gap: spacing[1] },
   subtitle: { color: colors.textSecondary },
@@ -322,11 +344,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     gap: spacing[2],
-    marginVertical: spacing[3],
+    marginVertical: spacing[2],
   },
   starBtn: { padding: spacing[1] },
   input: {
-    minHeight: 60,
+    minHeight: 48,
     borderRadius: radius.btn,
     borderWidth: 1,
     borderColor: colors.border,
@@ -334,7 +356,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     padding: spacing[3],
     textAlignVertical: "top",
-    marginBottom: spacing[3],
+    marginBottom: spacing[2],
   },
   switchRow: {
     flexDirection: "row",
@@ -351,7 +373,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.btn,
     alignItems: "center",
     paddingVertical: spacing[3],
-    marginTop: spacing[3],
+    marginTop: spacing[2],
   },
   submitDisabled: { opacity: 0.45 },
   submitText: { color: "#FFFFFF" },
