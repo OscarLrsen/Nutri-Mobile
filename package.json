@@ -58,6 +58,7 @@
     "swish:check": "node scripts/check-swish-disabled.mjs",
     "pricing:check": "node scripts/check-custom-meal-pricing.mjs",
     "sizes:check": "node scripts/check-portion-sizes.mjs",
+    "limits:check": "node scripts/check-ingredient-limits.mjs",
     "doctor": "expo-doctor"
   },
   "private": true
