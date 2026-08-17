@@ -104,11 +104,20 @@ export function StampCardCheckoutCard({ items }: { items: CartItem[] }) {
     setPickerOpen(true);
   }
 
+  // The applied preview must use the SELECTED reward's own cap — the same
+  // source CartScreen's summary row reads — so the card and the summary can
+  // never quote different amounts if the selection is no longer the list's
+  // first reward. Falls back to the offered reward's cap only when the
+  // selected one has left the list (order creation is the authority then).
+  const selectedRewardCapOre = selected
+    ? status.availableRewardList?.find((r) => r.id === selected.rewardId)?.maxValueOre ??
+      rewardMaxValueOre
+    : rewardMaxValueOre;
   const previewOre = selectedItem
-    ? Math.min(Math.round(selectedItem.meal.basePrice * 100), rewardMaxValueOre)
+    ? Math.min(Math.round(selectedItem.meal.basePrice * 100), selectedRewardCapOre)
     : 0;
   const coversWholeMeal =
-    !!selectedItem && Math.round(selectedItem.meal.basePrice * 100) <= rewardMaxValueOre;
+    !!selectedItem && Math.round(selectedItem.meal.basePrice * 100) <= selectedRewardCapOre;
 
   return (
     <View style={styles.card}>

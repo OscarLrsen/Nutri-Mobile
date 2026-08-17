@@ -60,6 +60,7 @@
     "sizes:check": "node scripts/check-portion-sizes.mjs",
     "limits:check": "node scripts/check-ingredient-limits.mjs",
     "feedback:check": "node scripts/check-food-feedback.mjs",
+    "snags:check": "node scripts/check-oscar-snags.mjs",
     "doctor": "expo-doctor"
   },
   "private": true

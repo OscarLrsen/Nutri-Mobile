@@ -177,7 +177,22 @@ export function PushNotificationsSection() {
               hintError={prefsMutation.isError}
               value={ownDevice.orderUpdatesEnabled}
               disabled={prefsMutation.isPending}
-              onChange={(v) => toggle({ orderUpdatesEnabled: v })}
+              // Master OFF must silence EVERYTHING: the backend fan-outs for
+              // weekly rewards and profile reminders check only their own
+              // columns, so leaving them true would keep pushing while the
+              // UI honestly claims "av". Re-enabling the master does NOT
+              // resurrect them — the customer opts back in per category.
+              onChange={(v) =>
+                toggle(
+                  v
+                    ? { orderUpdatesEnabled: true }
+                    : {
+                        orderUpdatesEnabled: false,
+                        weeklyRewardsEnabled: false,
+                        profileRemindersEnabled: false,
+                      }
+                )
+              }
               bordered={ownDevice.orderUpdatesEnabled}
             />
             {ownDevice.orderUpdatesEnabled ? (

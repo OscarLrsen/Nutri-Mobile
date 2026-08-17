@@ -193,8 +193,14 @@ export function CartScreen() {
     !!stampCardItem &&
     allLineIdsValidAndUnique &&
     // Still offered by the server. A reward reserved on another device, or
-    // spent since the cart was opened, has left this list.
-    (stampCardStatus?.availableRewardList ?? []).some((r) => r.id === activeStampCard.rewardId);
+    // spent since the cart was opened, has left this list. Only an ACTUAL
+    // list may veto, though — a failed/offline status fetch has no list and
+    // must not silently drop the customer's reward with a misleading error
+    // (the coupon path has the same only-server-truth rule). If the reward
+    // truly died, order creation rejects it server-side with an honest
+    // stamp-card error code instead.
+    (stampCardStatus?.availableRewardList == null ||
+      stampCardStatus.availableRewardList.some((r) => r.id === activeStampCard.rewardId));
 
   // Both discounts active is unrepresentable in CheckoutDiscountContext, so
   // this can only fire if that invariant is ever broken — better a refused
