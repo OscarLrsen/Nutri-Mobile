@@ -20,7 +20,7 @@ import { getOrderReviewPrompt, skipOrderReview, submitOrderReview } from "@/serv
 import { useActiveOrder } from "@/features/order/useActiveOrder";
 import { dismissFeedbackForSession, useFeedbackSession } from "./feedbackSession";
 import { useTranslation } from "@/i18n";
-import { colors, radius, spacing } from "@/theme";
+import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
  * "Hur smakade maten?" — asked on the NEXT app session after a delivered
@@ -196,8 +196,10 @@ export function FoodFeedbackPrompt() {
             <ScrollView style={styles.body} keyboardShouldPersistTaps="handled" bounces={false}>
               <View style={styles.headRow}>
                 <View style={styles.headText}>
-                  <ThemedText variant="title">{t("foodReview.title")}</ThemedText>
-                  <ThemedText variant="caption" style={styles.subtitle}>
+                  <ThemedText style={styles.introTitle}>{t("foodReview.title")}</ThemedText>
+                  {/* The review target's meal (server-chosen), never a random
+                      cart item — prompt.firstMealTitle IS the review target. */}
+                  <ThemedText style={styles.introBody} numberOfLines={2}>
                     {prompt.firstMealTitle
                       ? t("foodReview.subtitleMeal", { meal: prompt.firstMealTitle })
                       : t("foodReview.subtitle")}
@@ -224,7 +226,7 @@ export function FoodFeedbackPrompt() {
                     style={styles.starBtn}
                   >
                     <Star
-                      size={26}
+                      size={24}
                       color={value <= rating ? colors.accent : colors.textMuted}
                       fill={value <= rating ? colors.accent : "transparent"}
                       strokeWidth={1.75}
@@ -252,13 +254,12 @@ export function FoodFeedbackPrompt() {
                 <Switch value={isAnonymous} onValueChange={setIsAnonymous} />
               </View>
 
+              {/* No explainer paragraph — the label carries itself, and every
+                  saved line is vertical budget on a phone. Never pre-selected. */}
               <View style={styles.switchRow}>
                 <View style={styles.switchText}>
                   <ThemedText variant="bodyMedium" style={styles.switchLabel}>
                     {t("foodReview.marketing")}
-                  </ThemedText>
-                  <ThemedText variant="caption" style={styles.switchHint}>
-                    {t("foodReview.marketingHint")}
                   </ThemedText>
                 </View>
                 <Switch value={allowMarketingUse} onValueChange={setAllowMarketingUse} />
@@ -330,8 +331,11 @@ const styles = StyleSheet.create({
   body: { flexShrink: 1 },
   footer: { paddingTop: spacing[2] },
   headRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing[3] },
-  headText: { flex: 1, gap: spacing[1] },
-  subtitle: { color: colors.textSecondary },
+  headText: { flex: 1, gap: 2 },
+  // Deliberately small: the heading is a thank-you line, not a hero title —
+  // the vertical budget belongs to the interactive rows below it.
+  introTitle: { fontSize: 15.5, fontFamily: fontFamily.bodyBold, lineHeight: 20 },
+  introBody: { fontSize: 13, lineHeight: 17, color: colors.textSecondary },
   closeBtn: {
     width: 32,
     height: 32,
@@ -348,7 +352,7 @@ const styles = StyleSheet.create({
   },
   starBtn: { padding: spacing[1] },
   input: {
-    minHeight: 48,
+    minHeight: 40,
     borderRadius: radius.btn,
     borderWidth: 1,
     borderColor: colors.border,
@@ -362,11 +366,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[3],
-    paddingVertical: spacing[1],
+    paddingVertical: 2,
   },
   switchText: { flex: 1 },
-  switchLabel: { fontSize: 14 },
-  switchHint: { color: colors.textTertiary, marginTop: 2 },
+  switchLabel: { fontSize: 13, lineHeight: 17 },
   error: { color: colors.error, marginTop: spacing[2] },
   submit: {
     backgroundColor: colors.accent,

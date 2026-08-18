@@ -647,10 +647,11 @@ export function ProfileScreen() {
     await signOut();
   };
 
-  // Shared with Hem's greeting (bug 5): real name → cached name → neutral
-  // fallback while resolving; the e-mail only after a settled no-name.
-  // Called BEFORE the loading early-return — hooks must run unconditionally.
-  const displayName = useDisplayName(t("profile.fallbackName"));
+  // Shared with Hem's greeting (bug 5): real name or null — the e-mail
+  // never renders as a NAME (it still shows in the account rows where it
+  // belongs). Called BEFORE the loading early-return — hooks run
+  // unconditionally.
+  const displayName = useDisplayName() ?? t("profile.fallbackName");
 
   if (nutritionLoading) {
     return (

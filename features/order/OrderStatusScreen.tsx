@@ -9,6 +9,7 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withRepeat,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import {
@@ -283,6 +284,34 @@ function PulsingDot({ size = 6, style }: { size?: number; style?: ViewStyle }) {
   );
 }
 
+/**
+ * The CURRENT step's circle, alive but discreet: a small pop when the step
+ * becomes active (mount = the step just advanced), then a slow, subtle
+ * breathing scale while the order is in progress. Mounted ONLY for the
+ * current step — done/terminal states render the static dot, so nothing
+ * pulses forever after pickup. Reduced motion renders it fully static.
+ */
+function CurrentStepDot({ children }: { children: React.ReactNode }) {
+  const reduced = useReducedMotion();
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    if (reduced) return;
+    scale.value = withSequence(
+      withTiming(1.18, { duration: 220 }),
+      withTiming(1, { duration: 260 }),
+      withRepeat(
+        withSequence(
+          withTiming(1.06, { duration: 1100 }),
+          withTiming(1, { duration: 1100 })
+        ),
+        -1
+      )
+    );
+  }, [reduced, scale]);
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return <Animated.View style={animStyle}>{children}</Animated.View>;
+}
+
 /** Horizontal 3-step progress (web Variation B stepper). curStep: -1 = none,
  * steps.length = all done. */
 function ProgressSteps({ labels, curStep }: { labels: string[]; curStep: number }) {
@@ -302,22 +331,27 @@ function ProgressSteps({ labels, curStep }: { labels: string[]; curStep: number 
                 ]}
               />
             )}
-            <View
-              style={[
-                styles.stepDot,
-                done && { backgroundColor: colors.accent, borderColor: colors.accent },
-                current && {
-                  backgroundColor: "rgba(232,101,10,0.12)",
-                  borderColor: colors.accent,
-                },
-              ]}
-            >
-              {done ? (
-                <Check size={10} color={colors.textPrimary} strokeWidth={2.5} />
-              ) : current ? (
-                <View style={styles.stepDotInner} />
-              ) : null}
-            </View>
+            {current ? (
+              <CurrentStepDot key={`current-${i}`}>
+                <View
+                  style={[
+                    styles.stepDot,
+                    { backgroundColor: "rgba(232,101,10,0.12)", borderColor: colors.accent },
+                  ]}
+                >
+                  <PulsingDot size={8} />
+                </View>
+              </CurrentStepDot>
+            ) : (
+              <View
+                style={[
+                  styles.stepDot,
+                  done && { backgroundColor: colors.accent, borderColor: colors.accent },
+                ]}
+              >
+                {done ? <Check size={10} color={colors.textPrimary} strokeWidth={2.5} /> : null}
+              </View>
+            )}
             <ThemedText
               style={[
                 styles.stepLabel,

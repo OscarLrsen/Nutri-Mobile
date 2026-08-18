@@ -455,7 +455,27 @@ export function CartScreen() {
         const { message } = formatOrderError(err, t);
         setError(`${message ?? t("checkout.errorGeneric")} ${t("coupon.rejectedSuffix")}`);
       } else {
-        const { message, unauthorized } = formatOrderError(err, t);
+        // Stock details resolver: lets the sold-out copy name the item from
+        // the cart's own metadata (meal, drink or custom-meal ingredient)
+        // when the backend's structured name is missing. Never a UUID.
+        const { message, unauthorized } = formatOrderError(err, t, (details) => {
+          const clientLineId =
+            typeof details.clientLineId === "string" ? details.clientLineId : null;
+          const itemId = typeof details.itemId === "string" ? details.itemId : null;
+          const ingredientId =
+            typeof details.ingredientId === "string" ? details.ingredientId : null;
+          for (const item of items) {
+            if (clientLineId && item.clientLineId === clientLineId) {
+              return item.originalMealName ?? item.meal.name;
+            }
+            if (itemId && item.meal.id === itemId) return item.meal.name;
+            if (ingredientId) {
+              const ing = item.customIngredients?.find((ci) => ci.ingredientId === ingredientId);
+              if (ing?.name) return ing.name;
+            }
+          }
+          return null;
+        });
         if (unauthorized) {
           goToLogin();
         } else if (message) {

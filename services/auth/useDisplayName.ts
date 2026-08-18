@@ -5,71 +5,59 @@ import { supabase } from "@/services/auth/supabase";
 import { useAuth } from "@/services/auth/AuthProvider";
 
 /**
- * The user's display name WITHOUT the transient-email flash.
+ * The user's display NAME — never the e-mail address.
  *
- * deriveDisplayName's chain (full_name → email → fallback) is correct as a
- * FINAL answer, but rendering it immediately meant the Home greeting could
- * show the raw e-mail address whenever `user_metadata.full_name` was not in
- * the current session token yet — restored sessions carry the metadata from
- * when the JWT was minted, so a name added later only appears after a token
- * refresh. Rule: a real saved name must never lose to the e-mail, and the
- * e-mail may only show once we have genuinely settled on "no name exists".
+ * Physical QA rule (hard): the full e-mail may never render as the
+ * customer's name in the Home header. This hook therefore resolves to a
+ * real name or to null — the CALLER chooses its neutral copy for null
+ * ("Hej!" on Home, "Din profil" on Profil). Screens that legitimately show
+ * the e-mail (account rows) read `user.email` directly where it belongs.
  *
  * Resolution order:
  *   1. `full_name` from the live session — the happy path, instant;
  *   2. the last known name for this user (device cache, written every time
- *      a real name is observed) — kills the flash for returning users;
- *   3. while a one-shot `getUser()` refresh is in flight (stale-JWT
- *      self-heal), the caller's neutral fallback copy — NEVER the e-mail;
- *   4. only after the refresh settles with no name anywhere: the e-mail,
- *      which remains today's intended final fallback.
+ *      a real name is observed) — no flash for returning users;
+ *   3. null — both while resolving AND when the account genuinely has no
+ *      name (a one-shot `getUser()` self-heals stale session tokens whose
+ *      metadata predates the name).
  */
 
 const keyFor = (userId: string) => `nutri_display_name_v1:${userId}`;
 
-export function useDisplayName(fallback: string): string {
+export function useDisplayName(): string | null {
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const email = user?.email ?? null;
   const metadataName =
     ((user?.user_metadata?.full_name as string | undefined) ?? "").trim() || null;
 
-  // undefined = cache not read yet; null = cache empty.
-  const [cachedName, setCachedName] = useState<string | null | undefined>(undefined);
-  const [refreshSettled, setRefreshSettled] = useState(false);
+  const [cachedName, setCachedName] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setCachedName(undefined);
+    setCachedName(null);
     if (!userId) return;
     AsyncStorage.getItem(keyFor(userId))
       .then((v) => {
-        if (!cancelled) setCachedName(v);
+        if (!cancelled && v) setCachedName(v);
       })
-      .catch(() => {
-        if (!cancelled) setCachedName(null);
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [userId]);
 
   // Remember every real name we see, per user — the next cold start greets
-  // correctly even before any network round-trip.
+  // correctly before any network round-trip.
   useEffect(() => {
     if (!userId || !metadataName) return;
     AsyncStorage.setItem(keyFor(userId), metadataName).catch(() => {});
   }, [userId, metadataName]);
 
   // Stale-JWT self-heal: no name in the session token → ask the server once.
-  // getUser() does not rewrite the stored session, so the fresh name is
+  // getUser() does not rewrite the stored session, so a fresh name is
   // captured into the cache instead of waiting for the next token refresh.
   useEffect(() => {
-    setRefreshSettled(false);
-    if (!userId || metadataName) {
-      setRefreshSettled(true);
-      return;
-    }
+    if (!userId || metadataName) return;
     let cancelled = false;
     supabase.auth
       .getUser()
@@ -81,18 +69,12 @@ export function useDisplayName(fallback: string): string {
           setCachedName(fresh);
           AsyncStorage.setItem(keyFor(userId), fresh).catch(() => {});
         }
-        setRefreshSettled(true);
       })
-      .catch(() => {
-        if (!cancelled) setRefreshSettled(true);
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [userId, metadataName]);
 
-  if (metadataName) return metadataName;
-  if (cachedName) return cachedName;
-  if (cachedName === undefined || !refreshSettled) return fallback;
-  return email || fallback;
+  return metadataName ?? cachedName;
 }

@@ -30,7 +30,7 @@ const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 function routeForPush(data: unknown): string | null {
   if (typeof data !== "object" || data === null) return null;
   const { type, orderId } = data as { type?: unknown; orderId?: unknown };
-  if (type === "order-ready") {
+  if (type === "order-ready" || type === "order-preparing") {
     return typeof orderId === "string" && GUID_PATTERN.test(orderId) ? `/order/${orderId}` : null;
   }
   if (type === "weekly-rewards") return "/beloningar";

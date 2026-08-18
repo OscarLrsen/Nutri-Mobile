@@ -22,9 +22,9 @@ export function GreetingHeader() {
   const { language } = useLanguage();
   const router = useRouter();
   const { user } = useAuth();
-  // Never the raw e-mail while the name is still resolving (bug 5) — real
-  // name → cached name → neutral fallback; e-mail only once settled no-name.
-  const name = useDisplayName(t("profile.fallbackName"));
+  // Hard physical-QA rule: the e-mail address NEVER renders here. A real
+  // name greets by name; otherwise the neutral greeting carries the row.
+  const name = useDisplayName();
 
   const rewardQuery = useQuery({
     queryKey: ["rewards", "status", user?.id ?? null],
@@ -38,7 +38,7 @@ export function GreetingHeader() {
   return (
     <View style={styles.row} accessibilityRole="header">
       <ThemedText variant="headline" style={styles.greeting} numberOfLines={1}>
-        {t("home.greeting", { name })}
+        {name ? t("home.greeting", { name }) : t("home.greetingNeutral")}
       </ThemedText>
       {points !== null ? (
         <Pressable

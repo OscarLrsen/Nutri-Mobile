@@ -33,6 +33,7 @@
     "pitchBody": "Nutri plans your food around your training goals — whole ingredients, calculated for you.",
     "seeMenuSecondary": "Or take a look at the menu",
     "greeting": "Hi {{name}}",
+    "greetingNeutral": "Hi!",
     "greetingSub": "Here's your day at a glance.",
     "planHead": "Today's plan",
     "kcalUnit": "kcal",
@@ -1288,9 +1289,9 @@
     "remove": "Remove a glass of water"
   },
   "foodReview": {
-    "title": "How was the food?",
+    "title": "Thank you for ordering from Nutri.",
     "subtitle": "Tell us what you thought of your latest order.",
-    "subtitleMeal": "Tell us what you thought of {{meal}}.",
+    "subtitleMeal": "Tell us what you thought of “{{meal}}”.",
     "close": "Close",
     "starLabel": "{{value}} of 5 stars",
     "commentPlaceholder": "Write a comment (optional)",

@@ -63,22 +63,53 @@ check("utan namn är e-post slutgiltig fallback (dagens regel)",
 check("utan användare gäller neutral fallback",
   deriveDisplayName(null, "Din profil") === "Din profil");
 
-// …and the HOOK guarantees the e-mail never renders transiently.
+// …and the HOOK can only ever return a real name or null — the e-mail is
+// structurally impossible in the Home header (hard physical-QA rule).
 const hook = readFileSync("services/auth/useDisplayName.ts", "utf8");
-const iMeta = hook.indexOf("if (metadataName) return metadataName;");
-const iCache = hook.indexOf("if (cachedName) return cachedName;");
-const iWait = hook.indexOf("return fallback;", iCache);
-const iEmail = hook.indexOf("return email || fallback;");
-check("hookens ordning: namn → cache → neutral vänta → e-post sist",
-  iMeta !== -1 && iCache !== -1 && iWait !== -1 && iEmail !== -1
-  && iMeta < iCache && iCache < iWait && iWait < iEmail);
+check("hooken returnerar namn eller null — aldrig e-post",
+  hook.includes("return metadataName ?? cachedName;")
+  && !hook.includes("|| user?.email")
+  && !hook.includes("return email"));
 check("stale-JWT självläker via getUser()", hook.includes("supabase.auth") && hook.includes(".getUser()"));
 
 const greeting = readFileSync("features/home/GreetingHeader.tsx", "utf8");
 check("Home-hälsningen använder hooken (aldrig rå deriveDisplayName)",
-  greeting.includes("useDisplayName(") && !greeting.includes("deriveDisplayName"));
+  greeting.includes("useDisplayName()") && !greeting.includes("deriveDisplayName"));
+check("null-namn ger neutral hälsning, inte e-post",
+  greeting.includes('t("home.greetingNeutral")') && !greeting.includes(".email"));
 const profileSrc = readFileSync("features/profile/ProfileScreen.tsx", "utf8");
-check("ProfileScreen använder samma hook", profileSrc.includes("useDisplayName(t(\"profile.fallbackName\"))"));
+check("ProfileScreen använder samma hook med neutral fallback",
+  profileSrc.includes('useDisplayName() ?? t("profile.fallbackName")'));
+
+// ── Bug 2: sold-out-copy får aldrig visa ett UUID ───────────────────────
+const oeJs = ts.transpileModule(readFileSync("utils/orderErrors.ts", "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
+}).outputText;
+const oeMod = join(outDir, "orderErrors.mjs");
+writeFileSync(oeMod, oeJs);
+const { formatOrderError, isUuidLike } = await import(pathToFileURL(oeMod).href);
+const fakeT = (key, opts) => (opts && opts.name ? `${key}:${opts.name}` : key);
+const uuid = "12e87b33-1111-2222-3333-444455556666";
+
+check("isUuidLike känner igen UUID", isUuidLike(uuid) && !isUuidLike("Chicken Bowl"));
+check("strukturerat itemName vinner",
+  formatOrderError({ status: 409, message: "x", details: { error: "Insufficient stock", itemName: "Chicken Bowl" } }, fakeT)
+    .message === "checkout.errorOutOfStockNamed:Chicken Bowl");
+check("ingredientName (personlig måltid) fungerar också",
+  formatOrderError({ status: 409, message: "x", details: { error: "Insufficient stock", ingredientName: "Keso" } }, fakeT)
+    .message === "checkout.errorOutOfStockNamed:Keso");
+check("cart-resolvern används när namnet saknas",
+  formatOrderError(
+    { status: 409, message: "x", details: { error: "Insufficient stock", itemName: null, clientLineId: "L1" } },
+    fakeT,
+    (d) => (d.clientLineId === "L1" ? "Beef Power Bowl" : null)
+  ).message === "checkout.errorOutOfStockNamed:Beef Power Bowl");
+check("legacy-prosa med UUID blir generisk copy — aldrig UUID",
+  formatOrderError({ status: 409, message: `Slut i lager: ${uuid} storlek medium (0 tillgängliga, 1 begärda)`, details: undefined }, fakeT)
+    .message === "checkout.errorOutOfStockGeneric");
+check("legacy-prosa med riktigt namn fungerar fortfarande",
+  formatOrderError({ status: 409, message: "Slut i lager: Kyckling Wrap storlek medium (0 tillgängliga, 1 begärda)", details: undefined }, fakeT)
+    .message === "checkout.errorOutOfStockNamed:Kyckling Wrap");
 
 // ── Rapport ─────────────────────────────────────────────────────────────
 if (failures.length > 0) {

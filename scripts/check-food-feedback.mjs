@@ -96,8 +96,11 @@ check("skip-fel sväljs utan att frysa UI", src.includes("skipOrderReview(orderI
 check("CTA-footern ligger UTANFÖR scrollen (alltid synlig)",
   /<\/ScrollView>\s*<View style=\{styles\.footer\}>/s.test(src)
   && /body:\s*\{\s*flexShrink:\s*1\s*\}/.test(src));
-check("stjärnor är kompakta (26)", src.includes("size={26}") && !src.includes("size={34}"));
-check("kommentarsfältet är 48pt", /minHeight:\s*48/.test(src));
+check("stjärnor är kompakta (24)", src.includes("size={24}") && !src.includes("size={34}"));
+check("kommentarsfältet är 40pt", /minHeight:\s*40/.test(src));
+check("ingen förklaringstext under consent-raderna", !src.includes("marketingHint"));
+check("intro är kompakt (ingen title-variant)", src.includes("styles.introTitle")
+  && !src.includes('variant="title"'));
 check("sheeten har inte den gamla jättepaddingen", !src.includes("paddingBottom: spacing[8]"));
 check("stjärnraden har kompakt marginal", /starsRow:[\s\S]*?marginVertical:\s*spacing\[2\]/.test(src));
 

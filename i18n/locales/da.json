@@ -33,6 +33,7 @@
     "pitchBody": "Nutri planlægger din mad ud fra dine træningsmål — hele råvarer, beregnet til dig.",
     "seeMenuSecondary": "Eller kig på menuen",
     "greeting": "Hej {{name}}",
+    "greetingNeutral": "Hej!",
     "greetingSub": "Her er din dag kort fortalt.",
     "planHead": "Dagens plan",
     "kcalUnit": "kcal",
@@ -1288,9 +1289,9 @@
     "remove": "Fjern et glas vand"
   },
   "foodReview": {
-    "title": "Hvordan smagte maden?",
+    "title": "Tak, fordi du bestilte fra Nutri.",
     "subtitle": "Fortæl os, hvad du syntes om din seneste bestilling.",
-    "subtitleMeal": "Fortæl os, hvad du syntes om {{meal}}.",
+    "subtitleMeal": "Fortæl os, hvad du syntes om ”{{meal}}”.",
     "close": "Luk",
     "starLabel": "{{value}} af 5 stjerner",
     "commentPlaceholder": "Skriv en kommentar (valgfrit)",

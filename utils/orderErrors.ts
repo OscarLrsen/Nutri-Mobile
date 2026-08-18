@@ -37,7 +37,22 @@ export interface OrderErrorResult {
   unauthorized: boolean;
 }
 
-export function formatOrderError(err: unknown, t: TFunction): OrderErrorResult {
+/** A raw UUID must never reach customer copy — a name that looks like one is
+ * treated as missing. */
+export function isUuidLike(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
+/** Optional cart-side resolver: given the backend's structured stock details
+ * (clientLineId / itemId / ingredientId), return the human item name the
+ * cart knows, or null. */
+export type StockItemNameResolver = (details: Record<string, unknown>) => string | null;
+
+export function formatOrderError(
+  err: unknown,
+  t: TFunction,
+  resolveStockItemName?: StockItemNameResolver
+): OrderErrorResult {
   if (!isApiError(err)) {
     // Includes the pre-network "Not authenticated" throw from the auth
     // interceptor / createOrder fast-fail — treat as unauthorized so the
@@ -55,11 +70,28 @@ export function formatOrderError(err: unknown, t: TFunction): OrderErrorResult {
   if (err.status === 409 && /service is not live/i.test(text)) {
     return { message: t("checkout.errorJustClosed"), unauthorized: false };
   }
-  if (err.status === 409 && /slut i lager:/i.test(text)) {
-    // Web: pull the meal name out of "Slut i lager: <name> storlek <s>" /
-    // "Slut i lager: <name> (…)".
+  if (err.status === 409 && (/slut i lager/i.test(text) || /insufficient stock/i.test(text))) {
+    // Physical-QA rule: the customer must learn WHAT sold out, and an
+    // internal UUID may never render. Resolution order:
+    //   1. the backend's structured itemName/ingredientName (never a UUID),
+    //   2. the cart's own metadata via the caller's resolver,
+    //   3. the legacy "Slut i lager: <name>…" prose — UUID-guarded,
+    //   4. the generic copy.
+    const details = (
+      typeof err.details === "object" && err.details !== null ? err.details : {}
+    ) as Record<string, unknown>;
+    const structuredName = [details.itemName, details.ingredientName].find(
+      (v): v is string => typeof v === "string" && v.trim().length > 0 && !isUuidLike(v)
+    );
+    if (structuredName) {
+      return { message: t("checkout.errorOutOfStockNamed", { name: structuredName }), unauthorized: false };
+    }
+    const resolvedName = resolveStockItemName?.(details) ?? null;
+    if (resolvedName) {
+      return { message: t("checkout.errorOutOfStockNamed", { name: resolvedName }), unauthorized: false };
+    }
     const nameMatch = text.match(/slut i lager:\s*(.+?)(?:\s+storlek\s+|\s+\()/i);
-    if (nameMatch) {
+    if (nameMatch && !isUuidLike(nameMatch[1])) {
       return { message: t("checkout.errorOutOfStockNamed", { name: nameMatch[1] }), unauthorized: false };
     }
     return { message: t("checkout.errorOutOfStockGeneric"), unauthorized: false };

@@ -99,6 +99,20 @@ export async function registerCurrentDeviceForPush(): Promise<boolean> {
     if (!Device.isDevice) return false;
     if (Platform.OS !== "ios" && Platform.OS !== "android") return false;
 
+    // Expo Go (appOwnership === "expo") lost remote-push support in SDK 53:
+    // the native token fetch rejects, so registration can never succeed
+    // there. Bail out EXPLICITLY with a dev-visible log instead of dying in
+    // the blanket catch below — physical QA burned real time on this being
+    // invisible. Development/TestFlight builds are unaffected.
+    if (Constants.appOwnership === "expo") {
+      if (__DEV__) {
+        console.warn(
+          "[push] Expo Go kan inte ta emot remote push (SDK 53+) — testa i en development/TestFlight-build."
+        );
+      }
+      return false;
+    }
+
     const permission = await getPushPermissionStatus();
     if (permission !== "granted") return false;
 
