@@ -313,17 +313,19 @@ const styles = StyleSheet.create({
     padding: spacing[5],
   },
   avoider: { width: "100%", maxWidth: 400, alignItems: "stretch" },
-  // Centered compact card. NO ScrollView: everything — intro, stars,
-  // comment, both consent rows, Submit and "Inte nu" — fits a normal
-  // iPhone with the keyboard closed; maxHeight only clips on extreme
-  // accessibility sizes, and the keyboard lifts the whole card.
+  // Centered compact card. NO ScrollView and — crucially — NO maxHeight:
+  // a percentage maxHeight inside the content-sized KeyboardAvoidingView
+  // resolved against an indefinite parent and capped the PAINTED background
+  // shorter than the content, so the last children ("Inte nu") spilled
+  // visually onto the backdrop below the border radius. The card must
+  // always wrap every child; at ~430pt of content it fits every normal
+  // iPhone, and the keyboard lifts the whole card.
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.card * 2,
     paddingHorizontal: spacing[5],
     paddingTop: spacing[4],
     paddingBottom: spacing[4],
-    maxHeight: "92%",
   },
   headRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing[3] },
   headText: { flex: 1, gap: 2 },

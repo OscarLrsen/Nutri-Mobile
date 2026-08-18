@@ -103,6 +103,16 @@ check("CTA:erna ligger i kortet efter consent-raderna", (() => {
   const later = src.indexOf("styles.laterBtn");
   return lastSwitch !== -1 && submitBtn > lastSwitch && later > submitBtn;
 })());
+check("BÅDA CTA:erna renderas INUTI card-wrappern", (() => {
+  const cardOpen = src.indexOf("styles.card");
+  const later = src.indexOf("styles.laterBtn");
+  const kavClose = src.indexOf("</KeyboardAvoidingView>");
+  return cardOpen !== -1 && later > cardOpen && later < kavClose;
+})());
+check("cardets bakgrund kan aldrig kapa innehållet",
+  !/card:\s*\{[\s\S]*?maxHeight/.test(src));
+check("ingen absolut positionering av CTA:erna",
+  !/(submit|laterBtn):\s*\{[\s\S]*?position:\s*"absolute"/.test(src));
 check("stjärnor är kompakta (24)", src.includes("size={24}") && !src.includes("size={34}"));
 check("kommentarsfältet är 56pt", /minHeight:\s*56/.test(src));
 check("Inte nu är läsbar men sekundär",
@@ -111,7 +121,6 @@ check("Inte nu är läsbar men sekundär",
 check("ingen förklaringstext under consent-raderna", !src.includes("marketingHint"));
 check("intro är kompakt (ingen title-variant)", src.includes("styles.introTitle")
   && !src.includes('variant="title"'));
-check("maxHeight-fallback finns för extremfall", /maxHeight:\s*"92%"/.test(src));
 check("sheeten har inte den gamla jättepaddingen", !src.includes("paddingBottom: spacing[8]"));
 check("stjärnraden har kompakt marginal", /starsRow:[\s\S]*?marginVertical:\s*spacing\[2\]/.test(src));
 
