@@ -104,7 +104,10 @@ check("CTA:erna ligger i kortet efter consent-raderna", (() => {
   return lastSwitch !== -1 && submitBtn > lastSwitch && later > submitBtn;
 })());
 check("stjärnor är kompakta (24)", src.includes("size={24}") && !src.includes("size={34}"));
-check("kommentarsfältet är 40pt", /minHeight:\s*40/.test(src));
+check("kommentarsfältet är 56pt", /minHeight:\s*56/.test(src));
+check("Inte nu är läsbar men sekundär",
+  /laterText:[\s\S]*?fontFamily:\s*fontFamily\.bodySemibold[\s\S]*?color:\s*colors\.textPrimary/.test(src)
+  && /laterBtn:[\s\S]*?paddingVertical:\s*spacing\[3\]/.test(src));
 check("ingen förklaringstext under consent-raderna", !src.includes("marketingHint"));
 check("intro är kompakt (ingen title-variant)", src.includes("styles.introTitle")
   && !src.includes('variant="title"'));

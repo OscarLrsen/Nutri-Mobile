@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
   },
   starBtn: { padding: spacing[1] },
   input: {
-    minHeight: 40,
+    minHeight: 56,
     borderRadius: radius.btn,
     borderWidth: 1,
     borderColor: colors.border,
@@ -375,6 +375,13 @@ const styles = StyleSheet.create({
   },
   submitDisabled: { opacity: 0.45 },
   submitText: { color: "#FFFFFF" },
-  laterBtn: { alignItems: "center", paddingVertical: spacing[2] },
-  laterText: { color: colors.textSecondary },
+  // "Inte nu" stays SECONDARY (plain text, no fill) but must be clearly
+  // readable: primary text color + semibold, and enough padding for a
+  // proper touch target.
+  laterBtn: { alignItems: "center", paddingVertical: spacing[3] },
+  laterText: {
+    fontSize: 13.5,
+    fontFamily: fontFamily.bodySemibold,
+    color: colors.textPrimary,
+  },
 });
