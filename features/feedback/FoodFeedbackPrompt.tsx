@@ -4,7 +4,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Switch,
   TextInput,
@@ -181,19 +180,21 @@ export function FoodFeedbackPrompt() {
     <Modal
       visible={!closing}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={notNow}
       onDismiss={completeClose}
     >
+      {/* Centered compact CARD (physical-QA redesign) — not a bottom sheet.
+          No ScrollView in the normal path: the card is small enough to fit
+          any normal iPhone with the keyboard closed; maxHeight is the only
+          tiny-screen fallback, and KeyboardAvoidingView lifts the card when
+          the comment field opens. */}
       <View style={styles.backdrop}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.avoider}
         >
-          <View style={styles.sheet}>
-            {/* Body scrolls ONLY as a small-screen/keyboard fallback; the
-                footer with both CTAs lives OUTSIDE it and is always visible. */}
-            <ScrollView style={styles.body} keyboardShouldPersistTaps="handled" bounces={false}>
+          <View style={styles.card}>
               <View style={styles.headRow}>
                 <View style={styles.headText}>
                   <ThemedText style={styles.introTitle}>{t("foodReview.title")}</ThemedText>
@@ -265,41 +266,37 @@ export function FoodFeedbackPrompt() {
                 <Switch value={allowMarketingUse} onValueChange={setAllowMarketingUse} />
               </View>
 
-            </ScrollView>
+            {error && (
+              <ThemedText variant="caption" style={styles.error}>
+                {t("foodReview.error")}
+              </ThemedText>
+            )}
 
-            <View style={styles.footer}>
-              {error && (
-                <ThemedText variant="caption" style={styles.error}>
-                  {t("foodReview.error")}
-                </ThemedText>
-              )}
+            <Pressable
+              accessibilityRole="button"
+              disabled={rating < 1 || submitMutation.isPending}
+              onPress={submit}
+              style={[
+                styles.submit,
+                (rating < 1 || submitMutation.isPending) && styles.submitDisabled,
+              ]}
+            >
+              <ThemedText variant="bodyMedium" style={styles.submitText}>
+                {submitMutation.isPending
+                  ? t("foodReview.sending")
+                  : t("foodReview.submit")}
+              </ThemedText>
+            </Pressable>
 
-              <Pressable
-                accessibilityRole="button"
-                disabled={rating < 1 || submitMutation.isPending}
-                onPress={submit}
-                style={[
-                  styles.submit,
-                  (rating < 1 || submitMutation.isPending) && styles.submitDisabled,
-                ]}
-              >
-                <ThemedText variant="bodyMedium" style={styles.submitText}>
-                  {submitMutation.isPending
-                    ? t("foodReview.sending")
-                    : t("foodReview.submit")}
-                </ThemedText>
-              </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                onPress={notNow}
-                style={styles.laterBtn}
-              >
-                <ThemedText variant="caption" style={styles.laterText}>
-                  {t("foodReview.notNow")}
-                </ThemedText>
-              </Pressable>
-            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={notNow}
+              style={styles.laterBtn}
+            >
+              <ThemedText variant="caption" style={styles.laterText}>
+                {t("foodReview.notNow")}
+              </ThemedText>
+            </Pressable>
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -311,25 +308,23 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.55)",
-    justifyContent: "flex-end",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: spacing[5],
   },
-  avoider: { width: "100%" },
-  // Compact on purpose: title, stars, comment, both switches, Submit and
-  // "Inte nu" must all fit a normal iPhone height WITHOUT scrolling (the
-  // ScrollView stays only as a keyboard/small-screen fallback).
-  sheet: {
+  avoider: { width: "100%", maxWidth: 400, alignItems: "stretch" },
+  // Centered compact card. NO ScrollView: everything — intro, stars,
+  // comment, both consent rows, Submit and "Inte nu" — fits a normal
+  // iPhone with the keyboard closed; maxHeight only clips on extreme
+  // accessibility sizes, and the keyboard lifts the whole card.
+  card: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: radius.card * 2,
-    borderTopRightRadius: radius.card * 2,
+    borderRadius: radius.card * 2,
     paddingHorizontal: spacing[5],
     paddingTop: spacing[4],
-    paddingBottom: spacing[5],
-    maxHeight: "88%",
+    paddingBottom: spacing[4],
+    maxHeight: "92%",
   },
-  // flexShrink lets the footer keep its full height on every screen — only
-  // the body ever scrolls, and only when it genuinely does not fit.
-  body: { flexShrink: 1 },
-  footer: { paddingTop: spacing[2] },
   headRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing[3] },
   headText: { flex: 1, gap: 2 },
   // Deliberately small: the heading is a thank-you line, not a hero title —

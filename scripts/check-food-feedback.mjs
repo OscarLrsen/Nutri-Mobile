@@ -92,15 +92,23 @@ check("skip-anropet sker EFTER native-stängningen, aldrig i beginClose",
 check("order-id fångas när stängningen börjar", src.includes("closeOrderIdRef.current = prompt?.orderId"));
 check("skip-fel sväljs utan att frysa UI", src.includes("skipOrderReview(orderId).catch(() => {})"));
 
-// ── Compact layout pins ─────────────────────────────────────────────────
-check("CTA-footern ligger UTANFÖR scrollen (alltid synlig)",
-  /<\/ScrollView>\s*<View style=\{styles\.footer\}>/s.test(src)
-  && /body:\s*\{\s*flexShrink:\s*1\s*\}/.test(src));
+// ── Centered compact card (physical-QA redesign) ────────────────────────
+check("centrerad modal-card, inte bottom sheet",
+  /backdrop:[\s\S]*?justifyContent:\s*"center"[\s\S]*?alignItems:\s*"center"/.test(src)
+  && src.includes('animationType="fade"'));
+check("ingen ScrollView i normalfallet", !src.includes("<ScrollView"));
+check("CTA:erna ligger i kortet efter consent-raderna", (() => {
+  const lastSwitch = src.lastIndexOf("styles.switchRow");
+  const submitBtn = src.indexOf("styles.submit,");
+  const later = src.indexOf("styles.laterBtn");
+  return lastSwitch !== -1 && submitBtn > lastSwitch && later > submitBtn;
+})());
 check("stjärnor är kompakta (24)", src.includes("size={24}") && !src.includes("size={34}"));
 check("kommentarsfältet är 40pt", /minHeight:\s*40/.test(src));
 check("ingen förklaringstext under consent-raderna", !src.includes("marketingHint"));
 check("intro är kompakt (ingen title-variant)", src.includes("styles.introTitle")
   && !src.includes('variant="title"'));
+check("maxHeight-fallback finns för extremfall", /maxHeight:\s*"92%"/.test(src));
 check("sheeten har inte den gamla jättepaddingen", !src.includes("paddingBottom: spacing[8]"));
 check("stjärnraden har kompakt marginal", /starsRow:[\s\S]*?marginVertical:\s*spacing\[2\]/.test(src));
 
