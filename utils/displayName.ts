@@ -11,6 +11,17 @@ export function deriveDisplayName(user: User | null | undefined, fallback: strin
   return (user?.user_metadata?.full_name as string | undefined) || user?.email || fallback;
 }
 
+/**
+ * The FIRST name out of a stored display name, for greetings ("Hi Pontus",
+ * never "Hi Pontus Vångö"). Null when the first token doesn't look like a
+ * human name (digits, @, empty) — the caller falls back to its neutral copy,
+ * NEVER to the e-mail. Same validation idea as personalizeMealName.
+ */
+export function firstNameFrom(displayName: string): string | null {
+  const first = displayName.trim().split(/\s+/)[0] ?? "";
+  return /^[\p{L}][\p{L}'-]*$/u.test(first) ? first : null;
+}
+
 export function deriveInitials(user: User | null | undefined): string {
   const source = ((user?.user_metadata?.full_name as string | undefined) || user?.email || "NU").trim();
   const parts = source.split(/[\s@.]+/).filter(Boolean);

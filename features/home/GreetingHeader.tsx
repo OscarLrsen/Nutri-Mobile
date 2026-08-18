@@ -6,6 +6,7 @@ import { Sparkles } from "lucide-react-native";
 import { ThemedText } from "@/components/ui/ThemedText";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { useDisplayName } from "@/services/auth/useDisplayName";
+import { firstNameFrom } from "@/utils/displayName";
 import { getRewardStatus } from "@/services/api/rewards";
 import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
@@ -23,8 +24,13 @@ export function GreetingHeader() {
   const router = useRouter();
   const { user } = useAuth();
   // Hard physical-QA rule: the e-mail address NEVER renders here. A real
-  // name greets by name; otherwise the neutral greeting carries the row.
-  const name = useDisplayName();
+  // name greets by FIRST name ("Hi Pontus", not "Hi Pontus Vångö");
+  // otherwise the neutral greeting carries the row. Forensic note: the
+  // app's one and only saved customer name is user_metadata.full_name
+  // (written by registration) — no profile table carries a name — and
+  // useDisplayName already resolves it with cache + stale-JWT self-heal.
+  const fullName = useDisplayName();
+  const name = fullName ? (firstNameFrom(fullName) ?? fullName) : null;
 
   const rewardQuery = useQuery({
     queryKey: ["rewards", "status", user?.id ?? null],

@@ -55,9 +55,13 @@ const js = ts.transpileModule(readFileSync("utils/displayName.ts", "utf8"), {
 }).outputText;
 const mod = join(outDir, "displayName.mjs");
 writeFileSync(mod, js);
-const { deriveDisplayName } = await import(pathToFileURL(mod).href);
+const { deriveDisplayName, firstNameFrom } = await import(pathToFileURL(mod).href);
 check("riktigt namn vinner alltid",
   deriveDisplayName({ user_metadata: { full_name: "Pontus V" }, email: "x@y.z" }, "Din profil") === "Pontus V");
+check("hälsningen använder FÖRNAMNET", firstNameFrom("Pontus Vångö") === "Pontus"
+  && firstNameFrom("Pontus") === "Pontus");
+check("ogiltigt förnamn ger null (aldrig e-post)", firstNameFrom("x@y.z") === null
+  && firstNameFrom("12345") === null);
 check("utan namn är e-post slutgiltig fallback (dagens regel)",
   deriveDisplayName({ user_metadata: {}, email: "x@y.z" }, "Din profil") === "x@y.z");
 check("utan användare gäller neutral fallback",
@@ -75,6 +79,7 @@ check("stale-JWT självläker via getUser()", hook.includes("supabase.auth") && 
 const greeting = readFileSync("features/home/GreetingHeader.tsx", "utf8");
 check("Home-hälsningen använder hooken (aldrig rå deriveDisplayName)",
   greeting.includes("useDisplayName()") && !greeting.includes("deriveDisplayName"));
+check("hälsningen extraherar förnamnet", greeting.includes("firstNameFrom(fullName)"));
 check("null-namn ger neutral hälsning, inte e-post",
   greeting.includes('t("home.greetingNeutral")') && !greeting.includes(".email"));
 const profileSrc = readFileSync("features/profile/ProfileScreen.tsx", "utf8");
