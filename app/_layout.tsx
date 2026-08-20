@@ -13,6 +13,7 @@ import { DMSerifDisplay_400Regular } from "@expo-google-fonts/dm-serif-display";
 import { queryClient } from "@/lib/queryClient";
 import { LanguageProvider } from "@/i18n";
 import { AuthProvider, useAuth } from "@/services/auth/AuthProvider";
+import { AuthDeepLinkHandler } from "@/services/auth/AuthDeepLinkHandler";
 import { CartProvider } from "@/context/CartContext";
 import { CouponProvider } from "@/context/CouponContext";
 import { CheckoutDiscountProvider } from "@/context/CheckoutDiscountContext";
@@ -146,6 +147,12 @@ export default function RootLayout() {
                           the consent gate/intro/survey still cover them. */}
                       <PushNotificationResponder />
                       <PushTokenSync />
+                      {/* Email-confirmation return path. Renders nothing;
+                          sets the session from an auth deep link so the
+                          gate below flips to signed-in on its own. Mounted
+                          ABOVE RootNavigator because the gate hides every
+                          route while signed out — see the file's header. */}
+                      <AuthDeepLinkHandler />
                       {/* Central auth gate (patch 11): the app is fully
                           account-based — see RootNavigator below. */}
                       <RootNavigator />

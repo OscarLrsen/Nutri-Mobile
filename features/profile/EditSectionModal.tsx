@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -12,6 +11,7 @@ import {
 import { Check, X } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
+import { SwipeDownSheet } from "@/components/ui/SwipeDownSheet";
 import {
   previewNutritionResult,
   type ApiNutritionResult,
@@ -110,6 +110,10 @@ export function EditSectionModal({
   // caller's buildDto, so the preview here omits it exactly like a fresh
   // profile would — close enough for the feedback line, and the SAVE uses
   // the caller's full DTO).
+  // The in-app body-fat guide (replaces the old external link — see the
+  // chip below).
+  const [guideOpen, setGuideOpen] = useState(false);
+
   const [preview, setPreview] = useState<ApiNutritionResult | null>(null);
   useEffect(() => {
     const id = setTimeout(async () => {
@@ -146,7 +150,16 @@ export function EditSectionModal({
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.sheetWrap}
         >
-          <View style={styles.sheet}>
+          {/* Drag-to-dismiss. `enabled={!saving}` is the mid-save guard:
+              a profile upsert in flight cannot be swiped away, so the save
+              always finishes against a mounted sheet. Cancel semantics are
+              unchanged — a dismissed sheet runs the same onCancel the X
+              button does, so nothing is saved by dragging. */}
+          <SwipeDownSheet
+            style={styles.sheet}
+            enabled={!saving && !saveDone}
+            onDismiss={onCancel}
+          >
             <View style={styles.sheetHeader}>
               <ThemedText style={styles.sheetTitle}>
                 {isNewProfile ? t("profile.editBasicData") : title}
@@ -225,27 +238,27 @@ export function EditSectionModal({
                       <FieldLabel optionalText={t("profile.optional")}>{t("profile.bodyFat")}</FieldLabel>
                       <HelperText>{t("profile.bodyFatHelper")}</HelperText>
                       <View style={styles.chipRow}>
+                        {/* WAS: Linking.openURL to ruled.me — the same third-
+                            party page for both genders, so "Visa guide för
+                            män" never showed a men's guide, and an
+                            openURL rejection failed silently with no catch,
+                            which is what made it look dead. The guide is now
+                            in-app and gender-specific, built from the
+                            percentages the app already has in
+                            BODY_FAT_OPTIONS. No browser, no dead end.
+                            The "Vet inte – hoppa över" chip next to it was
+                            removed: the field is already marked optional, so
+                            it only offered a second way to do nothing. */}
                         <Pressable
-                          onPress={() =>
-                            Linking.openURL(
-                              "https://www.ruled.me/visually-estimate-body-fat-percentage/"
-                            )
-                          }
+                          onPress={() => setGuideOpen(true)}
                           style={styles.linkChip}
-                          accessibilityRole="link"
+                          accessibilityRole="button"
                         >
                           <ThemedText style={styles.linkChipText}>
                             {form.gender === "Male"
                               ? t("profile.bodyFatGuideMale")
                               : t("profile.bodyFatGuideFemale")}
                           </ThemedText>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => onChange({ bodyFatLevel: null })}
-                          style={styles.linkChip}
-                          accessibilityRole="button"
-                        >
-                          <ThemedText style={styles.linkChipText}>{t("profile.dontKnowSkip")}</ThemedText>
                         </Pressable>
                       </View>
                       <View style={{ gap: spacing[2], marginTop: spacing[2] }}>
@@ -435,11 +448,62 @@ export function EditSectionModal({
                 </ThemedText>
               </Pressable>
             </ScrollView>
-          </View>
+          </SwipeDownSheet>
         </KeyboardAvoidingView>
         {/* iOS "Klar" bar above the numeric pad (P8). */}
         <NumericDoneBar />
       </View>
+
+      {/* Gender-specific body-fat guide. Stacked inside this Modal rather
+          than as a second top-level Modal: iOS will not present one over an
+          already-open Modal, which would be a second dead end. */}
+      {guideOpen && (
+        <View style={styles.guideBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setGuideOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel={t("common.close")}
+          />
+          <View style={styles.guideCard} pointerEvents="box-none">
+            <View style={styles.sheetHeader}>
+              <ThemedText style={styles.sheetTitle}>
+                {form.gender === "Male"
+                  ? t("profile.bodyFatGuideMale")
+                  : t("profile.bodyFatGuideFemale")}
+              </ThemedText>
+              <Pressable
+                onPress={() => setGuideOpen(false)}
+                style={styles.closeButton}
+                accessibilityRole="button"
+              >
+                <X size={15} color={colors.accent} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.guideContent}>
+              <HelperText>{t("profile.bodyFatGuideIntro")}</HelperText>
+              {bfOptions.map((opt) => (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => {
+                    // Picking straight from the guide is the point: read the
+                    // range, tap it, the guide closes with the value set.
+                    onChange({ bodyFatLevel: opt.value });
+                    setGuideOpen(false);
+                  }}
+                  style={styles.guideRow}
+                  accessibilityRole="button"
+                >
+                  <ThemedText style={styles.guideRowLabel}>{opt.label}</ThemedText>
+                  <ThemedText style={styles.guideRowDesc}>
+                    {t(`profileOptions.bodyFatDesc.${opt.value}`)}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      )}
     </Modal>
   );
 }
@@ -512,6 +576,34 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   linkChipText: { fontSize: 12, fontFamily: fontFamily.bodyMedium, color: "rgba(255,255,255,0.72)" },
+  // In-app body-fat guide, stacked above the edit sheet.
+  guideBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    justifyContent: "flex-end",
+  },
+  guideCard: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingBottom: spacing[5],
+    maxHeight: "80%",
+  },
+  guideContent: { paddingHorizontal: spacing[5], paddingBottom: spacing[4], gap: spacing[2] },
+  guideRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[3],
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[4],
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  guideRowLabel: { fontSize: 15, fontFamily: fontFamily.bodySemibold, color: colors.textPrimary },
+  guideRowDesc: { fontSize: 13, fontFamily: fontFamily.body, color: "rgba(255,255,255,0.66)" },
   maintainNote: {
     flexDirection: "row",
     alignItems: "flex-start",

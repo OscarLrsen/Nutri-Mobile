@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter, type Href } from "expo-router";
+import * as Linking from "expo-linking";
 import { ArrowLeft, Check, Info, Mail, User } from "lucide-react-native";
 
 import { LanguageButton } from "@/components/language/LanguageButton";
@@ -160,7 +161,19 @@ export function RegisterScreen() {
 
     setLoading(true);
 
-    const emailRedirectTo = `${env.EXPO_PUBLIC_WEB_URL}/auth/callback?next=/profil`;
+    // Where the confirmation link comes back to. It goes to the WEB bridge,
+    // not straight to the app scheme, for two reasons: a custom scheme in an
+    // email is blocked or mangled by several mail clients, and a phone
+    // WITHOUT the app installed must land somewhere real rather than on an
+    // "address invalid" page. The bridge opens the app immediately when it
+    // can and shows an "Öppna Nutri" button when it cannot.
+    //
+    // `Linking.createURL` resolves the scheme at runtime, so a staging build
+    // (nutristaging://) can never hand the confirmation to the production
+    // app installed beside it — see app.config.js.
+    const appReturnUrl = Linking.createURL("auth/callback");
+    const emailRedirectTo =
+      `${env.EXPO_PUBLIC_WEB_URL}/auth/app?return=${encodeURIComponent(appReturnUrl)}`;
     const fullName = trimmedLast ? `${trimmedFirst} ${trimmedLast}` : trimmedFirst;
     const marketingMeta = acceptsMarketing
       ? {

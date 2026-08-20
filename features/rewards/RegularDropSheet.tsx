@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Check, ImageOff, X } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
+import { SwipeDownSheet } from "@/components/ui/SwipeDownSheet";
 import { Skeleton } from "@/components/feedback/Skeleton";
 import { pickLang, useLanguage, useTranslation } from "@/i18n";
 import {
@@ -163,7 +164,15 @@ export function RegularDropSheet({ onClose }: { onClose: () => void }) {
           accessibilityRole="button"
           accessibilityLabel={t("common.close")}
         />
-        <View style={styles.sheet} accessibilityViewIsModal>
+        {/* Drag-to-dismiss, disabled while a vote is being submitted — the
+            same `busy` guard the backdrop already uses, so the two ways out
+            of this sheet stay in step and a vote in flight cannot be
+            swiped away. */}
+        <SwipeDownSheet
+          style={styles.sheet}
+          enabled={!busy}
+          onDismiss={handleDismiss}
+        >
           <View style={styles.header}>
             <ThemedText style={styles.title} accessibilityRole="header">
               {step === "success"
@@ -415,7 +424,7 @@ export function RegularDropSheet({ onClose }: { onClose: () => void }) {
               </View>
             )}
           </ScrollView>
-        </View>
+        </SwipeDownSheet>
       </View>
     </Modal>
   );

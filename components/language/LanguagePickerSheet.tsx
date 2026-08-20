@@ -2,6 +2,7 @@ import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { Check, X } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
+import { SwipeDownSheet } from "@/components/ui/SwipeDownSheet";
 import { SUPPORTED_LANGUAGES, useLanguage, useTranslation, type AppLanguage } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
 
@@ -46,7 +47,9 @@ export function LanguagePickerSheet({
           accessibilityRole="button"
           accessibilityLabel={t("language.close")}
         />
-        <View style={styles.sheet}>
+        {/* Drag-to-dismiss: same close path as the X and the backdrop, so a
+            swipe simply closes the picker without changing the language. */}
+        <SwipeDownSheet style={styles.sheet} onDismiss={onClose}>
           <View style={styles.header}>
             <ThemedText style={styles.title}>{t("language.selectLanguage")}</ThemedText>
             <Pressable
@@ -79,7 +82,7 @@ export function LanguagePickerSheet({
               );
             })}
           </View>
-        </View>
+        </SwipeDownSheet>
       </View>
     </Modal>
   );

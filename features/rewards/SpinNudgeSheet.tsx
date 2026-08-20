@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeIn, SlideInDown } from "react-native-reanimated";
 
 import { ThemedText } from "@/components/ui/ThemedText";
+import { SwipeDownSheet } from "@/components/ui/SwipeDownSheet";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { getRewardStatus } from "@/services/api/rewards";
 import { WELCOME_PROMPTED_KEY_PREFIX } from "@/features/coupons/WelcomeCouponModal";
@@ -95,11 +96,12 @@ export function SpinNudgeSheet() {
       {/* Non-blocking: tapping the backdrop dismisses. */}
       <Animated.View entering={FadeIn.duration(180)} style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} accessibilityRole="button" />
-        <Animated.View
-          entering={SlideInDown.springify().damping(19).stiffness(160)}
-          style={styles.sheet}
-        >
-          <View style={styles.handle} />
+        <Animated.View entering={SlideInDown.springify().damping(19).stiffness(160)}>
+          {/* Drag-to-dismiss. This sheet already drew a grabber of its own;
+              SwipeDownSheet renders the (now functional) one, so the static
+              View was removed rather than leaving two stacked handles.
+              Nothing here submits, so there is no busy state to guard. */}
+          <SwipeDownSheet style={styles.sheet} onDismiss={dismiss}>
           <ThemedText style={styles.title}>{t("rewards.nudgeTitle")}</ThemedText>
           <ThemedText style={styles.body}>{t("rewards.nudgeBody")}</ThemedText>
           <Pressable
@@ -119,6 +121,7 @@ export function SpinNudgeSheet() {
           >
             <ThemedText style={styles.secondaryButtonText}>{t("rewards.nudgeLater")}</ThemedText>
           </Pressable>
+          </SwipeDownSheet>
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -143,13 +146,8 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[8],
     alignItems: "center",
   },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    marginBottom: spacing[4],
-  },
+  // `handle` removed — SwipeDownSheet draws the grabber now, and it is the
+  // one that actually responds to a drag.
   title: {
     fontSize: 17,
     fontFamily: fontFamily.bodyBold,

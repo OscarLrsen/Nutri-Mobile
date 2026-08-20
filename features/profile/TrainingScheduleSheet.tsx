@@ -2,6 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Activity, Dumbbell, Minus, Star, X } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
+import { SwipeDownSheet } from "@/components/ui/SwipeDownSheet";
 import type { WeeklyScheduleDto } from "@/services/api/weeklySchedule";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
@@ -97,7 +98,10 @@ export function TrainingScheduleSheet({
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={styles.sheet}>
+        {/* Drag-to-dismiss, frozen while the schedule is saving so a swipe
+            cannot cancel a write already in flight. Dismissing runs the
+            same onClose as the X — nothing is saved by swiping. */}
+        <SwipeDownSheet style={styles.sheet} enabled={!saving} onDismiss={onClose}>
           <View style={styles.header}>
             <View style={{ flex: 1, gap: 4 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: spacing[2] }}>
@@ -233,7 +237,7 @@ export function TrainingScheduleSheet({
               </Pressable>
             </View>
           )}
-        </View>
+        </SwipeDownSheet>
       </View>
     </Modal>
   );
