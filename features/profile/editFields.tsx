@@ -73,12 +73,21 @@ export function EditNumField({
   value,
   onChange,
   placeholder,
+  onFocus,
+  onDone,
 }: {
   label: string;
   unit: string;
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  /** The field took focus. Lets the caller tell "moved to the next number in
+   *  this block" apart from "finished with the block". */
+  onFocus?: () => void;
+  /** The customer left the field — Done, "Klar", or a tap elsewhere. Whether
+   *  that actually advances the form is the caller's decision, not this
+   *  component's. */
+  onDone?: () => void;
 }) {
   return (
     <View style={styles.fieldWrap}>
@@ -91,6 +100,10 @@ export function EditNumField({
           placeholderTextColor="#4E4A46"
           keyboardType="numeric"
           returnKeyType="done"
+          onFocus={onFocus}
+          // Both routes out of the field end here: the keyboard closing
+          // blurs the input, and so does tapping the next one.
+          onBlur={onDone}
           onSubmitEditing={() => Keyboard.dismiss()}
           inputAccessoryViewID={Platform.OS === "ios" ? NUMERIC_ACCESSORY_ID : undefined}
           style={styles.input}

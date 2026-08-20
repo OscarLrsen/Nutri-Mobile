@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -9,7 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   View,
-  type LayoutChangeEvent,
 } from "react-native";
 import { Check, X } from "lucide-react-native";
 
@@ -36,10 +35,10 @@ import {
 import {
   menopauseToApi,
   missingRequiredSteps,
-  nextIncompleteAnchor,
   type ProfileAnchorId,
   type ProfileFormState,
 } from "./profileRequirements";
+import { useProfileProgression } from "./useProfileProgression";
 import {
   EditNumField,
   FieldLabel,
@@ -148,28 +147,29 @@ export function EditSectionModal({
   };
 
   // ── Auto-progression ────────────────────────────────────────────────
-  // Each block reports its y-offset inside the ScrollView; a completed
-  // choice scrolls to the next required gap.
-  const scrollRef = useRef<ScrollView>(null);
-  const anchorY = useRef<Partial<Record<ProfileAnchorId, number>>>({});
-
-  const registerAnchor = (id: ProfileAnchorId) => (e: LayoutChangeEvent) => {
-    anchorY.current[id] = e.nativeEvent.layout.y;
-  };
+  // ONE mechanism, owned by useProfileProgression: it holds the ScrollView
+  // ref, the per-block refs and the scroll bookkeeping, and it asks
+  // profileProgression where — if anywhere — to go. Nothing else in this
+  // file scrolls.
+  const progression = useProfileProgression();
 
   /**
-   * Apply a choice, then move to the next unanswered required block.
+   * Apply a choice, then move FORWARD to the next unanswered required block.
    * `patch` is applied to a local copy first so the target is computed from
-   * the state the customer is about to see, not the one they just left.
+   * the state the customer is about to see, not the one they just left —
+   * which is what makes a newly revealed block (Tempo, Cykelfas) a valid
+   * target on the very tap that reveals it.
    */
   const choose = (from: ProfileAnchorId, patch: Partial<ProfileFormState>) => {
     onChange(patch);
     if (!showAll) return;
-    const next = nextIncompleteAnchor({ ...form, ...patch }, from);
-    const y = next ? anchorY.current[next] : undefined;
-    if (y === undefined) return;
-    scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing[4]), animated: true });
+    progression.advanceFrom(from, { ...form, ...patch });
   };
+
+  /** A numeric field was left. Same forward-only rule; the hook decides
+   *  whether the customer actually finished the block or just moved to the
+   *  next number in it. */
+  const numericDone = (fieldId: string) => progression.onNumericBlur(fieldId, "basics", form);
 
   // 400ms-debounced live preview (web parity). Sends the same values the
   // save will send, so the number under the button is the number the
@@ -244,366 +244,392 @@ export function EditSectionModal({
             }
           >
             <ScrollView
-              ref={scrollRef}
+              ref={progression.scrollRef}
               contentContainerStyle={styles.sheetContent}
               keyboardShouldPersistTaps="handled"
+              // The KeyboardAvoidingView above already makes room for the
+              // keyboard. Letting iOS ALSO adjust the insets is the second
+              // correction that used to shove the content back up when the
+              // keyboard closed — the customer's position is ours to keep.
+              automaticallyAdjustKeyboardInsets={false}
+              automaticallyAdjustContentInsets={false}
+              contentInsetAdjustmentBehavior="never"
+              {...progression.scrollViewProps}
             >
-              {section === "vikt" && !isNewProfile && (
-                <View style={{ gap: spacing[4] }}>
-                  <HelperText>{t("profile.weightEditHelp")}</HelperText>
-                  <EditNumField
-                    label={t("profile.weight")}
-                    unit="kg"
-                    value={form.weightKg}
-                    onChange={(v) => onChange({ weightKg: v })}
-                    placeholder="75"
-                  />
-                </View>
-              )}
-
-              {showAll && <SectionHeading text={t("profile.sectionBasics")} first />}
-
-              {(section === "grunddata" || showAll) && (
-                <View style={{ gap: spacing[4] }} onLayout={registerAnchor("basics")}>
-                  <View style={{ gap: 6 }}>
-                    <FieldLabel>{t("profile.gender")}</FieldLabel>
-                    <PillPair
-                      options={[
-                        { value: "Male", label: t("profile.genderMale") },
-                        { value: "Female", label: t("profile.genderFemale") },
-                      ]}
-                      value={form.gender ?? ""}
-                      onChange={(g) => {
-                        const gender = g as "Male" | "Female";
-                        // Gender switch clears an invalid body-fat level, and
-                        // the female-only answers when switching to male —
-                        // the engine ignores them there, so keeping them
-                        // would only preserve stale data.
-                        const validBf = BODY_FAT_OPTIONS[gender].some(
-                          (o) => o.value === form.bodyFatLevel
-                        );
-                        choose("basics", {
-                          gender,
-                          bodyFatLevel: validBf ? form.bodyFatLevel : null,
-                          menopause: gender === "Female" ? form.menopause : null,
-                          cyclePhase: gender === "Female" ? form.cyclePhase : null,
-                        });
-                      }}
+              {/* Every block is measured against THIS view, so a block's
+                  position is its real offset in the scrollable content no
+                  matter how deeply it is grouped. `sheetContent` has no top
+                  padding, so this wrapper starts at content y = 0. */}
+              <View ref={progression.contentRef} collapsable={false}>
+                {section === "vikt" && !isNewProfile && (
+                  <View style={{ gap: spacing[4] }}>
+                    <HelperText>{t("profile.weightEditHelp")}</HelperText>
+                    <EditNumField
+                      label={t("profile.weight")}
+                      unit="kg"
+                      value={form.weightKg}
+                      onChange={(v) => onChange({ weightKg: v })}
+                      placeholder="75"
+                      onFocus={() => progression.onNumericFocus("weight-quick")}
+                      onDone={() => numericDone("weight-quick")}
                     />
                   </View>
-                  <EditNumField
-                    label={t("profile.age")}
-                    unit={t("profile.yearsUnit")}
-                    value={form.ageYears}
-                    onChange={(v) => onChange({ ageYears: v })}
-                    placeholder="25"
-                  />
-                  <EditNumField
-                    label={t("profile.weight")}
-                    unit="kg"
-                    value={form.weightKg}
-                    onChange={(v) => onChange({ weightKg: v })}
-                    placeholder="75"
-                  />
-                  <EditNumField
-                    label={t("profile.height")}
-                    unit="cm"
-                    value={form.heightCm}
-                    onChange={(v) => onChange({ heightCm: v })}
-                    placeholder="175"
-                  />
-                </View>
-              )}
+                )}
 
-              {showAll && (
-                <View style={{ gap: 6, marginTop: spacing[5] }} onLayout={registerAnchor("bodyFat")}>
-                  <FieldLabel optionalText={t("profile.optional")}>
-                    {t("profile.bodyFat")}
-                  </FieldLabel>
-                  <HelperText>{t("profile.bodyFatHelper")}</HelperText>
-                  <View style={styles.chipRow}>
-                    {/* Opens ruled.me's visual body-fat guide in the browser.
-                        A previous pass replaced this with an in-app guide;
-                        that decision is reversed — the external page has
-                        photographs at each percentage, which is the thing
-                        that actually helps someone estimate, and a list of
-                        our own percentages does not.
-                        BOTH genders open the same page: it covers men and
-                        women, and the chip label is what differs.
-                        What is NOT restored is the silent failure. The old
-                        call had no catch, so a refused open looked like a
-                        dead button — that is the whole reason this was
-                        reported broken. It now says so.
-                        The "Vet inte – hoppa över" chip stays removed. */}
-                    <Pressable
-                      onPress={openBodyFatGuide}
-                      style={styles.linkChip}
-                      accessibilityRole="link"
-                      accessibilityHint={t("profile.bodyFatGuideHint")}
-                    >
-                      <ThemedText style={styles.linkChipText}>
-                        {form.gender === "Female"
-                          ? t("profile.bodyFatGuideFemale")
-                          : t("profile.bodyFatGuideMale")}
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                  <View style={{ gap: spacing[2], marginTop: spacing[2] }}>
-                    {bfOptions.map((opt) => (
-                      <SelectRow
-                        key={opt.value}
-                        label={opt.label}
-                        rightText={t(`profileOptions.bodyFatDesc.${opt.value}`)}
-                        active={form.bodyFatLevel === opt.value}
-                        onPress={() => choose("bodyFat", { bodyFatLevel: opt.value })}
+                {showAll && <SectionHeading text={t("profile.sectionBasics")} first />}
+
+                {(section === "grunddata" || showAll) && (
+                  <View style={{ gap: spacing[4] }} ref={progression.registerAnchor("basics")} collapsable={false}>
+                    <View style={{ gap: 6 }}>
+                      <FieldLabel>{t("profile.gender")}</FieldLabel>
+                      <PillPair
+                        options={[
+                          { value: "Male", label: t("profile.genderMale") },
+                          { value: "Female", label: t("profile.genderFemale") },
+                        ]}
+                        value={form.gender ?? ""}
+                        onChange={(g) => {
+                          const gender = g as "Male" | "Female";
+                          // Gender switch clears an invalid body-fat level, and
+                          // the female-only answers when switching to male —
+                          // the engine ignores them there, so keeping them
+                          // would only preserve stale data.
+                          const validBf = BODY_FAT_OPTIONS[gender].some(
+                            (o) => o.value === form.bodyFatLevel
+                          );
+                          choose("basics", {
+                            gender,
+                            bodyFatLevel: validBf ? form.bodyFatLevel : null,
+                            menopause: gender === "Female" ? form.menopause : null,
+                            cyclePhase: gender === "Female" ? form.cyclePhase : null,
+                          });
+                        }}
                       />
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              {showAll && <SectionHeading text={t("profile.sectionActivity")} />}
-
-              {(section === "aktivitet" || showAll) && (
-                <View style={{ gap: spacing[5] }}>
-                  <HelperText>{t("profile.activityIntro")}</HelperText>
-
-                  <View style={{ gap: 6 }} onLayout={registerAnchor("activityType")}>
-                    <FieldLabel>{t("profile.dailyActivity")}</FieldLabel>
-                    <View style={{ gap: spacing[2] }}>
-                      {ACTIVITY_TYPE_OPTIONS.map((o) => (
-                        <OptionCard
-                          key={o.value}
-                          label={t(`profileOptions.activityType.${o.value}.label`)}
-                          description={t(`profileOptions.activityType.${o.value}.description`)}
-                          active={form.activityType === o.value}
-                          onPress={() => choose("activityType", { activityType: o.value })}
-                        />
-                      ))}
                     </View>
+                    <EditNumField
+                      label={t("profile.age")}
+                      unit={t("profile.yearsUnit")}
+                      value={form.ageYears}
+                      onChange={(v) => onChange({ ageYears: v })}
+                      placeholder="25"
+                      onFocus={() => progression.onNumericFocus("age")}
+                      onDone={() => numericDone("age")}
+                    />
+                    <EditNumField
+                      label={t("profile.weight")}
+                      unit="kg"
+                      value={form.weightKg}
+                      onChange={(v) => onChange({ weightKg: v })}
+                      placeholder="75"
+                      onFocus={() => progression.onNumericFocus("weight")}
+                      onDone={() => numericDone("weight")}
+                    />
+                    <EditNumField
+                      label={t("profile.height")}
+                      unit="cm"
+                      value={form.heightCm}
+                      onChange={(v) => onChange({ heightCm: v })}
+                      placeholder="175"
+                      onFocus={() => progression.onNumericFocus("height")}
+                      onDone={() => numericDone("height")}
+                    />
                   </View>
+                )}
 
-                  {/* Steps and training were "(valfritt)" with a "Hoppa
-                      över" link. They are not optional in any meaningful
-                      sense: null scores 0 activity points, exactly like
-                      "under 5 000 steg" and "tränar aldrig", and together
-                      they are worth 8 of the score that picks the TDEE
-                      multiplier. Skipping them silently produced a
-                      sedentary plan, so the skip is gone. */}
-                  <View style={{ gap: 6 }} onLayout={registerAnchor("steps")}>
-                    <FieldLabel>{t("profile.stepsPerDay")}</FieldLabel>
-                    <HelperText>{t("profile.stepsHelp")}</HelperText>
-                    <View style={{ gap: spacing[2], marginTop: 4 }}>
-                      {STEPS_OPTIONS.map((o) => (
+                {showAll && (
+                  <View
+                    style={{ gap: 6, marginTop: spacing[5] }}
+                    ref={progression.registerAnchor("bodyFat")}
+                    collapsable={false}
+                  >
+                    <FieldLabel optionalText={t("profile.optional")}>
+                      {t("profile.bodyFat")}
+                    </FieldLabel>
+                    <HelperText>{t("profile.bodyFatHelper")}</HelperText>
+                    <View style={styles.chipRow}>
+                      {/* Opens ruled.me's visual body-fat guide in the browser.
+                          A previous pass replaced this with an in-app guide;
+                          that decision is reversed — the external page has
+                          photographs at each percentage, which is the thing
+                          that actually helps someone estimate, and a list of
+                          our own percentages does not.
+                          BOTH genders open the same page: it covers men and
+                          women, and the chip label is what differs.
+                          What is NOT restored is the silent failure. The old
+                          call had no catch, so a refused open looked like a
+                          dead button — that is the whole reason this was
+                          reported broken. It now says so.
+                          The "Vet inte – hoppa över" chip stays removed. */}
+                      <Pressable
+                        onPress={openBodyFatGuide}
+                        style={styles.linkChip}
+                        accessibilityRole="link"
+                        accessibilityHint={t("profile.bodyFatGuideHint")}
+                      >
+                        <ThemedText style={styles.linkChipText}>
+                          {form.gender === "Female"
+                            ? t("profile.bodyFatGuideFemale")
+                            : t("profile.bodyFatGuideMale")}
+                        </ThemedText>
+                      </Pressable>
+                    </View>
+                    <View style={{ gap: spacing[2], marginTop: spacing[2] }}>
+                      {bfOptions.map((opt) => (
                         <SelectRow
-                          key={o.value}
-                          label={t(`profileOptions.steps.${o.value}`)}
-                          active={form.stepsRange === o.value}
-                          onPress={() => choose("steps", { stepsRange: o.value })}
+                          key={opt.value}
+                          label={opt.label}
+                          rightText={t(`profileOptions.bodyFatDesc.${opt.value}`)}
+                          active={form.bodyFatLevel === opt.value}
+                          onPress={() => choose("bodyFat", { bodyFatLevel: opt.value })}
                         />
                       ))}
                     </View>
                   </View>
+                )}
 
-                  <View style={{ gap: 6 }} onLayout={registerAnchor("training")}>
-                    <FieldLabel>{t("profile.trainingSessions")}</FieldLabel>
-                    <HelperText>{t("profile.trainingHelp")}</HelperText>
-                    <View style={{ gap: spacing[2], marginTop: 4 }}>
-                      {TRAINING_OPTIONS.map((o) => (
-                        <SelectRow
-                          key={o.value}
-                          label={t(`profileOptions.training.${o.value}`)}
-                          active={form.trainingSessions === o.value}
-                          onPress={() => choose("training", { trainingSessions: o.value })}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                </View>
-              )}
+                {showAll && <SectionHeading text={t("profile.sectionActivity")} />}
 
-              {showAll && <SectionHeading text={t("profile.sectionGoal")} />}
-
-              {(section === "mal" || showAll) && (
-                <View style={{ gap: spacing[5] }}>
-                  <View style={{ gap: 6 }} onLayout={registerAnchor("goal")}>
-                    {/* Release P15: no duplicated "Mål" label — the modal
-                        title already says it, so the helper line carries
-                        the explanation and the options speak for
-                        themselves. */}
-                    <HelperText>{t("profile.primaryGoalHelp")}</HelperText>
-                    <View style={{ gap: spacing[2], marginTop: 4 }}>
-                      {PRIMARY_GOAL_OPTIONS.map((g) => (
-                        <OptionCard
-                          key={g.value}
-                          label={t(`profileOptions.goal.${g.value}.label`)}
-                          description={t(`profileOptions.goal.${g.value}.description`)}
-                          active={form.primaryGoal === g.value}
-                          onPress={() => {
-                            const v = g.value as NonNullable<ProfileFormState["primaryGoal"]>;
-                            // Maintain has no pace; switching goals clears an
-                            // invalid pace (web parity).
-                            const valid = GOAL_PACE_OPTIONS[v] ?? [];
-                            choose("goal", {
-                              primaryGoal: v,
-                              goalPace:
-                                v === "Maintain"
-                                  ? null
-                                  : valid.find((p) => p.value === form.goalPace)
-                                    ? form.goalPace
-                                    : null,
-                            });
-                          }}
-                        />
-                      ))}
-                    </View>
-                  </View>
-
-                  {form.primaryGoal !== null && form.primaryGoal !== "Maintain" ? (
-                    <View style={{ gap: 6 }} onLayout={registerAnchor("pace")}>
-                      <FieldLabel>{t("profile.pace")}</FieldLabel>
-                      <View style={{ gap: spacing[2], marginTop: 4 }}>
-                        {(GOAL_PACE_OPTIONS[form.primaryGoal] ?? []).map((p) => (
-                          <OptionCard
-                            key={p.value}
-                            label={t(`profileOptions.goalPace.${p.value}.label`)}
-                            description={t(`profileOptions.goalPace.${p.value}.description`)}
-                            note={
-                              p.hasNote
-                                ? t(`profileOptions.goalPace.${p.value}.note`, { defaultValue: "" })
-                                : undefined
-                            }
-                            active={form.goalPace === p.value}
-                            onPress={() => choose("pace", { goalPace: p.value })}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  ) : form.primaryGoal === "Maintain" ? (
-                    <View style={styles.maintainNote}>
-                      <View style={styles.maintainDot} />
-                      <ThemedText style={styles.maintainNoteText}>{t("profile.maintainNote")}</ThemedText>
-                    </View>
-                  ) : null}
-                </View>
-              )}
-
-              {/* Plan focus — reads straight into CalculateMacros (fat ×1.10
-                  / ×0.90, protein ×0.95). It had no UI at all: the app sent
-                  whatever the web had stored, so an app-only customer was
-                  permanently on Balance without ever being asked. */}
-              {showAll && (
-                <>
-                  <SectionHeading text={t("profile.sectionPlanFocus")} />
-                  <View style={{ gap: 6 }} onLayout={registerAnchor("planFocus")}>
-                    <HelperText>{t("profile.planFocusHelp")}</HelperText>
-                    <View style={{ gap: spacing[2], marginTop: 4 }}>
-                      {PLAN_FOCUS_OPTIONS.map((o) => (
-                        <OptionCard
-                          key={o.value}
-                          label={t(`profileOptions.planFocus.${o.value}.label`)}
-                          description={t(`profileOptions.planFocus.${o.value}.description`)}
-                          active={form.planFocus === o.value}
-                          onPress={() => choose("planFocus", { planFocus: o.value })}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                </>
-              )}
-
-              {/* Female-only cycle inputs — also previously unreachable in
-                  the app, and worse: the save omitted them entirely, so
-                  editing anything here WIPED a cycle phase set on the web
-                  and quietly moved the target by 100 kcal. */}
-              {showAll && form.gender === "Female" && (
-                <>
-                  <SectionHeading text={t("profile.sectionCycle")} />
+                {(section === "aktivitet" || showAll) && (
                   <View style={{ gap: spacing[5] }}>
-                    <View style={{ gap: 6 }} onLayout={registerAnchor("menopause")}>
-                      <FieldLabel>{t("profile.menopauseLabel")}</FieldLabel>
-                      <HelperText>{t("profile.menopauseHelp")}</HelperText>
-                      <View style={{ gap: spacing[2], marginTop: 4 }}>
-                        {MENOPAUSE_OPTIONS.map((o) => (
+                    <HelperText>{t("profile.activityIntro")}</HelperText>
+
+                    <View style={{ gap: 6 }} ref={progression.registerAnchor("activityType")} collapsable={false}>
+                      <FieldLabel>{t("profile.dailyActivity")}</FieldLabel>
+                      <View style={{ gap: spacing[2] }}>
+                        {ACTIVITY_TYPE_OPTIONS.map((o) => (
                           <OptionCard
                             key={o.value}
-                            label={t(`profileOptions.menopause.${o.value}.label`)}
-                            description={t(`profileOptions.menopause.${o.value}.description`)}
-                            active={form.menopause === o.value}
-                            onPress={() =>
-                              choose("menopause", {
-                                menopause: o.value,
-                                // The phase only applies to an active cycle.
-                                cyclePhase: o.value === "Cycling" ? form.cyclePhase : null,
-                              })
-                            }
+                            label={t(`profileOptions.activityType.${o.value}.label`)}
+                            description={t(`profileOptions.activityType.${o.value}.description`)}
+                            active={form.activityType === o.value}
+                            onPress={() => choose("activityType", { activityType: o.value })}
                           />
                         ))}
                       </View>
                     </View>
 
-                    {form.menopause === "Cycling" && (
-                      <View style={{ gap: 6 }} onLayout={registerAnchor("cyclePhase")}>
-                        <FieldLabel>{t("profile.cyclePhaseLabel")}</FieldLabel>
-                        <HelperText>{t("profile.cyclePhaseHelp")}</HelperText>
+                    {/* Steps and training were "(valfritt)" with a "Hoppa
+                        över" link. They are not optional in any meaningful
+                        sense: null scores 0 activity points, exactly like
+                        "under 5 000 steg" and "tränar aldrig", and together
+                        they are worth 8 of the score that picks the TDEE
+                        multiplier. Skipping them silently produced a
+                        sedentary plan, so the skip is gone. */}
+                    <View style={{ gap: 6 }} ref={progression.registerAnchor("steps")} collapsable={false}>
+                      <FieldLabel>{t("profile.stepsPerDay")}</FieldLabel>
+                      <HelperText>{t("profile.stepsHelp")}</HelperText>
+                      <View style={{ gap: spacing[2], marginTop: 4 }}>
+                        {STEPS_OPTIONS.map((o) => (
+                          <SelectRow
+                            key={o.value}
+                            label={t(`profileOptions.steps.${o.value}`)}
+                            active={form.stepsRange === o.value}
+                            onPress={() => choose("steps", { stepsRange: o.value })}
+                          />
+                        ))}
+                      </View>
+                    </View>
+
+                    <View style={{ gap: 6 }} ref={progression.registerAnchor("training")} collapsable={false}>
+                      <FieldLabel>{t("profile.trainingSessions")}</FieldLabel>
+                      <HelperText>{t("profile.trainingHelp")}</HelperText>
+                      <View style={{ gap: spacing[2], marginTop: 4 }}>
+                        {TRAINING_OPTIONS.map((o) => (
+                          <SelectRow
+                            key={o.value}
+                            label={t(`profileOptions.training.${o.value}`)}
+                            active={form.trainingSessions === o.value}
+                            onPress={() => choose("training", { trainingSessions: o.value })}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {showAll && <SectionHeading text={t("profile.sectionGoal")} />}
+
+                {(section === "mal" || showAll) && (
+                  <View style={{ gap: spacing[5] }}>
+                    <View style={{ gap: 6 }} ref={progression.registerAnchor("goal")} collapsable={false}>
+                      {/* Release P15: no duplicated "Mål" label — the modal
+                          title already says it, so the helper line carries
+                          the explanation and the options speak for
+                          themselves. */}
+                      <HelperText>{t("profile.primaryGoalHelp")}</HelperText>
+                      <View style={{ gap: spacing[2], marginTop: 4 }}>
+                        {PRIMARY_GOAL_OPTIONS.map((g) => (
+                          <OptionCard
+                            key={g.value}
+                            label={t(`profileOptions.goal.${g.value}.label`)}
+                            description={t(`profileOptions.goal.${g.value}.description`)}
+                            active={form.primaryGoal === g.value}
+                            onPress={() => {
+                              const v = g.value as NonNullable<ProfileFormState["primaryGoal"]>;
+                              // Maintain has no pace; switching goals clears an
+                              // invalid pace (web parity).
+                              const valid = GOAL_PACE_OPTIONS[v] ?? [];
+                              choose("goal", {
+                                primaryGoal: v,
+                                goalPace:
+                                  v === "Maintain"
+                                    ? null
+                                    : valid.find((p) => p.value === form.goalPace)
+                                      ? form.goalPace
+                                      : null,
+                              });
+                            }}
+                          />
+                        ))}
+                      </View>
+                    </View>
+
+                    {form.primaryGoal !== null && form.primaryGoal !== "Maintain" ? (
+                      <View style={{ gap: 6 }} ref={progression.registerAnchor("pace")} collapsable={false}>
+                        <FieldLabel>{t("profile.pace")}</FieldLabel>
                         <View style={{ gap: spacing[2], marginTop: 4 }}>
-                          {CYCLE_PHASE_OPTIONS.map((o) => (
-                            <SelectRow
-                              key={o.value}
-                              label={t(`profileOptions.cyclePhase.${o.value}.label`)}
-                              rightText={t(`profileOptions.cyclePhase.${o.value}.days`, {
-                                defaultValue: "",
-                              })}
-                              active={form.cyclePhase === o.value}
-                              onPress={() => choose("cyclePhase", { cyclePhase: o.value })}
+                          {(GOAL_PACE_OPTIONS[form.primaryGoal] ?? []).map((p) => (
+                            <OptionCard
+                              key={p.value}
+                              label={t(`profileOptions.goalPace.${p.value}.label`)}
+                              description={t(`profileOptions.goalPace.${p.value}.description`)}
+                              note={
+                                p.hasNote
+                                  ? t(`profileOptions.goalPace.${p.value}.note`, { defaultValue: "" })
+                                  : undefined
+                              }
+                              active={form.goalPace === p.value}
+                              onPress={() => choose("pace", { goalPace: p.value })}
                             />
                           ))}
                         </View>
                       </View>
-                    )}
+                    ) : form.primaryGoal === "Maintain" ? (
+                      <View style={styles.maintainNote}>
+                        <View style={styles.maintainDot} />
+                        <ThemedText style={styles.maintainNoteText}>{t("profile.maintainNote")}</ThemedText>
+                      </View>
+                    ) : null}
                   </View>
-                </>
-              )}
+                )}
 
-              {/* Live preview line (adaptation of the web's behind-modal plan card) */}
-              {preview && preview.calorieTarget > 0 ? (
-                <ThemedText style={styles.previewLine}>
-                  {formatNumber(preview.calorieTarget, language)} {t("profile.kcalPerDay")} ·{" "}
-                  {t("profile.macroProtein")} {preview.proteinG}g
-                </ThemedText>
-              ) : null}
+                {/* Plan focus — reads straight into CalculateMacros (fat ×1.10
+                    / ×0.90, protein ×0.95). It had no UI at all: the app sent
+                    whatever the web had stored, so an app-only customer was
+                    permanently on Balance without ever being asked. */}
+                {showAll && (
+                  <>
+                    <SectionHeading text={t("profile.sectionPlanFocus")} />
+                    <View style={{ gap: 6 }} ref={progression.registerAnchor("planFocus")} collapsable={false}>
+                      <HelperText>{t("profile.planFocusHelp")}</HelperText>
+                      <View style={{ gap: spacing[2], marginTop: 4 }}>
+                        {PLAN_FOCUS_OPTIONS.map((o) => (
+                          <OptionCard
+                            key={o.value}
+                            label={t(`profileOptions.planFocus.${o.value}.label`)}
+                            description={t(`profileOptions.planFocus.${o.value}.description`)}
+                            active={form.planFocus === o.value}
+                            onPress={() => choose("planFocus", { planFocus: o.value })}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  </>
+                )}
 
-              {/* What is still missing, named. The old flow let the save
-                  through and filled the gaps with defaults. */}
-              {gateSave ? (
-                <View style={styles.missingBox}>
-                  <ThemedText style={styles.missingIntro}>{t("profile.missingIntro")}</ThemedText>
-                  {missing.map((id) => (
-                    <ThemedText key={id} style={styles.missingItem}>
-                      · {t(`profile.missingStep.${id}`)}
-                    </ThemedText>
-                  ))}
-                </View>
-              ) : null}
+                {/* Female-only cycle inputs — also previously unreachable in
+                    the app, and worse: the save omitted them entirely, so
+                    editing anything here WIPED a cycle phase set on the web
+                    and quietly moved the target by 100 kcal. */}
+                {showAll && form.gender === "Female" && (
+                  <>
+                    <SectionHeading text={t("profile.sectionCycle")} />
+                    <View style={{ gap: spacing[5] }}>
+                      <View style={{ gap: 6 }} ref={progression.registerAnchor("menopause")} collapsable={false}>
+                        <FieldLabel>{t("profile.menopauseLabel")}</FieldLabel>
+                        <HelperText>{t("profile.menopauseHelp")}</HelperText>
+                        <View style={{ gap: spacing[2], marginTop: 4 }}>
+                          {MENOPAUSE_OPTIONS.map((o) => (
+                            <OptionCard
+                              key={o.value}
+                              label={t(`profileOptions.menopause.${o.value}.label`)}
+                              description={t(`profileOptions.menopause.${o.value}.description`)}
+                              active={form.menopause === o.value}
+                              onPress={() =>
+                                choose("menopause", {
+                                  menopause: o.value,
+                                  // The phase only applies to an active cycle.
+                                  cyclePhase: o.value === "Cycling" ? form.cyclePhase : null,
+                                })
+                              }
+                            />
+                          ))}
+                        </View>
+                      </View>
 
-              {saveError ? <ThemedText style={styles.errorText}>{saveError}</ThemedText> : null}
+                      {form.menopause === "Cycling" && (
+                        <View style={{ gap: 6 }} ref={progression.registerAnchor("cyclePhase")} collapsable={false}>
+                          <FieldLabel>{t("profile.cyclePhaseLabel")}</FieldLabel>
+                          <HelperText>{t("profile.cyclePhaseHelp")}</HelperText>
+                          <View style={{ gap: spacing[2], marginTop: 4 }}>
+                            {CYCLE_PHASE_OPTIONS.map((o) => (
+                              <SelectRow
+                                key={o.value}
+                                label={t(`profileOptions.cyclePhase.${o.value}.label`)}
+                                rightText={t(`profileOptions.cyclePhase.${o.value}.days`, {
+                                  defaultValue: "",
+                                })}
+                                active={form.cyclePhase === o.value}
+                                onPress={() => choose("cyclePhase", { cyclePhase: o.value })}
+                              />
+                            ))}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  </>
+                )}
 
-              <Pressable
-                onPress={onSave}
-                disabled={saving || saveDone || gateSave}
-                style={({ pressed }) => [
-                  styles.saveButton,
-                  pressed && !saving && !gateSave && { backgroundColor: colors.accentHover },
-                  (saving || saveDone || gateSave) && { opacity: 0.75 },
-                ]}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: saving || saveDone || gateSave }}
-              >
-                <Check size={15} color={colors.textPrimary} strokeWidth={2.5} />
-                <ThemedText style={styles.saveButtonText}>
-                  {saveDone ? t("profile.saved") : saving ? t("profile.saving") : t("profile.save")}
-                </ThemedText>
-              </Pressable>
+                {/* Live preview line (adaptation of the web's behind-modal plan card) */}
+                {preview && preview.calorieTarget > 0 ? (
+                  <ThemedText style={styles.previewLine}>
+                    {formatNumber(preview.calorieTarget, language)} {t("profile.kcalPerDay")} ·{" "}
+                    {t("profile.macroProtein")} {preview.proteinG}g
+                  </ThemedText>
+                ) : null}
+
+                {/* What is still missing, named. The old flow let the save
+                    through and filled the gaps with defaults. */}
+                {gateSave ? (
+                  <View style={styles.missingBox}>
+                    <ThemedText style={styles.missingIntro}>{t("profile.missingIntro")}</ThemedText>
+                    {missing.map((id) => (
+                      <ThemedText key={id} style={styles.missingItem}>
+                        · {t(`profile.missingStep.${id}`)}
+                      </ThemedText>
+                    ))}
+                  </View>
+                ) : null}
+
+                {saveError ? <ThemedText style={styles.errorText}>{saveError}</ThemedText> : null}
+
+                <Pressable
+                  onPress={onSave}
+                  disabled={saving || saveDone || gateSave}
+                  style={({ pressed }) => [
+                    styles.saveButton,
+                    pressed && !saving && !gateSave && { backgroundColor: colors.accentHover },
+                    (saving || saveDone || gateSave) && { opacity: 0.75 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: saving || saveDone || gateSave }}
+                >
+                  <Check size={15} color={colors.textPrimary} strokeWidth={2.5} />
+                  <ThemedText style={styles.saveButtonText}>
+                    {saveDone ? t("profile.saved") : saving ? t("profile.saving") : t("profile.save")}
+                  </ThemedText>
+                </Pressable>
+              </View>
             </ScrollView>
           </SwipeDownSheet>
         </KeyboardAvoidingView>

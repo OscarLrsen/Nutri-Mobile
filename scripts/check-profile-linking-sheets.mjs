@@ -79,9 +79,18 @@ check("nya profiler ser samma formulär som befintliga",
 check("spara är spärrat medan obligatoriska fält saknas",
   modal.includes("disabled={saving || saveDone || gateSave}"));
 check("det som saknas listas med namn", modal.includes("profile.missingStep."));
-check("auto-progression scrollar till nästa lucka",
-  modal.includes("nextIncompleteAnchor")
-  && modal.includes("scrollRef.current?.scrollTo"));
+// THIS ASSERTION USED TO PIN THE BUG. It required `nextIncompleteAnchor`
+// plus an inline `scrollRef.current?.scrollTo` — i.e. exactly the top-down
+// search and the raw scroll call that made the sheet jump BACKWARDS to an
+// earlier question. Both are gone; the rule now lives in profileProgression
+// and the mechanics in useProfileProgression, which is what is pinned here.
+// The forward-only behaviour itself is exercised for real in
+// check-profile-scroll.mjs.
+check("auto-progression har ETT system, och det scrollar inte själv",
+  modal.includes("useProfileProgression()")
+  && modal.includes("progression.advanceFrom(from, { ...form, ...patch })")
+  && !modal.includes("nextIncompleteAnchor")
+  && !/scrollRef\.current\?\.scrollTo/.test(modal));
 
 // ── 3: svep nedåt stänger bottensheets ──────────────────────────────────
 const swipe = readFileSync("components/ui/SwipeDownSheet.tsx", "utf8");

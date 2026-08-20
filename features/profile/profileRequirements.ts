@@ -265,17 +265,12 @@ export const isProfileComplete = (form: ProfileFormState) =>
   missingRequiredSteps(form).length === 0;
 
 /**
- * The block auto-progression should move to after a choice. Only REQUIRED
- * steps are targets — otherwise the flow would park on the optional body-fat
- * block and refuse to move on. Returns null when nothing is left, or when
- * the next gap is in the block the customer is already looking at.
+ * WHERE AUTO-PROGRESSION LIVES: profileProgression.ts.
+ *
+ * This file used to own it too, as `nextIncompleteAnchor` — a
+ * `PROFILE_STEPS.find(...)` that searched from the top of the list. Answering
+ * a question near the bottom while an earlier one was blank therefore
+ * targeted a block ABOVE the customer and scrolled the sheet backwards. The
+ * replacement only ever looks forward from the block being answered; see
+ * `nextAnchorAfter`.
  */
-export function nextIncompleteAnchor(
-  form: ProfileFormState,
-  currentAnchor: ProfileAnchorId
-): ProfileAnchorId | null {
-  const next = PROFILE_STEPS.find(
-    (s) => s.required && s.applies(form) && !s.filled(form) && s.anchor !== currentAnchor
-  );
-  return next?.anchor ?? null;
-}
