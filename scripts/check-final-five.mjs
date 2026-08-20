@@ -65,8 +65,12 @@ const sheet = readFileSync("components/ui/SwipeDownSheet.tsx", "utf8");
 check("höjden kapas från uppmätt safe-area, inte från en modellgissning",
   sheet.includes("useSafeAreaInsets") && sheet.includes("insets.top")
   && !/iPhone\s*1[0-9]|Dynamic Island.*===/.test(sheet));
+// Still applied last so a sheet's own maxHeight cannot win over the safe
+// area — but conditionally now, so an untrustworthy measurement overrides
+// nothing at all (see check-three-qa-bugs).
 check("kapningen appliceras EFTER anroparens style",
-  /style=\{\[style, animatedStyle, \{ maxHeight: heightCap \}\]\}/.test(sheet));
+  /style=\{\[style, animatedStyle, heightCap !== null \? \{ maxHeight: heightCap \} : null\]\}/
+    .test(sheet));
 check("centrerade sheets reserverar toppen på båda sidor",
   sheet.includes('anchor === "center" ? windowHeight - clearance * 2'));
 check("greppzonen omfattar även headern",

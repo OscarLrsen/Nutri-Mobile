@@ -1,5 +1,11 @@
-import { type ReactNode } from "react";
-import { StyleSheet, useWindowDimensions, View, type ViewStyle } from "react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  AppState,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
@@ -83,21 +89,59 @@ const DISMISS_VELOCITY = 900;
 export const SAFE_TOP_GAP = 12;
 
 /**
+ * Largest plausible top inset, as a share of screen height. The Dynamic
+ * Island is about 7%; nothing real approaches 20%. Anything above this is a
+ * measurement, not a notch.
+ */
+const MAX_PLAUSIBLE_INSET_RATIO = 0.2;
+
+/** A sheet is never squeezed below this share of the screen. */
+const MIN_SHEET_RATIO = 0.6;
+
+/**
  * The tallest a sheet may be and still keep its top edge (and therefore its
- * grabber) clear of the notch. Exported so the guard can exercise the maths
- * for every device shape without a simulator.
+ * grabber) clear of the notch — or null when the window cannot be trusted,
+ * in which case the caller's own maxHeight applies unchanged.
+ *
+ * WHY IT IS DEFENSIVE. This function is fed two measurements it cannot
+ * verify, and returning from Safari is exactly when they go wrong: iOS
+ * re-measures on foreground, and react-native-safe-area-context can report
+ * an inflated top inset (or the window a height of 0) for a frame or more
+ * while a Modal is presented. The first version turned any such reading into
+ * `Math.max(..., 240)` — a hard 240-point floor — so one bad measurement
+ * became a tiny centred card that survived closing and reopening the sheet.
+ * That is the reported regression.
+ *
+ * Two rules make a bad reading harmless rather than visible:
+ *   - an implausible inset is ignored, not obeyed;
+ *   - the floor is a SHARE of the window, not an absolute 240, so the worst
+ *     case is a slightly shorter sheet instead of a chip.
+ *
+ * Exported so the guard can exercise every device shape, and every failure
+ * mode, without a simulator.
  */
 export function maxSheetHeight(
   windowHeight: number,
   topInset: number,
   anchor: "bottom" | "center"
-): number {
-  const clearance = topInset + SAFE_TOP_GAP;
+): number | null {
+  // No trustworthy window: cap nothing and let the caller's own style stand.
+  if (!Number.isFinite(windowHeight) || windowHeight <= 0) return null;
+
+  // An inset larger than any real notch is a bad measurement. Obeying it is
+  // what produced the mini-card; ignoring it costs nothing, because the
+  // clamp only ever lets the sheet be TALLER than a nonsense reading would.
+  const plausibleInset =
+    Number.isFinite(topInset) && topInset > 0
+      ? Math.min(topInset, windowHeight * MAX_PLAUSIBLE_INSET_RATIO)
+      : 0;
+
+  const clearance = plausibleInset + SAFE_TOP_GAP;
   // Centred cards only get half the leftover space above them, so the
   // clearance has to be reserved on both sides.
   const height = anchor === "center" ? windowHeight - clearance * 2 : windowHeight - clearance;
-  // Never return something unusable on a very short screen.
-  return Math.max(height, 240);
+
+  return Math.max(height, windowHeight * MIN_SHEET_RATIO);
 }
 
 export function SwipeDownSheet({
@@ -124,6 +168,30 @@ export function SwipeDownSheet({
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
 
+  // ── Re-measure when the app comes back to the foreground ───────────
+  //
+  // Opening the body-fat guide sends the customer to Safari, which
+  // backgrounds the app with this sheet still mounted. iOS re-measures on
+  // the way back, and the values that arrive first can be wrong. Neither
+  // useWindowDimensions nor useSafeAreaInsets necessarily re-renders this
+  // component again once they settle — so it could keep a bad reading for
+  // the rest of the sheet's life. Bumping state on `active` forces one more
+  // render, at which point both hooks are read again.
+  const [, forceRemeasure] = useState(0);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active") forceRemeasure((n) => n + 1);
+    });
+    return () => sub.remove();
+  }, []);
+
+  // A reopened sheet must never inherit a partial drag from the last one.
+  // The shared value survives as long as this component instance does, and
+  // callers keep the sheet mounted across open/close in some screens.
+  useEffect(() => {
+    translateY.value = 0;
+  }, [translateY]);
+
   const heightCap = maxSheetHeight(windowHeight, insets.top, anchor);
 
   const pan = Gesture.Pan()
@@ -145,7 +213,11 @@ export function SwipeDownSheet({
       if (shouldDismiss) {
         // Animate out first so the sheet leaves under the finger rather than
         // vanishing, then hand control back to the caller.
-        translateY.value = withTiming(windowHeight, { duration: 180 }, (finished) => {
+        // Travel the real screen height so the card clears the bottom on a
+        // tall phone — with a fallback, because a zero window would leave
+        // the sheet sitting still and never call onDismiss.
+        const exitDistance = windowHeight > 0 ? windowHeight : 800;
+        translateY.value = withTiming(exitDistance, { duration: 180 }, (finished) => {
           if (finished) runOnJS(onDismiss)();
         });
         return;
@@ -159,9 +231,14 @@ export function SwipeDownSheet({
   }));
 
   return (
-    // The cap is applied AFTER the caller's style so a sheet's own
-    // maxHeight can never win over the safe area.
-    <Animated.View style={[style, animatedStyle, { maxHeight: heightCap }]}>
+    // The cap is applied AFTER the caller's style so a sheet's own maxHeight
+    // can never win over the safe area — but only when there IS one. A null
+    // cap leaves the property absent entirely, so an untrustworthy window
+    // falls back to the caller's own style instead of overriding it with a
+    // number derived from a bad measurement.
+    <Animated.View
+      style={[style, animatedStyle, heightCap !== null ? { maxHeight: heightCap } : null]}
+    >
       <GestureDetector gesture={pan}>
         {/* The drag target: the grabber plus the sheet's title row. Sized to
             a real touch target rather than the width of the line itself. */}

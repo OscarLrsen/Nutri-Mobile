@@ -64,6 +64,7 @@
     "profile:check": "node scripts/check-profile-linking-sheets.mjs",
     "dayplan:check": "node scripts/check-home-day-plan.mjs",
     "final5:check": "node scripts/check-final-five.mjs",
+    "qa3:check": "node scripts/check-three-qa-bugs.mjs",
     "doctor": "expo-doctor"
   },
   "private": true
