@@ -5,28 +5,29 @@ import { ThemedText } from "@/components/ui/ThemedText";
 import { NUTRITION_ONBOARDING_ROUTE } from "@/features/onboarding/nutritionOnboardingRoute";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
-import { MenuPlanCard } from "./MenuPlanCard";
 
 /**
- * "Din personliga meny" (patch 12) — the section at the top of
- * Huvudmåltider that makes the three ways of using Nutri explicit:
+ * The profile-gap CTA at the top of Huvudmåltider.
  *
- * 1. PLAN YOUR DAY  → /planera-dagen (the mobile port of the existing
- *    server-backed day planner; Heldag's ready-made package is offered
- *    INSIDE it as a quick suggestion — decision Alternativ B, so the menu
- *    top never carries three overlapping plan cards).
- * 2. CUSTOMISE A MEAL → the existing /nutri-anpassar flow (calculation
- *    logic untouched; only the card copy is more action-oriented).
- * 3. Regular meal cards below carry the personal portion recommendation.
+ * WHAT THIS USED TO BE. "Din personliga meny" — a section carrying two
+ * cards: "Anpassa en måltid" (removed in an earlier release) and "Planera
+ * din dag", which opened /planera-dagen. The day-plan card is now gone too:
+ * those controls render directly on Home, where the day belongs, so keeping
+ * an entry point here would be a second door to the same room. The planner
+ * route still exists and still works — Home simply is not a door to it, and
+ * nothing else links to it either.
  *
- * `profileGap` = the backend answered 404/422 (no/incomplete nutrition
- * profile): the section then shows ONE honest fill-your-profile CTA
- * instead of implying personalisation that doesn't exist yet — and no
- * fake recommendation ever renders on the cards (they get null).
+ * What remains is the one thing that is genuinely about the MENU: when the
+ * backend answers 404/422 (no or incomplete nutrition profile), the cards
+ * below cannot carry a personal recommendation, and this says so honestly
+ * instead of letting the menu look un-personalised for no stated reason.
+ * With a complete profile there is nothing to say, so nothing renders.
  */
 export function PersonalMenuSection({ profileGap }: { profileGap: boolean }) {
   const { t } = useTranslation();
   const router = useRouter();
+
+  if (!profileGap) return null;
 
   return (
     <View style={styles.section}>
@@ -35,45 +36,16 @@ export function PersonalMenuSection({ profileGap }: { profileGap: boolean }) {
       </ThemedText>
       <ThemedText style={styles.subtitle}>{t("menu.personal.subtitle")}</ThemedText>
 
-      {profileGap ? (
-        <View style={styles.gapCard}>
-          <ThemedText style={styles.gapText}>{t("menu.personal.profileGap")}</ThemedText>
-          <Pressable
-            onPress={() => router.navigate(NUTRITION_ONBOARDING_ROUTE)}
-            style={({ pressed }) => [styles.gapCta, pressed && { opacity: 0.85 }]}
-            accessibilityRole="button"
-            accessibilityLabel={t("menu.personal.profileGapCta")}
-          >
-            <ThemedText style={styles.gapCtaText}>{t("menu.personal.profileGapCta")}</ThemedText>
-          </Pressable>
-        </View>
-      ) : null}
-
-      {/* Release change: the "Anpassa en måltid" card is GONE from the
-          customer flow — the ordinary menu is already tailored to the
-          customer's goals, and a second customisation entrance read as a
-          competing product. The /nutri-anpassar route still exists and
-          works; nothing links to it. Only the day planner remains here. */}
-      <View style={styles.cards}>
-        <MenuPlanCard
-          badge={t("menu.personal.planBadge")}
-          heading={t("menu.personal.planHeading")}
-          subheading={
-            profileGap ? t("menu.personal.lockedSubheading") : t("menu.personal.planSubheading")
-          }
-          ctaLabel={profileGap ? t("menu.personal.profileGapCta") : t("menu.personal.planCta")}
-          lockLabel={profileGap ? t("menu.personal.lockedLabel") : undefined}
-          accessibilityLabel={
-            profileGap
-              ? t("menu.personal.lockedAria", { feature: t("menu.personal.planHeading") })
-              : t("menu.personal.planHeading")
-          }
-          onPress={() =>
-            profileGap
-              ? router.navigate(NUTRITION_ONBOARDING_ROUTE)
-              : router.push("/planera-dagen")
-          }
-        />
+      <View style={styles.gapCard}>
+        <ThemedText style={styles.gapText}>{t("menu.personal.profileGap")}</ThemedText>
+        <Pressable
+          onPress={() => router.navigate(NUTRITION_ONBOARDING_ROUTE)}
+          style={({ pressed }) => [styles.gapCta, pressed && { opacity: 0.85 }]}
+          accessibilityRole="button"
+          accessibilityLabel={t("menu.personal.profileGapCta")}
+        >
+          <ThemedText style={styles.gapCtaText}>{t("menu.personal.profileGapCta")}</ThemedText>
+        </Pressable>
       </View>
     </View>
   );
@@ -119,13 +91,5 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontFamily: fontFamily.bodyBold,
     color: colors.textPrimary,
-  },
-  cards: {
-    marginTop: spacing[2],
-    flexDirection: "column",
-    alignItems: "stretch",
-    gap: spacing[3],
-    width: "100%",
-    minWidth: 0,
   },
 });

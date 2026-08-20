@@ -18,6 +18,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ApiMealDistribution } from "@/services/api/nutrition";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
+import { DayPlanSlotList } from "./DayPlanSlotList";
+import { visibleSlotsFor } from "./dayPlanSlots";
 
 /**
  * "Planera din dag" (patch 12) — the mobile port of the web's existing
@@ -44,29 +46,6 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
 
 const AUTO_PCTS_3 = [0.32, 0.34, 0.34];
 const AUTO_PCTS_4 = [0.25, 0.3, 0.25, 0.2];
-
-const DISPLAY_ORDER: Record<string, number> = {
-  Frukost: 0,
-  "Mellanmål": 1,
-  Lunch: 2,
-  Middag: 3,
-};
-
-const SLOT_COLORS: Record<string, string> = {
-  Frukost: "#FF8A3D",
-  Lunch: "#5FA0FF",
-  Middag: "#F0C14B",
-  "Mellanmål": "#7FC97F",
-};
-const SLOT_COLOR_FALLBACK = ["#FF8A3D", "#5FA0FF", "#F0C14B", "#7FC97F"];
-
-function slotColor(label: string, index: number): string {
-  return SLOT_COLORS[label] ?? SLOT_COLOR_FALLBACK[index % SLOT_COLOR_FALLBACK.length];
-}
-
-function orderForDisplay(meals: ApiMealDistribution[]): ApiMealDistribution[] {
-  return [...meals].sort((a, b) => (DISPLAY_ORDER[a.label] ?? 99) - (DISPLAY_ORDER[b.label] ?? 99));
-}
 
 export function PlanDayScreen() {
   const { t } = useTranslation();
@@ -135,20 +114,10 @@ export function PlanDayScreen() {
     { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 }
   );
 
-  const visibleSlots: ApiMealDistribution[] = useMemo(() => {
-    if (mealTab === "4" || localMeals.length < 4) return orderForDisplay(localMeals);
-    const totalCals = localMeals.reduce((s, m) => s + m.calories, 0);
-    const first3 = localMeals[0].calories + localMeals[1].calories + localMeals[2].calories;
-    if (first3 === 0) return localMeals.slice(0, 3);
-    const scale = totalCals / first3;
-    return localMeals.slice(0, 3).map((m) => ({
-      ...m,
-      calories: Math.round(m.calories * scale),
-      proteinG: Math.round(m.proteinG * scale),
-      carbsG: Math.round(m.carbsG * scale),
-      fatG: Math.round(m.fatG * scale),
-    }));
-  }, [mealTab, localMeals]);
+  const visibleSlots: ApiMealDistribution[] = useMemo(
+    () => visibleSlotsFor(mealTab, localMeals),
+    [mealTab, localMeals]
+  );
 
   const totalDiff = goal ? Math.abs(localTotal.calories - goal.calories) : 0;
   const macrosInBalance =
@@ -304,57 +273,31 @@ export function PlanDayScreen() {
           </ThemedText>
         </View>
 
-        {/* 3/4-meal toggle */}
-        <View style={styles.tabRow}>
-          {(["3", "4"] as const).map((tab) => (
-            <Pressable
-              key={tab}
-              onPress={() => setMealTab(tab)}
-              style={[styles.tab, mealTab === tab && styles.tabActive]}
-              accessibilityRole="button"
-              accessibilityState={{ selected: mealTab === tab }}
-              accessibilityLabel={t("planDay.mealCount", { count: Number(tab) })}
-            >
-              <ThemedText style={[styles.tabText, mealTab === tab && styles.tabTextActive]}>
-                {t("planDay.mealCount", { count: Number(tab) })}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Slots */}
-        <View style={styles.slotList}>
-          {visibleSlots.map((slot, i) => {
+        {/* 3/4-meal toggle + slots — the SAME component Home renders, so the
+            two surfaces cannot drift apart. Only the row's trailing control
+            differs: the planner edits, Home navigates. */}
+        <DayPlanSlotList
+          mealTab={mealTab}
+          onMealTabChange={setMealTab}
+          slots={visibleSlots}
+          renderAction={(slot) => {
             const realIdx = localMeals.findIndex((m) => m.label === slot.label);
             const editable = mealTab === "4" || localMeals.length < 4;
+            if (!editable || realIdx < 0) return null;
             return (
-              <View key={slot.label} style={styles.slotCard}>
-                <View style={[styles.slotDot, { backgroundColor: slotColor(slot.label, i) }]} />
-                <View style={styles.slotBody}>
-                  <ThemedText style={styles.slotLabel}>
-                    {t(`planDay.slots.${slot.label}`, { defaultValue: slot.label })}
-                  </ThemedText>
-                  <ThemedText variant="caption" style={styles.slotMacros}>
-                    {slot.calories} kcal · {slot.proteinG}g {t("home.macroProtein").toLowerCase()} ·{" "}
-                    {slot.carbsG}g {t("menu.carbsShort")} · {slot.fatG}g {t("menu.fatShort")}
-                  </ThemedText>
-                </View>
-                {editable && realIdx >= 0 ? (
-                  <Pressable
-                    onPress={() => openEdit(realIdx)}
-                    style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.7 }]}
-                    accessibilityRole="button"
-                    accessibilityLabel={t("planDay.editSlotAria", {
-                      slot: t(`planDay.slots.${slot.label}`, { defaultValue: slot.label }),
-                    })}
-                  >
-                    <ThemedText style={styles.editBtnText}>{t("planDay.edit")}</ThemedText>
-                  </Pressable>
-                ) : null}
-              </View>
+              <Pressable
+                onPress={() => openEdit(realIdx)}
+                style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.7 }]}
+                accessibilityRole="button"
+                accessibilityLabel={t("planDay.editSlotAria", {
+                  slot: t(`planDay.slots.${slot.label}`, { defaultValue: slot.label }),
+                })}
+              >
+                <ThemedText style={styles.editBtnText}>{t("planDay.edit")}</ThemedText>
+              </Pressable>
             );
-          })}
-        </View>
+          }}
+        />
 
         {/* Plan vs goal summary */}
         <View style={styles.summaryCard}>

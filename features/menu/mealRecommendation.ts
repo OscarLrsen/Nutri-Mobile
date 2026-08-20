@@ -59,6 +59,42 @@ export function slotForCategory(
   return getStockholmHour(language) < 15 ? "Lunch" : "Middag";
 }
 
+export type MenuCategoryId = "frukost" | "huvudmaltider" | "mellanmal";
+
+/**
+ * The inverse: which menu category a day-plan slot lands in.
+ *
+ * NOTE THAT LUNCH AND MIDDAG SHARE ONE CATEGORY. The menu has five chips
+ * (frukost, huvudmaltider, mellanmal, shakes, dryck) and no separate lunch
+ * or dinner tab — both are Huvudmåltider. So opening the menu from a slot
+ * has to carry the SLOT as well as the category, or a tap on Middag at
+ * 12:00 would silently be served lunch portions by the clock rule above.
+ */
+export function categoryForSlot(slot: WizardSlot): MenuCategoryId {
+  if (slot === "Frukost") return "frukost";
+  if (slot === "Mellanmål") return "mellanmal";
+  return "huvudmaltider";
+}
+
+/** Narrows an arbitrary string (a navigation param) to a real slot. */
+export function parseSlot(value: string | undefined | null): WizardSlot | null {
+  return value === "Frukost" || value === "Lunch" || value === "Middag" || value === "Mellanmål"
+    ? value
+    : null;
+}
+
+/**
+ * The slot a MEAL belongs to, for screens that have a meal but no category
+ * context — the detail route reached by a deep link or a back-navigation.
+ * Same precedence the menu grouping uses: the Breakfast tag wins, then the
+ * Mellanmål category, then the clock decides lunch vs dinner.
+ */
+export function slotForMeal(meal: ApiMeal, language: AppLanguage): WizardSlot {
+  if (meal.mealTimeTags?.includes("Breakfast")) return "Frukost";
+  if (meal.category === "Mellanmål") return "Mellanmål";
+  return getStockholmHour(language) < 15 ? "Lunch" : "Middag";
+}
+
 /** The server's target for a slot, in priority order: the user's SAVED
  * day plan first (a valid slot row with calories > 0), then the backend's
  * automatic distribution, then the Heldag fallback share. Null without

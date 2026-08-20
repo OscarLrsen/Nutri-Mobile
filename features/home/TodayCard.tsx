@@ -17,6 +17,7 @@ import {
   plannedDeviatesFromTarget,
 } from "@/features/nutrition/activeDailyNutrition";
 import { useActiveOrder } from "@/features/order/useActiveOrder";
+import { HomeDayPlan } from "@/features/home/HomeDayPlan";
 import { GLASS_ML, useWaterLog } from "@/features/home/waterLog";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
@@ -159,6 +160,14 @@ export function TodayCard() {
           {t("home.noSchedule")}
         </ThemedText>
       ) : null}
+
+      {/* ── The day's plan ────────────────────────────────────────────
+          Moved here from the menu's "Planera din dag" card. Sits after the
+          macros and before what has been ordered, because it belongs to the
+          goal above it, not to the tally below. */}
+      <View style={styles.dayPlanBlock}>
+        <HomeDayPlan />
+      </View>
 
       {/* ── So far today (old "Dagens status", compacted) ─────────── */}
       {remaining ? (
@@ -365,6 +374,12 @@ const styles = StyleSheet.create({
   },
   plannedDiff: {
     color: colors.textTertiary,
+  },
+  dayPlanBlock: {
+    gap: spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSoft,
+    paddingTop: spacing[3],
   },
   statusRow: {
     flexDirection: "row",

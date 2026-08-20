@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { ThemedText } from "@/components/ui/ThemedText";
@@ -22,7 +23,14 @@ import { MealCard } from "./MealCard";
 import { DrinkCard } from "./DrinkCard";
 import { PersonalMenuSection } from "./PersonalMenuSection";
 import { GoWellFlavorCarousel } from "./GoWellFlavorCarousel";
-import { recommendSize, slotForCategory, slotTarget } from "./mealRecommendation";
+import {
+  categoryForSlot,
+  parseSlot,
+  recommendSize,
+  slotForCategory,
+  slotTarget,
+} from "./mealRecommendation";
+import { BREAKFAST_WINDOW_LABEL, isBreakfastOrderable } from "./breakfastWindow";
 import {
   isProfileGapError,
   useTodayDayPlanQuery,
@@ -139,6 +147,31 @@ export function MenuScreen() {
   );
 
   const [activeCategory, setActiveCategory] = useState<CategoryId>("huvudmaltider");
+
+  // Header height differs per category now — reset scroll on chip switch so
+  // the list never lands mid-content under a differently-sized header.
+  const listRef = useRef<FlatList<MenuItem>>(null);
+  const switchCategory = (id: CategoryId) => {
+    setActiveCategory(id);
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  };
+
+  // Home's day-plan rows open the menu on a category. Applied through an
+  // effect keyed on the param (not on mount) so tapping Frukost, going back
+  // and tapping Mellanmål switches again; `navKey` distinguishes two taps on
+  // the SAME slot, which would otherwise be one unchanged param and leave a
+  // manual chip switch in between un-overridden.
+  const params = useLocalSearchParams<{ category?: string; slot?: string; navKey?: string }>();
+  const requestedCategory = params.category;
+  const navKey = params.navKey;
+  useEffect(() => {
+    if (!requestedCategory) return;
+    if ((CATEGORY_IDS as readonly string[]).includes(requestedCategory)) {
+      setActiveCategory(requestedCategory as CategoryId);
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    }
+  }, [requestedCategory, navKey]);
+
   const activeId: CategoryId =
     availableCategories.find((id) => id === activeCategory) ??
     availableCategories[0] ??
@@ -152,21 +185,25 @@ export function MenuScreen() {
   // Slot target for the ACTIVE category — pure presentation of the
   // backend's per-slot distribution (see mealRecommendation.ts).
   const { language } = useLanguage();
+  // A slot carried in from Home wins over the clock rule: Lunch and Middag
+  // share the Huvudmåltider chip, so without it a tap on Middag at 12:00
+  // would be served lunch portions. Only honoured when it actually belongs
+  // to the category being shown, so a stale param cannot mismatch the list.
+  const requestedSlot = parseSlot(params.slot);
   const activeSlot =
     activeId === "frukost" || activeId === "huvudmaltider" || activeId === "mellanmal"
-      ? slotForCategory(activeId, language)
+      ? requestedSlot && categoryForSlot(requestedSlot) === activeId
+        ? requestedSlot
+        : slotForCategory(activeId, language)
       : null;
   const activeSlotTarget = activeSlot
     ? slotTarget(todayQuery.data, dayPlanQuery.data ?? null, activeSlot)
     : null;
 
-  // Header height differs per category now — reset scroll on chip switch so
-  // the list never lands mid-content under a differently-sized header.
-  const listRef = useRef<FlatList<MenuItem>>(null);
-  const switchCategory = (id: CategoryId) => {
-    setActiveCategory(id);
-    listRef.current?.scrollToOffset({ offset: 0, animated: false });
-  };
+  // Advisory mirror of the server's window (see breakfastWindow.ts). The
+  // backend refuses the order regardless; this only avoids a dead Add button
+  // that fails with an unexplained error.
+  const breakfastOpen = isBreakfastOrderable(language);
 
   const loading = mealsQuery.isLoading || drinksQuery.isLoading;
   const error = mealsQuery.isError || drinksQuery.isError;
@@ -302,10 +339,21 @@ export function MenuScreen() {
                     count: activeItems.length + (activeId === "dryck" ? goWellDrinks.length : 0),
                   }).toUpperCase()}
                 </ThemedText>
+                {/* Breakfast stays BROWSABLE outside its window — the
+                    customer can read the menu and plan. The banner switches
+                    from "served 10–11" to "cannot be ordered now" so the
+                    locked Add buttons below have a stated reason. */}
                 {activeId === "frukost" ? (
-                  <View style={styles.breakfastBanner}>
-                    <ThemedText variant="caption" style={styles.breakfastText}>
-                      {t("menu.breakfastServed")}
+                  <View
+                    style={[styles.breakfastBanner, !breakfastOpen && styles.breakfastBannerClosed]}
+                  >
+                    <ThemedText
+                      variant="caption"
+                      style={[styles.breakfastText, !breakfastOpen && styles.breakfastTextClosed]}
+                    >
+                      {breakfastOpen
+                        ? t("menu.breakfastServed")
+                        : t("menu.breakfastClosed", { window: BREAKFAST_WINDOW_LABEL })}
                     </ThemedText>
                   </View>
                 ) : null}
@@ -411,5 +459,14 @@ const styles = StyleSheet.create({
   },
   breakfastText: {
     color: "rgba(255,255,255,0.78)",
+  },
+  // Outside the window the banner drops the appetising accent tint — the
+  // text carries the meaning, the colour only reinforces it.
+  breakfastBannerClosed: {
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  breakfastTextClosed: {
+    color: "rgba(255,255,255,0.62)",
   },
 });
