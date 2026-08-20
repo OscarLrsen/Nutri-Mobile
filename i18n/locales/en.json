@@ -282,6 +282,7 @@
     "preorderTeaserBody": "Soon you'll be able to choose your day, location and pickup time directly in checkout."
   },
   "auth": {
+    "completingSignIn": "Signing you in…",
     "loginTitle": "Welcome back",
     "loginSubtitle": "Log in and continue your Nutri plan",
     "email": "Email",

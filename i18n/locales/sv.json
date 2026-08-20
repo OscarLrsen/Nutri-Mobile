@@ -282,6 +282,7 @@
     "preorderTeaserBody": "Snart kan du välja dag, plats och upphämtningstid direkt i kassan."
   },
   "auth": {
+    "completingSignIn": "Loggar in dig…",
     "loginTitle": "Välkommen tillbaka",
     "loginSubtitle": "Logga in och fortsätt din Nutri-plan",
     "email": "E-post",

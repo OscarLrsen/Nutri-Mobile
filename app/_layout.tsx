@@ -77,6 +77,13 @@ function RootNavigator() {
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+      {/* OUTSIDE both guards on purpose. The confirmation deep link
+          (nutri://auth/callback#…) arrives while signed OUT, and the session
+          lands a moment later — so this route has to resolve in BOTH states.
+          Inside either guard it would be missing on one side of that flip and
+          Expo Router would fall through to +not-found, which is the 404 the
+          confirmation mail used to end on. */}
+      <Stack.Screen name="auth/callback" />
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="beloningar" />
