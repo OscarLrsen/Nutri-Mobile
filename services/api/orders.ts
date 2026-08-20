@@ -115,6 +115,11 @@ export interface CreateOrderInput {
     customIngredients?: { ingredientId: string; name: string; amountG: number }[];
     containerTypeId?: string;
     originalMealName?: string;
+    /** The menu meal a PERSONALISED line was built from. A personalised meal
+     * is sent as a custom line with mealId null, which severs the link to its
+     * origin — and the server's breakfast window needs that link. Never used
+     * for pricing, macros or stock. */
+    sourceMealId?: string;
   }[];
 }
 

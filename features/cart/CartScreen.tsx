@@ -363,6 +363,10 @@ export function CartScreen() {
             customIngredients: item.customIngredients,
             containerTypeId: item.containerTypeId,
             originalMealName: item.originalMealName,
+            // A personalised menu meal goes up as a custom line with mealId
+            // null. Without this the server cannot tell it was a breakfast,
+            // and the 10–11 window would not apply to it.
+            sourceMealId: item.isCustom ? item.meal.id : undefined,
           };
         }),
       });
