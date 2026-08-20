@@ -1,3 +1,4 @@
+import type { ApiNutritionProfile } from "@/services/api/nutrition";
 import { BODY_FAT_OPTIONS, GOAL_PACE_OPTIONS } from "./profileOptions";
 
 /**
@@ -55,6 +56,51 @@ export interface ProfileFormState {
    */
   menopause: "Postmenopausal" | "Cycling" | "PreferNotToSay" | null;
   cyclePhase: string | null;
+}
+
+/** Form tri-state → the backend's nullable bool. "PreferNotToSay" and
+ *  "never asked" both send null; the difference matters to the form, not to
+ *  the engine (which applies no adjustment either way). */
+export function menopauseToApi(v: ProfileFormState["menopause"]): boolean | null {
+  if (v === "Postmenopausal") return true;
+  if (v === "Cycling") return false;
+  return null;
+}
+
+/** Backend nullable bool → form tri-state. A stored null on a female
+ *  profile is shown as unanswered, so the question gets asked once. */
+export function menopauseFromApi(
+  isPostmenopausal: boolean | null,
+  gender: string
+): ProfileFormState["menopause"] {
+  if (gender !== "Female") return null;
+  if (isPostmenopausal === true) return "Postmenopausal";
+  if (isPostmenopausal === false) return "Cycling";
+  return null;
+}
+
+/**
+ * A STORED profile as this form sees it. Lives here rather than in the
+ * screen because the completion check needs exactly the same reading — if
+ * the screen and the "is this profile complete" question mapped the stored
+ * profile differently, they could disagree about the same customer.
+ */
+export function formFromProfile(np: ApiNutritionProfile): ProfileFormState {
+  return {
+    gender: np.gender as "Male" | "Female",
+    ageYears: np.ageYears > 0 ? String(np.ageYears) : "",
+    weightKg: np.weightKg > 0 ? String(np.weightKg) : "",
+    heightCm: np.heightCm > 0 ? String(np.heightCm) : "",
+    bodyFatLevel: np.bodyFatLevel,
+    activityType: np.activityType as ProfileFormState["activityType"],
+    stepsRange: np.stepsRange,
+    trainingSessions: np.trainingSessions,
+    primaryGoal: np.primaryGoal as ProfileFormState["primaryGoal"],
+    goalPace: np.goalPace,
+    planFocus: (np.planFocus as ProfileFormState["planFocus"]) ?? null,
+    menopause: menopauseFromApi(np.isPostmenopausal, np.gender),
+    cyclePhase: np.cyclePhase,
+  };
 }
 
 /** Bounds shared by the completeness gate and the save validator, so the
