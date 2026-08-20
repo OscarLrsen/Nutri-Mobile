@@ -61,6 +61,7 @@
     "limits:check": "node scripts/check-ingredient-limits.mjs",
     "feedback:check": "node scripts/check-food-feedback.mjs",
     "snags:check": "node scripts/check-oscar-snags.mjs",
+    "profile:check": "node scripts/check-profile-linking-sheets.mjs",
     "doctor": "expo-doctor"
   },
   "private": true

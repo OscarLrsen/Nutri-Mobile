@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  type LayoutChangeEvent,
 } from "react-native";
 import { Check, X } from "lucide-react-native";
 
@@ -22,11 +23,20 @@ import { colors, fontFamily, spacing } from "@/theme";
 import {
   ACTIVITY_TYPE_OPTIONS,
   BODY_FAT_OPTIONS,
+  CYCLE_PHASE_OPTIONS,
   GOAL_PACE_OPTIONS,
+  MENOPAUSE_OPTIONS,
+  PLAN_FOCUS_OPTIONS,
   PRIMARY_GOAL_OPTIONS,
   STEPS_OPTIONS,
   TRAINING_OPTIONS,
 } from "./profileOptions";
+import {
+  missingRequiredSteps,
+  nextIncompleteAnchor,
+  type ProfileAnchorId,
+  type ProfileFormState,
+} from "./profileRequirements";
 import {
   EditNumField,
   FieldLabel,
@@ -37,6 +47,8 @@ import {
   SelectRow,
 } from "./editFields";
 
+export type { ProfileFormState } from "./profileRequirements";
+
 /**
  * "profil" (release P13) is the COMBINED page — grunddata + aktivitet + mål
  * in one scroll with section headings and one save, replacing the four
@@ -45,28 +57,27 @@ import {
  */
 export type EditSection = "grunddata" | "aktivitet" | "mal" | "profil" | "vikt";
 
-export interface ProfileFormState {
-  gender: "Male" | "Female";
-  ageYears: string;
-  weightKg: string;
-  heightCm: string;
-  bodyFatLevel: number | null;
-  activityType: "Sedentary" | "Mixed" | "Active";
-  stepsRange: string | null;
-  trainingSessions: string | null;
-  primaryGoal: "FatLoss" | "Maintain" | "MuscleGain";
-  goalPace: string | null;
-}
-
 /**
- * Edit modal — port of the web profile page's section modals (grunddata /
- * aktivitet / mål) plus the "new-profile" variant (np === null → only the
- * grunddata basics, the approved V1 path to a complete profile). Same
- * behavior: gender switch clears an invalid body-fat level, Maintain clears
- * the pace, and a 400ms-debounced POST /nutrition-profile/preview gives
- * live target feedback (the web shows it in the plan card behind the
- * backdrop; RN modals are opaque, so the same preview renders as a compact
- * line above the save button instead — documented adaptation).
+ * Edit modal — port of the web profile page's section modals. Behaviour
+ * carried over from the web: gender switch clears an invalid body-fat level,
+ * Maintain clears the pace, and a 400ms-debounced POST
+ * /nutrition-profile/preview gives live target feedback (the web shows it in
+ * the plan card behind the backdrop; RN modals are opaque, so the same
+ * preview renders as a compact line above the save button instead —
+ * documented adaptation).
+ *
+ * A NEW PROFILE NOW SEES THE SAME FORM AS AN EXISTING ONE. It previously
+ * showed gender/age/weight/height only, and the save filled the rest from
+ * EMPTY_FORM's defaults: Maintain, Mixed, no steps, no training. That
+ * passes the backend's completeness check, so onboarding finished "klar"
+ * with an activity score of 2 — multiplier 1.200, "Stillasittande" — for a
+ * customer who might train five times a week, and nothing on screen ever
+ * said so. One form, one set of fields, no second-class first run.
+ *
+ * PROGRESSION: answering a choice scrolls to the next REQUIRED block that is
+ * still empty. Only tap-choices advance — scrolling the sheet out from under
+ * someone who is typing a number would be hostile, and the numeric fields
+ * have their own "Klar" bar.
  */
 export function EditSectionModal({
   section,
@@ -80,7 +91,7 @@ export function EditSectionModal({
   onCancel,
 }: {
   section: EditSection;
-  /** New-profile variant: basics only, no body fat (web parity). */
+  /** First run: same fields, different title. */
   isNewProfile: boolean;
   form: ProfileFormState;
   onChange: (patch: Partial<ProfileFormState>) => void;
@@ -105,33 +116,61 @@ export function EditSectionModal({
             : t("profile.editGoal");
 
   const combined = section === "profil";
+  /** Every algorithm field on one page — the combined page and the first run. */
+  const showAll = combined || isNewProfile;
 
-  // 400ms-debounced live preview (web parity; planFocus is preserved by the
-  // caller's buildDto, so the preview here omits it exactly like a fresh
-  // profile would — close enough for the feedback line, and the SAVE uses
-  // the caller's full DTO).
   // The in-app body-fat guide (replaces the old external link — see the
   // chip below).
   const [guideOpen, setGuideOpen] = useState(false);
 
+  // ── Auto-progression ────────────────────────────────────────────────
+  // Each block reports its y-offset inside the ScrollView; a completed
+  // choice scrolls to the next required gap.
+  const scrollRef = useRef<ScrollView>(null);
+  const anchorY = useRef<Partial<Record<ProfileAnchorId, number>>>({});
+
+  const registerAnchor = (id: ProfileAnchorId) => (e: LayoutChangeEvent) => {
+    anchorY.current[id] = e.nativeEvent.layout.y;
+  };
+
+  /**
+   * Apply a choice, then move to the next unanswered required block.
+   * `patch` is applied to a local copy first so the target is computed from
+   * the state the customer is about to see, not the one they just left.
+   */
+  const choose = (from: ProfileAnchorId, patch: Partial<ProfileFormState>) => {
+    onChange(patch);
+    if (!showAll) return;
+    const next = nextIncompleteAnchor({ ...form, ...patch }, from);
+    const y = next ? anchorY.current[next] : undefined;
+    if (y === undefined) return;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing[4]), animated: true });
+  };
+
+  // 400ms-debounced live preview (web parity). Sends the same values the
+  // save will send, so the number under the button is the number the
+  // customer gets.
   const [preview, setPreview] = useState<ApiNutritionResult | null>(null);
   useEffect(() => {
     const id = setTimeout(async () => {
       try {
         const dto: UpsertNutritionProfileDto = {
-          gender: form.gender,
+          gender: form.gender ?? "Male",
           ageYears: parseInt(form.ageYears) || 0,
           weightKg: parseFloat(form.weightKg) || 0,
           heightCm: parseInt(form.heightCm) || 0,
           bodyFatLevel: form.bodyFatLevel,
           targetWeightKg: null,
-          activityType: form.activityType,
+          activityType: form.activityType ?? "Mixed",
           stepsRange: form.stepsRange,
           trainingSessions: form.trainingSessions,
-          primaryGoal: form.primaryGoal,
+          primaryGoal: form.primaryGoal ?? "Maintain",
           goalPace: form.primaryGoal === "Maintain" ? null : form.goalPace,
           mealCountMain: 3,
           mealCountSnacks: 1,
+          planFocus: form.planFocus ?? "Balance",
+          isPostmenopausal: menopauseToApi(form.menopause),
+          cyclePhase: form.menopause === "Cycling" ? form.cyclePhase : null,
         };
         setPreview(await previewNutritionResult(dto));
       } catch {
@@ -141,7 +180,12 @@ export function EditSectionModal({
     return () => clearTimeout(id);
   }, [form]);
 
-  const bfOptions = BODY_FAT_OPTIONS[form.gender] ?? BODY_FAT_OPTIONS.Male;
+  const bfOptions = BODY_FAT_OPTIONS[form.gender ?? "Male"];
+  const missing = missingRequiredSteps(form);
+  // The gate only guards pages that actually RENDER the missing fields.
+  // The weight quick-edit shows one number; blocking it on a gap the
+  // customer cannot see from there would be a dead end.
+  const gateSave = showAll && missing.length > 0;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onCancel}>
@@ -170,6 +214,7 @@ export function EditSectionModal({
             </View>
 
             <ScrollView
+              ref={scrollRef}
               contentContainerStyle={styles.sheetContent}
               keyboardShouldPersistTaps="handled"
             >
@@ -186,10 +231,10 @@ export function EditSectionModal({
                 </View>
               )}
 
-              {combined && <SectionHeading text={t("profile.sectionBasics")} first />}
+              {showAll && <SectionHeading text={t("profile.sectionBasics")} first />}
 
-              {(section === "grunddata" || combined || isNewProfile) && (
-                <View style={{ gap: spacing[4] }}>
+              {(section === "grunddata" || showAll) && (
+                <View style={{ gap: spacing[4] }} onLayout={registerAnchor("basics")}>
                   <View style={{ gap: 6 }}>
                     <FieldLabel>{t("profile.gender")}</FieldLabel>
                     <PillPair
@@ -197,16 +242,21 @@ export function EditSectionModal({
                         { value: "Male", label: t("profile.genderMale") },
                         { value: "Female", label: t("profile.genderFemale") },
                       ]}
-                      value={form.gender}
+                      value={form.gender ?? ""}
                       onChange={(g) => {
                         const gender = g as "Male" | "Female";
-                        // Gender switch clears an invalid body-fat level (web parity).
-                        const validInNew = (BODY_FAT_OPTIONS[gender] ?? []).some(
+                        // Gender switch clears an invalid body-fat level, and
+                        // the female-only answers when switching to male —
+                        // the engine ignores them there, so keeping them
+                        // would only preserve stale data.
+                        const validBf = BODY_FAT_OPTIONS[gender].some(
                           (o) => o.value === form.bodyFatLevel
                         );
-                        onChange({
+                        choose("basics", {
                           gender,
-                          bodyFatLevel: isNewProfile ? null : validInNew ? form.bodyFatLevel : null,
+                          bodyFatLevel: validBf ? form.bodyFatLevel : null,
+                          menopause: gender === "Female" ? form.menopause : null,
+                          cyclePhase: gender === "Female" ? form.cyclePhase : null,
                         });
                       }}
                     />
@@ -232,58 +282,60 @@ export function EditSectionModal({
                     onChange={(v) => onChange({ heightCm: v })}
                     placeholder="175"
                   />
-
-                  {!isNewProfile && (
-                    <View style={{ gap: 6 }}>
-                      <FieldLabel optionalText={t("profile.optional")}>{t("profile.bodyFat")}</FieldLabel>
-                      <HelperText>{t("profile.bodyFatHelper")}</HelperText>
-                      <View style={styles.chipRow}>
-                        {/* WAS: Linking.openURL to ruled.me — the same third-
-                            party page for both genders, so "Visa guide för
-                            män" never showed a men's guide, and an
-                            openURL rejection failed silently with no catch,
-                            which is what made it look dead. The guide is now
-                            in-app and gender-specific, built from the
-                            percentages the app already has in
-                            BODY_FAT_OPTIONS. No browser, no dead end.
-                            The "Vet inte – hoppa över" chip next to it was
-                            removed: the field is already marked optional, so
-                            it only offered a second way to do nothing. */}
-                        <Pressable
-                          onPress={() => setGuideOpen(true)}
-                          style={styles.linkChip}
-                          accessibilityRole="button"
-                        >
-                          <ThemedText style={styles.linkChipText}>
-                            {form.gender === "Male"
-                              ? t("profile.bodyFatGuideMale")
-                              : t("profile.bodyFatGuideFemale")}
-                          </ThemedText>
-                        </Pressable>
-                      </View>
-                      <View style={{ gap: spacing[2], marginTop: spacing[2] }}>
-                        {bfOptions.map((opt) => (
-                          <SelectRow
-                            key={opt.value}
-                            label={opt.label}
-                            rightText={t(`profileOptions.bodyFatDesc.${opt.value}`)}
-                            active={form.bodyFatLevel === opt.value}
-                            onPress={() => onChange({ bodyFatLevel: opt.value })}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  )}
                 </View>
               )}
 
-              {combined && <SectionHeading text={t("profile.sectionActivity")} />}
+              {showAll && (
+                <View style={{ gap: 6, marginTop: spacing[5] }} onLayout={registerAnchor("bodyFat")}>
+                  <FieldLabel optionalText={t("profile.optional")}>
+                    {t("profile.bodyFat")}
+                  </FieldLabel>
+                  <HelperText>{t("profile.bodyFatHelper")}</HelperText>
+                  <View style={styles.chipRow}>
+                    {/* WAS: Linking.openURL to ruled.me — the same third-
+                        party page for both genders, so "Visa guide för
+                        män" never showed a men's guide, and an
+                        openURL rejection failed silently with no catch,
+                        which is what made it look dead. The guide is now
+                        in-app and gender-specific, built from the
+                        percentages the app already has in
+                        BODY_FAT_OPTIONS. No browser, no dead end.
+                        The "Vet inte – hoppa över" chip next to it was
+                        removed: the field is already marked optional, so
+                        it only offered a second way to do nothing. */}
+                    <Pressable
+                      onPress={() => setGuideOpen(true)}
+                      style={styles.linkChip}
+                      accessibilityRole="button"
+                    >
+                      <ThemedText style={styles.linkChipText}>
+                        {form.gender === "Female"
+                          ? t("profile.bodyFatGuideFemale")
+                          : t("profile.bodyFatGuideMale")}
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                  <View style={{ gap: spacing[2], marginTop: spacing[2] }}>
+                    {bfOptions.map((opt) => (
+                      <SelectRow
+                        key={opt.value}
+                        label={opt.label}
+                        rightText={t(`profileOptions.bodyFatDesc.${opt.value}`)}
+                        active={form.bodyFatLevel === opt.value}
+                        onPress={() => choose("bodyFat", { bodyFatLevel: opt.value })}
+                      />
+                    ))}
+                  </View>
+                </View>
+              )}
 
-              {(section === "aktivitet" || combined) && !isNewProfile && (
+              {showAll && <SectionHeading text={t("profile.sectionActivity")} />}
+
+              {(section === "aktivitet" || showAll) && (
                 <View style={{ gap: spacing[5] }}>
                   <HelperText>{t("profile.activityIntro")}</HelperText>
 
-                  <View style={{ gap: 6 }}>
+                  <View style={{ gap: 6 }} onLayout={registerAnchor("activityType")}>
                     <FieldLabel>{t("profile.dailyActivity")}</FieldLabel>
                     <View style={{ gap: spacing[2] }}>
                       {ACTIVITY_TYPE_OPTIONS.map((o) => (
@@ -292,55 +344,36 @@ export function EditSectionModal({
                           label={t(`profileOptions.activityType.${o.value}.label`)}
                           description={t(`profileOptions.activityType.${o.value}.description`)}
                           active={form.activityType === o.value}
-                          onPress={() => onChange({ activityType: o.value })}
+                          onPress={() => choose("activityType", { activityType: o.value })}
                         />
                       ))}
                     </View>
                   </View>
 
-                  <View style={{ gap: 6 }}>
-                    <View style={styles.labelRow}>
-                      <FieldLabel optionalText={t("profile.optional")}>{t("profile.stepsPerDay")}</FieldLabel>
-                      <Pressable
-                        onPress={() => onChange({ stepsRange: null })}
-                        disabled={form.stepsRange == null}
-                        accessibilityRole="button"
-                      >
-                        <ThemedText
-                          style={[styles.skipLink, form.stepsRange == null && { opacity: 0.4 }]}
-                        >
-                          {t("profile.skip")}
-                        </ThemedText>
-                      </Pressable>
-                    </View>
-                    <HelperText>{t("profile.unsureSkip")}</HelperText>
+                  {/* Steps and training were "(valfritt)" with a "Hoppa
+                      över" link. They are not optional in any meaningful
+                      sense: null scores 0 activity points, exactly like
+                      "under 5 000 steg" and "tränar aldrig", and together
+                      they are worth 8 of the score that picks the TDEE
+                      multiplier. Skipping them silently produced a
+                      sedentary plan, so the skip is gone. */}
+                  <View style={{ gap: 6 }} onLayout={registerAnchor("steps")}>
+                    <FieldLabel>{t("profile.stepsPerDay")}</FieldLabel>
+                    <HelperText>{t("profile.stepsHelp")}</HelperText>
                     <View style={{ gap: spacing[2], marginTop: 4 }}>
                       {STEPS_OPTIONS.map((o) => (
                         <SelectRow
                           key={o.value}
                           label={t(`profileOptions.steps.${o.value}`)}
                           active={form.stepsRange === o.value}
-                          onPress={() => onChange({ stepsRange: o.value })}
+                          onPress={() => choose("steps", { stepsRange: o.value })}
                         />
                       ))}
                     </View>
                   </View>
 
-                  <View style={{ gap: 6 }}>
-                    <View style={styles.labelRow}>
-                      <FieldLabel optionalText={t("profile.optional")}>{t("profile.trainingSessions")}</FieldLabel>
-                      <Pressable
-                        onPress={() => onChange({ trainingSessions: null })}
-                        disabled={form.trainingSessions == null}
-                        accessibilityRole="button"
-                      >
-                        <ThemedText
-                          style={[styles.skipLink, form.trainingSessions == null && { opacity: 0.4 }]}
-                        >
-                          {t("profile.skip")}
-                        </ThemedText>
-                      </Pressable>
-                    </View>
+                  <View style={{ gap: 6 }} onLayout={registerAnchor("training")}>
+                    <FieldLabel>{t("profile.trainingSessions")}</FieldLabel>
                     <HelperText>{t("profile.trainingHelp")}</HelperText>
                     <View style={{ gap: spacing[2], marginTop: 4 }}>
                       {TRAINING_OPTIONS.map((o) => (
@@ -348,7 +381,7 @@ export function EditSectionModal({
                           key={o.value}
                           label={t(`profileOptions.training.${o.value}`)}
                           active={form.trainingSessions === o.value}
-                          onPress={() => onChange({ trainingSessions: o.value })}
+                          onPress={() => choose("training", { trainingSessions: o.value })}
                         />
                       ))}
                     </View>
@@ -356,11 +389,11 @@ export function EditSectionModal({
                 </View>
               )}
 
-              {combined && <SectionHeading text={t("profile.sectionGoal")} />}
+              {showAll && <SectionHeading text={t("profile.sectionGoal")} />}
 
-              {(section === "mal" || combined) && !isNewProfile && (
+              {(section === "mal" || showAll) && (
                 <View style={{ gap: spacing[5] }}>
-                  <View style={{ gap: 6 }}>
+                  <View style={{ gap: 6 }} onLayout={registerAnchor("goal")}>
                     {/* Release P15: no duplicated "Mål" label — the modal
                         title already says it, so the helper line carries
                         the explanation and the options speak for
@@ -374,11 +407,11 @@ export function EditSectionModal({
                           description={t(`profileOptions.goal.${g.value}.description`)}
                           active={form.primaryGoal === g.value}
                           onPress={() => {
-                            const v = g.value as ProfileFormState["primaryGoal"];
+                            const v = g.value as NonNullable<ProfileFormState["primaryGoal"]>;
                             // Maintain has no pace; switching goals clears an
                             // invalid pace (web parity).
                             const valid = GOAL_PACE_OPTIONS[v] ?? [];
-                            onChange({
+                            choose("goal", {
                               primaryGoal: v,
                               goalPace:
                                 v === "Maintain"
@@ -393,8 +426,8 @@ export function EditSectionModal({
                     </View>
                   </View>
 
-                  {form.primaryGoal !== "Maintain" ? (
-                    <View style={{ gap: 6 }}>
+                  {form.primaryGoal !== null && form.primaryGoal !== "Maintain" ? (
+                    <View style={{ gap: 6 }} onLayout={registerAnchor("pace")}>
                       <FieldLabel>{t("profile.pace")}</FieldLabel>
                       <View style={{ gap: spacing[2], marginTop: 4 }}>
                         {(GOAL_PACE_OPTIONS[form.primaryGoal] ?? []).map((p) => (
@@ -408,18 +441,95 @@ export function EditSectionModal({
                                 : undefined
                             }
                             active={form.goalPace === p.value}
-                            onPress={() => onChange({ goalPace: p.value })}
+                            onPress={() => choose("pace", { goalPace: p.value })}
                           />
                         ))}
                       </View>
                     </View>
-                  ) : (
+                  ) : form.primaryGoal === "Maintain" ? (
                     <View style={styles.maintainNote}>
                       <View style={styles.maintainDot} />
                       <ThemedText style={styles.maintainNoteText}>{t("profile.maintainNote")}</ThemedText>
                     </View>
-                  )}
+                  ) : null}
                 </View>
+              )}
+
+              {/* Plan focus — reads straight into CalculateMacros (fat ×1.10
+                  / ×0.90, protein ×0.95). It had no UI at all: the app sent
+                  whatever the web had stored, so an app-only customer was
+                  permanently on Balance without ever being asked. */}
+              {showAll && (
+                <>
+                  <SectionHeading text={t("profile.sectionPlanFocus")} />
+                  <View style={{ gap: 6 }} onLayout={registerAnchor("planFocus")}>
+                    <HelperText>{t("profile.planFocusHelp")}</HelperText>
+                    <View style={{ gap: spacing[2], marginTop: 4 }}>
+                      {PLAN_FOCUS_OPTIONS.map((o) => (
+                        <OptionCard
+                          key={o.value}
+                          label={t(`profileOptions.planFocus.${o.value}.label`)}
+                          description={t(`profileOptions.planFocus.${o.value}.description`)}
+                          active={form.planFocus === o.value}
+                          onPress={() => choose("planFocus", { planFocus: o.value })}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* Female-only cycle inputs — also previously unreachable in
+                  the app, and worse: the save omitted them entirely, so
+                  editing anything here WIPED a cycle phase set on the web
+                  and quietly moved the target by 100 kcal. */}
+              {showAll && form.gender === "Female" && (
+                <>
+                  <SectionHeading text={t("profile.sectionCycle")} />
+                  <View style={{ gap: spacing[5] }}>
+                    <View style={{ gap: 6 }} onLayout={registerAnchor("menopause")}>
+                      <FieldLabel>{t("profile.menopauseLabel")}</FieldLabel>
+                      <HelperText>{t("profile.menopauseHelp")}</HelperText>
+                      <View style={{ gap: spacing[2], marginTop: 4 }}>
+                        {MENOPAUSE_OPTIONS.map((o) => (
+                          <OptionCard
+                            key={o.value}
+                            label={t(`profileOptions.menopause.${o.value}.label`)}
+                            description={t(`profileOptions.menopause.${o.value}.description`)}
+                            active={form.menopause === o.value}
+                            onPress={() =>
+                              choose("menopause", {
+                                menopause: o.value,
+                                // The phase only applies to an active cycle.
+                                cyclePhase: o.value === "Cycling" ? form.cyclePhase : null,
+                              })
+                            }
+                          />
+                        ))}
+                      </View>
+                    </View>
+
+                    {form.menopause === "Cycling" && (
+                      <View style={{ gap: 6 }} onLayout={registerAnchor("cyclePhase")}>
+                        <FieldLabel>{t("profile.cyclePhaseLabel")}</FieldLabel>
+                        <HelperText>{t("profile.cyclePhaseHelp")}</HelperText>
+                        <View style={{ gap: spacing[2], marginTop: 4 }}>
+                          {CYCLE_PHASE_OPTIONS.map((o) => (
+                            <SelectRow
+                              key={o.value}
+                              label={t(`profileOptions.cyclePhase.${o.value}.label`)}
+                              rightText={t(`profileOptions.cyclePhase.${o.value}.days`, {
+                                defaultValue: "",
+                              })}
+                              active={form.cyclePhase === o.value}
+                              onPress={() => choose("cyclePhase", { cyclePhase: o.value })}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                </>
               )}
 
               {/* Live preview line (adaptation of the web's behind-modal plan card) */}
@@ -430,17 +540,31 @@ export function EditSectionModal({
                 </ThemedText>
               ) : null}
 
+              {/* What is still missing, named. The old flow let the save
+                  through and filled the gaps with defaults. */}
+              {gateSave ? (
+                <View style={styles.missingBox}>
+                  <ThemedText style={styles.missingIntro}>{t("profile.missingIntro")}</ThemedText>
+                  {missing.map((id) => (
+                    <ThemedText key={id} style={styles.missingItem}>
+                      · {t(`profile.missingStep.${id}`)}
+                    </ThemedText>
+                  ))}
+                </View>
+              ) : null}
+
               {saveError ? <ThemedText style={styles.errorText}>{saveError}</ThemedText> : null}
 
               <Pressable
                 onPress={onSave}
-                disabled={saving || saveDone}
+                disabled={saving || saveDone || gateSave}
                 style={({ pressed }) => [
                   styles.saveButton,
-                  pressed && !saving && { backgroundColor: colors.accentHover },
-                  (saving || saveDone) && { opacity: 0.75 },
+                  pressed && !saving && !gateSave && { backgroundColor: colors.accentHover },
+                  (saving || saveDone || gateSave) && { opacity: 0.75 },
                 ]}
                 accessibilityRole="button"
+                accessibilityState={{ disabled: saving || saveDone || gateSave }}
               >
                 <Check size={15} color={colors.textPrimary} strokeWidth={2.5} />
                 <ThemedText style={styles.saveButtonText}>
@@ -468,9 +592,9 @@ export function EditSectionModal({
           <View style={styles.guideCard} pointerEvents="box-none">
             <View style={styles.sheetHeader}>
               <ThemedText style={styles.sheetTitle}>
-                {form.gender === "Male"
-                  ? t("profile.bodyFatGuideMale")
-                  : t("profile.bodyFatGuideFemale")}
+                {form.gender === "Female"
+                  ? t("profile.bodyFatGuideFemale")
+                  : t("profile.bodyFatGuideMale")}
               </ThemedText>
               <Pressable
                 onPress={() => setGuideOpen(false)}
@@ -506,6 +630,27 @@ export function EditSectionModal({
       )}
     </Modal>
   );
+}
+
+/** Form tri-state → the backend's nullable bool. "PreferNotToSay" and
+ *  "never asked" both send null; the difference matters to the form, not to
+ *  the engine (which applies no adjustment either way). */
+export function menopauseToApi(v: ProfileFormState["menopause"]): boolean | null {
+  if (v === "Postmenopausal") return true;
+  if (v === "Cycling") return false;
+  return null;
+}
+
+/** Backend nullable bool → form tri-state. A stored null on a female
+ *  profile is shown as unanswered, so the question gets asked once. */
+export function menopauseFromApi(
+  isPostmenopausal: boolean | null,
+  gender: string
+): ProfileFormState["menopause"] {
+  if (gender !== "Female") return null;
+  if (isPostmenopausal === true) return "Postmenopausal";
+  if (isPostmenopausal === false) return "Cycling";
+  return null;
 }
 
 /** Calm section divider for the combined profile page (P13). */
@@ -564,8 +709,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sheetContent: { paddingHorizontal: spacing[5], paddingBottom: spacing[5] },
-  labelRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" },
-  skipLink: { fontSize: 12, color: "rgba(255,255,255,0.5)" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing[2], marginTop: 4 },
   linkChip: {
     backgroundColor: "rgba(255,255,255,0.04)",
@@ -630,6 +773,18 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.mono,
     color: "rgba(255,255,255,0.45)",
   },
+  missingBox: {
+    marginTop: spacing[4],
+    gap: 3,
+    borderWidth: 1,
+    borderColor: "rgba(232,101,10,0.25)",
+    backgroundColor: "rgba(232,101,10,0.07)",
+    borderRadius: 12,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+  },
+  missingIntro: { fontSize: 12.5, fontFamily: fontFamily.bodySemibold, color: colors.accent },
+  missingItem: { fontSize: 12, lineHeight: 17, color: "rgba(255,255,255,0.62)" },
   errorText: { marginTop: spacing[3], fontSize: 13, color: "#f87171" },
   saveButton: {
     marginTop: spacing[4],

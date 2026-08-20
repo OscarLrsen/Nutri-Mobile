@@ -48,7 +48,19 @@ import { colors, fontFamily, spacing } from "@/theme";
 import {
   deriveTrainingSessionsFromWeeklySchedule,
 } from "./profileOptions";
-import { EditSectionModal, type EditSection, type ProfileFormState } from "./EditSectionModal";
+import {
+  EditSectionModal,
+  menopauseFromApi,
+  menopauseToApi,
+  type EditSection,
+} from "./EditSectionModal";
+import {
+  hasValidAge,
+  hasValidHeight,
+  hasValidWeight,
+  isProfileComplete,
+  type ProfileFormState,
+} from "./profileRequirements";
 import { TrainingScheduleSheet } from "./TrainingScheduleSheet";
 import { OrderHistory } from "./OrderHistory";
 import { PushNotificationsSection } from "@/features/push/PushNotificationsSection";
@@ -72,34 +84,27 @@ import { PushNotificationsSection } from "@/features/push/PushNotificationsSecti
  *   exactly like the web's save path.
  */
 
-const PLAN_FOCUS_MAP: Record<string, string> = {
-  satiety: "Satiety",
-  performance: "Performance",
-  health: "Health",
-  balance: "Balance",
-};
-
-function mapPlanFocusBack(planFocus: string | null): string {
-  const map: Record<string, string> = {
-    Satiety: "satiety",
-    Performance: "performance",
-    Health: "health",
-    Balance: "balance",
-  };
-  return map[planFocus ?? ""] ?? "balance";
-}
-
+/**
+ * A brand-new profile starts EMPTY, not defaulted. The old EMPTY_FORM
+ * pre-answered gender as Male, activity as Mixed and the goal as Maintain;
+ * combined with an onboarding sheet that never showed those fields, a first
+ * run saved a profile the customer had not described. Null means unanswered,
+ * and the sheet will not save until it is answered.
+ */
 const EMPTY_FORM: ProfileFormState = {
-  gender: "Male",
+  gender: null,
   ageYears: "",
   weightKg: "",
   heightCm: "",
   bodyFatLevel: null,
-  activityType: "Mixed",
+  activityType: null,
   stepsRange: null,
   trainingSessions: null,
-  primaryGoal: "Maintain",
+  primaryGoal: null,
   goalPace: null,
+  planFocus: null,
+  menopause: null,
+  cyclePhase: null,
 };
 
 function formFromProfile(np: ApiNutritionProfile): ProfileFormState {
@@ -114,6 +119,9 @@ function formFromProfile(np: ApiNutritionProfile): ProfileFormState {
     trainingSessions: np.trainingSessions,
     primaryGoal: np.primaryGoal as ProfileFormState["primaryGoal"],
     goalPace: np.goalPace,
+    planFocus: (np.planFocus as ProfileFormState["planFocus"]) ?? null,
+    menopause: menopauseFromApi(np.isPostmenopausal, np.gender),
+    cyclePhase: np.cyclePhase,
   };
 }
 
@@ -177,7 +185,6 @@ export function ProfileScreen() {
   const [saveError, setSaveError] = useState("");
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [showOrders, setShowOrders] = useState(false);
-  const [planFocus, setPlanFocus] = useState<string>("balance");
 
   // Release P14: the previous weight, for the "senaste förändring" line.
   // Device-local — the backend keeps no weight history.
@@ -202,28 +209,42 @@ export function ProfileScreen() {
   const [weeklyScheduleSaving, setWeeklyScheduleSaving] = useState(false);
   const [scheduleExpanded, setScheduleExpanded] = useState(false);
 
-  const buildDto = useCallback(
-    (): UpsertNutritionProfileDto => ({
-      gender: form.gender,
-      ageYears: parseInt(form.ageYears) || 0,
-      weightKg: parseFloat(form.weightKg) || 0,
-      heightCm: parseInt(form.heightCm) || 0,
+  /**
+   * Null when the form has not answered everything the engine needs — the
+   * caller refuses to save rather than substituting a default. Every
+   * algorithm field is sent from the FORM, including the two the old
+   * version left out entirely: PUT /nutrition-profile assigns
+   * IsPostmenopausal and CyclePhase unconditionally, so omitting them wiped
+   * a cycle phase set on the web and moved the luteal target by 100 kcal on
+   * every unrelated edit (the same wipe the P14 comment below describes for
+   * the goal weight).
+   */
+  const buildDto = useCallback((): UpsertNutritionProfileDto | null => {
+    if (!isProfileComplete(form)) return null;
+    return {
+      gender: form.gender!,
+      ageYears: parseInt(form.ageYears),
+      weightKg: parseFloat(form.weightKg),
+      heightCm: parseInt(form.heightCm),
       bodyFatLevel: form.bodyFatLevel,
       // Release P14: PRESERVE any stored goal weight — the old hard-coded
       // null silently wiped it on every save. Current weight and goal weight
-      // are separate facts; only the current one is edited here.
+      // are separate facts; only the current one is edited here. (The engine
+      // never reads it; it is a display fact.)
       targetWeightKg: nutritionProfile?.targetWeightKg ?? null,
-      activityType: form.activityType,
+      activityType: form.activityType!,
       stepsRange: form.stepsRange,
       trainingSessions: form.trainingSessions,
-      primaryGoal: form.primaryGoal,
+      primaryGoal: form.primaryGoal!,
       goalPace: form.primaryGoal === "Maintain" ? null : form.goalPace,
       mealCountMain: 3,
       mealCountSnacks: 1,
-      planFocus: PLAN_FOCUS_MAP[planFocus] ?? "Balance",
-    }),
-    [form, planFocus, nutritionProfile]
-  );
+      planFocus: form.planFocus,
+      isPostmenopausal: menopauseToApi(form.menopause),
+      // The engine ignores the phase unless there is an active cycle.
+      cyclePhase: form.menopause === "Cycling" ? form.cyclePhase : null,
+    };
+  }, [form, nutritionProfile]);
 
   // Patch 13: reloadResult is now ALSO triggered by the shared nutrition
   // query's refetch stamp (see the sync effect below), so it can resolve
@@ -273,7 +294,6 @@ export function ProfileScreen() {
         setNutritionProfile(np);
         if (np) {
           setForm(formFromProfile(np));
-          setPlanFocus(mapPlanFocusBack(np.planFocus));
           if (np.isComplete) await reloadResult(np);
         }
       } catch {
@@ -334,10 +354,7 @@ export function ProfileScreen() {
 
   // ── Edit handlers (web parity) ──
   const openEdit = (section: EditSection) => {
-    if (nutritionProfile) {
-      setForm(formFromProfile(nutritionProfile));
-      setPlanFocus(mapPlanFocusBack(nutritionProfile.planFocus));
-    }
+    if (nutritionProfile) setForm(formFromProfile(nutritionProfile));
     setSaveError("");
     setEditing(section);
   };
@@ -352,21 +369,36 @@ export function ProfileScreen() {
     setSaving(true);
     setSaveError("");
     // Every section that carries the basic numbers validates them — the
-    // combined page (P13) and the weight quick-edit (P14) included.
+    // combined page (P13) and the weight quick-edit (P14) included. The
+    // bounds live in profileRequirements so this check and the sheet's
+    // completeness gate can never disagree about what "filled in" means.
     if (editing === "grunddata" || editing === "profil" || editing === "vikt") {
-      const age = parseInt(form.ageYears);
-      const weight = parseFloat(form.weightKg);
-      const height = parseInt(form.heightCm);
-      if (
-        isNaN(age) || age < 10 || age > 120 ||
-        isNaN(weight) || weight < 30 || weight > 400 ||
-        isNaN(height) || height < 100 || height > 250
-      ) {
+      const basicsOk =
+        editing === "vikt"
+          ? hasValidWeight(form)
+          : hasValidAge(form) && hasValidWeight(form) && hasValidHeight(form);
+      if (!basicsOk) {
         setSaveError(t("profile.errorInvalidBasics"));
         setSaving(false);
         return;
       }
     }
+
+    // The weight quick-edit shows ONE number, so it must not be gated on
+    // fields it cannot display: it saves the stored profile with the new
+    // weight. Anything the customer skipped under the old form stays exactly
+    // as stored instead of being re-defaulted — the full editor is where
+    // those gaps get filled.
+    const dto =
+      editing === "vikt" && nutritionProfile
+        ? { ...buildDtoFromStoredProfile(nutritionProfile), weightKg: parseFloat(form.weightKg) }
+        : buildDto();
+    if (!dto) {
+      setSaveError(t("profile.errorIncomplete"));
+      setSaving(false);
+      return;
+    }
+
     try {
       const previousWeight = nutritionProfile?.weightKg ?? null;
       // The goal the customer actually had SAVED before this change —
@@ -374,9 +406,8 @@ export function ProfileScreen() {
       // the state with the post-change numbers.
       const previousResult = nutritionResult;
       const wasIncomplete = isOnboardingComplete !== true;
-      const updated = await upsertNutritionProfile(buildDto());
+      const updated = await upsertNutritionProfile(dto);
       setNutritionProfile(updated);
-      setPlanFocus(mapPlanFocusBack(updated.planFocus));
       // Patch 13: a profile change alters today's goal — refresh every
       // shared nutrition query so Home/Meny/Planera din dag follow.
       void queryClient.invalidateQueries({ queryKey: ["nutrition"] });

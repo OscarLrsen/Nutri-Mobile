@@ -47,6 +47,33 @@ export const GOAL_PACE_OPTIONS: Record<
   MuscleGain: [{ value: "Careful" }, { value: "Normal" }],
 };
 
+/** Macro focus — read by NutritionEngineService.CalculateMacros (fat ×1.10
+ * for Satiety/Health, ×0.90 for Performance, protein ×0.95 for Health).
+ * Balance applies no adjustment and is the backend's default. */
+export const PLAN_FOCUS_OPTIONS = [
+  { value: "Balance" },
+  { value: "Satiety" },
+  { value: "Performance" },
+  { value: "Health" },
+] as const;
+
+/** Female only. Maps to the backend's nullable IsPostmenopausal:
+ * Postmenopausal → true, Cycling → false, PreferNotToSay → null. */
+export const MENOPAUSE_OPTIONS = [
+  { value: "Cycling" },
+  { value: "Postmenopausal" },
+  { value: "PreferNotToSay" },
+] as const;
+
+/** Female with an active cycle. Only Luteal carries a calorie adjustment
+ * (+100 kcal); the rest are 0, including Unknown. */
+export const CYCLE_PHASE_OPTIONS = [
+  { value: "Menstruation" },
+  { value: "Follicular" },
+  { value: "Luteal" },
+  { value: "Unknown" },
+] as const;
+
 /** Body-fat levels per gender. `label` is a percent figure (not translated);
  * the description is profileOptions.bodyFatDesc.<level>. */
 export const BODY_FAT_OPTIONS: Record<

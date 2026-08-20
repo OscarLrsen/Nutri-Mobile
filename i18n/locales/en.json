@@ -546,9 +546,30 @@
     "dailyActivity": "Everyday activity",
     "stepsPerDay": "Steps per day",
     "skip": "Skip",
-    "unsureSkip": "Not sure? Skip.",
+    "stepsHelp": "Roughly is fine. Think of a normal weekday.",
     "trainingSessions": "Training sessions",
     "trainingHelp": "Count sessions that last at least about 30 minutes.",
+    "sectionPlanFocus": "Focus",
+    "planFocusHelp": "What should the plan prioritise? This adjusts the split between protein, fat and carbs.",
+    "sectionCycle": "Cycle",
+    "menopauseLabel": "Menstrual cycle",
+    "menopauseHelp": "Nutri adjusts your energy needs slightly during the luteal phase.",
+    "cyclePhaseLabel": "Where are you in your cycle right now?",
+    "cyclePhaseHelp": "An estimate is fine. You can change it any time.",
+    "missingIntro": "Fill these in to save:",
+    "missingStep": {
+      "gender": "Sex",
+      "numbers": "Age, weight and height",
+      "activityType": "Everyday activity",
+      "steps": "Steps per day",
+      "training": "Training sessions",
+      "goal": "Primary goal",
+      "pace": "Pace",
+      "planFocus": "Plan focus",
+      "menopause": "Menstrual cycle",
+      "cyclePhase": "Your cycle phase"
+    },
+    "errorIncomplete": "Some fields are still missing.",
     "primaryGoal": "Primary goal",
     "primaryGoalHelp": "Choose what Nutri should optimise your plan for.",
     "pace": "Pace",
@@ -1092,6 +1113,56 @@
       "4": "A bit more",
       "5": "More",
       "6": "High"
+    },
+    "planFocus": {
+      "Balance": {
+        "label": "Balance",
+        "description": "An even split. Nutri's default."
+      },
+      "Satiety": {
+        "label": "Satiety",
+        "description": "A little more fat — keeps hunger away for longer."
+      },
+      "Performance": {
+        "label": "Performance",
+        "description": "More carbs for training, slightly less fat."
+      },
+      "Health": {
+        "label": "Health",
+        "description": "A gentler protein level and more fat for hormones and recovery."
+      }
+    },
+    "menopause": {
+      "Cycling": {
+        "label": "I have an active cycle",
+        "description": "Nutri adapts your energy to where you are in your cycle."
+      },
+      "Postmenopausal": {
+        "label": "I am postmenopausal",
+        "description": "No cycle adjustment is applied."
+      },
+      "PreferNotToSay": {
+        "label": "Prefer not to say",
+        "description": "That's fine. No cycle adjustment is applied."
+      }
+    },
+    "cyclePhase": {
+      "Menstruation": {
+        "label": "Menstruation",
+        "days": "approx. day 1–5"
+      },
+      "Follicular": {
+        "label": "Follicular phase",
+        "days": "approx. day 1–13"
+      },
+      "Luteal": {
+        "label": "Luteal phase",
+        "days": "approx. day 15–28"
+      },
+      "Unknown": {
+        "label": "Not sure",
+        "days": "no adjustment"
+      }
     },
     "categoryNames": {
       "frukost": "Breakfast",

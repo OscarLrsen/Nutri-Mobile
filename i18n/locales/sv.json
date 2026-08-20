@@ -546,9 +546,30 @@
     "dailyActivity": "Vardagsaktivitet",
     "stepsPerDay": "Steg per dag",
     "skip": "Hoppa över",
-    "unsureSkip": "Osäker? Hoppa över.",
+    "stepsHelp": "Ungefär räcker. Ta en vanlig vardag.",
     "trainingSessions": "Träningspass",
     "trainingHelp": "Räkna pass som varar minst ca 30 minuter.",
+    "sectionPlanFocus": "Fokus",
+    "planFocusHelp": "Vad ska planen prioritera? Detta justerar fördelningen mellan protein, fett och kolhydrater.",
+    "sectionCycle": "Cykel",
+    "menopauseLabel": "Menstruationscykel",
+    "menopauseHelp": "Nutri justerar energibehovet något under lutealfasen.",
+    "cyclePhaseLabel": "Var i cykeln är du nu?",
+    "cyclePhaseHelp": "Ungefärligt räcker. Du kan ändra det när som helst.",
+    "missingIntro": "Fyll i detta för att spara:",
+    "missingStep": {
+      "gender": "Kön",
+      "numbers": "Ålder, vikt och längd",
+      "activityType": "Vardagsaktivitet",
+      "steps": "Steg per dag",
+      "training": "Träningspass",
+      "goal": "Primärt mål",
+      "pace": "Takt",
+      "planFocus": "Fokus för planen",
+      "menopause": "Menstruationscykel",
+      "cyclePhase": "Var i cykeln du är"
+    },
+    "errorIncomplete": "Några fält saknas fortfarande.",
     "primaryGoal": "Primärt mål",
     "primaryGoalHelp": "Välj vad Nutri ska optimera din plan för.",
     "pace": "Takt",
@@ -1092,6 +1113,56 @@
       "4": "Lite mer",
       "5": "Mer",
       "6": "Högt"
+    },
+    "planFocus": {
+      "Balance": {
+        "label": "Balans",
+        "description": "Jämn fördelning. Nutris standard."
+      },
+      "Satiety": {
+        "label": "Mättnad",
+        "description": "Något mer fett — håller hungern borta längre."
+      },
+      "Performance": {
+        "label": "Prestation",
+        "description": "Mer kolhydrater till träningen, något mindre fett."
+      },
+      "Health": {
+        "label": "Hälsa",
+        "description": "Mjukare proteinnivå och mer fett för hormoner och återhämtning."
+      }
+    },
+    "menopause": {
+      "Cycling": {
+        "label": "Jag har en aktiv cykel",
+        "description": "Nutri anpassar energin efter var i cykeln du är."
+      },
+      "Postmenopausal": {
+        "label": "Jag är postmenopausal",
+        "description": "Ingen cykeljustering görs."
+      },
+      "PreferNotToSay": {
+        "label": "Vill inte ange",
+        "description": "Helt okej. Ingen cykeljustering görs."
+      }
+    },
+    "cyclePhase": {
+      "Menstruation": {
+        "label": "Menstruation",
+        "days": "ca dag 1–5"
+      },
+      "Follicular": {
+        "label": "Follikelfas",
+        "days": "ca dag 1–13"
+      },
+      "Luteal": {
+        "label": "Lutealfas",
+        "days": "ca dag 15–28"
+      },
+      "Unknown": {
+        "label": "Vet inte",
+        "days": "ingen justering"
+      }
     },
     "categoryNames": {
       "frukost": "Frukost",
