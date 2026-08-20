@@ -15,6 +15,7 @@ import { personalizeMealName } from "@/utils/personalizeMealName";
 import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import type { MealRecommendation } from "./mealRecommendation";
+import { BREAKFAST_WINDOW_LABEL, isBreakfastLocked } from "./breakfastWindow";
 import { usePersonalizedMeal } from "./personalizedMenu";
 import { arePersonalSizesEquivalent } from "./portionEquivalence";
 
@@ -178,6 +179,12 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
     CUSTOMER_SIZE_OPTIONS.find((s) => s.id === recSizeId)?.label ?? recSizeId ?? "";
   const isRecommendedSelected = hasRecommendation && effectiveSize === recSizeId;
 
+  // Breakfast outside 10:00–11:00. Advisory only — BreakfastWindowRules.cs
+  // refuses the order server-side whatever the device clock says — but
+  // without it the Add button is live and fails at checkout with an error
+  // the customer cannot act on.
+  const breakfastLocked = isBreakfastLocked(meal, language);
+
   const selected = stockBySize[effectiveSize as "medium" | "large"];
   const stockLocked = allSoldOut || selected.soldOut;
   const showLowStock =
@@ -189,7 +196,7 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
   const showImage = !imageFailed && meal.image.trim().length > 0;
 
   const handleAdd = () => {
-    if (stockLocked || addLockedRef.current || personalAddPending) return;
+    if (stockLocked || breakfastLocked || addLockedRef.current || personalAddPending) return;
 
     // Same cart mapping and selected-size contract as MealDetailScreen.
     addLockedRef.current = true;
@@ -238,7 +245,15 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
   return (
     <View style={styles.card}>
       <Pressable
-        onPress={() => router.push(`/meal/${meal.id}`)}
+        onPress={() =>
+          // The slot rides along so the detail screen recommends the SAME
+          // size this card does — it has no category context of its own,
+          // which is why it used to open on M regardless.
+          router.push({
+            pathname: "/meal/[id]",
+            params: { id: meal.id, ...(recommendation ? { slot: recommendation.slot } : {}) },
+          })
+        }
         style={({ pressed }) => [styles.detailArea, pressed && styles.detailAreaPressed]}
         accessibilityRole="button"
         accessibilityLabel={meal.name}
@@ -421,21 +436,38 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
 
         <Pressable
           onPress={handleAdd}
-          disabled={stockLocked || added || personalAddPending}
+          disabled={stockLocked || breakfastLocked || added || personalAddPending}
           style={({ pressed }) => [
             styles.addButton,
             added && styles.addButtonAdded,
-            (stockLocked || personalAddPending) && styles.addButtonLocked,
-            pressed && !added && !stockLocked && !personalAddPending && styles.addButtonPressed,
+            (stockLocked || breakfastLocked || personalAddPending) && styles.addButtonLocked,
+            pressed &&
+              !added &&
+              !stockLocked &&
+              !breakfastLocked &&
+              !personalAddPending &&
+              styles.addButtonPressed,
           ]}
           accessibilityRole="button"
-          accessibilityState={{ disabled: stockLocked || added || personalAddPending }}
+          accessibilityState={{
+            disabled: stockLocked || breakfastLocked || added || personalAddPending,
+          }}
           accessibilityLabel={
-            stockLocked ? t("menu.soldOutToday") : added ? t("menu.added") : t("mealDetail.add")
+            stockLocked
+              ? t("menu.soldOutToday")
+              : breakfastLocked
+                ? t("menu.breakfastClosed", { window: BREAKFAST_WINDOW_LABEL })
+                : added
+                  ? t("menu.added")
+                  : t("mealDetail.add")
           }
         >
           {stockLocked ? (
             <ThemedText style={styles.addLabelLocked}>{t("menu.soldOutToday")}</ThemedText>
+          ) : breakfastLocked ? (
+            <ThemedText style={styles.addLabelLocked}>
+              {t("menu.breakfastServedShort", { window: BREAKFAST_WINDOW_LABEL })}
+            </ThemedText>
           ) : added ? (
             <>
               <Check size={12} color={colors.accent} strokeWidth={2.5} />

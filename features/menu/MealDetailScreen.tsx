@@ -22,6 +22,9 @@ import { useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { usePersonalizedMeal } from "./personalizedMenu";
 import { arePersonalSizesEquivalent } from "./portionEquivalence";
+import { parseSlot, recommendSize, slotForMeal, slotTarget } from "./mealRecommendation";
+import { BREAKFAST_WINDOW_LABEL, isBreakfastLocked } from "./breakfastWindow";
+import { useTodayDayPlanQuery, useTodayNutritionQuery } from "@/services/api/nutritionQueries";
 
 /**
  * Meal detail — mobile port of the web (customer)/meal/[id]/page.tsx,
@@ -55,7 +58,7 @@ export function MealDetailScreen() {
   const { language } = useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, slot: rawSlot } = useLocalSearchParams<{ id: string; slot?: string }>();
 
   const mealQuery = useQuery({
     queryKey: ["meals", id],
@@ -84,6 +87,39 @@ export function MealDetailScreen() {
   const { addItem, totalItems } = useCart();
   const [selectedSize, setSelectedSize] = useState<string>("medium");
   const [quantity, setQuantity] = useState(1);
+
+  // ── Recommended size (four-point batch) ────────────────────────────
+  //
+  // WHY THIS SCREEN USED TO OPEN ON M. The menu cards have a category, so
+  // they can ask which day-plan slot they belong to and preselect the size
+  // the plan calls for. This route has only a meal id, computed nothing, and
+  // hard-coded "medium" — so opening a Lunch the plan wants in L still
+  // showed M, and the customer had to correct a recommendation the app had
+  // already made one screen earlier.
+  //
+  // Same modules as the menu, no second engine: the slot comes from the
+  // navigation param when the card supplied one, otherwise it is derived
+  // from the meal itself (so a deep link or a back-navigation is just as
+  // right). Targets and sizes stay server-defined.
+  const slotParam = parseSlot(
+    Array.isArray(rawSlot) ? rawSlot[0] : rawSlot
+  );
+  const todayQuery = useTodayNutritionQuery();
+  const dayPlanQuery = useTodayDayPlanQuery();
+  const slot = meal ? (slotParam ?? slotForMeal(meal, language)) : null;
+  const recommendation = useMemo(() => {
+    if (!meal || !slot) return null;
+    return recommendSize(meal, slotTarget(todayQuery.data, dayPlanQuery.data, slot), slot);
+  }, [meal, slot, todayQuery.data, dayPlanQuery.data]);
+
+  // Preselect it once it arrives, with the card's exact rules: never steal a
+  // choice the customer has already made, and never select a sold-out size.
+  const userTouchedSizeRef = useRef(false);
+  const recSizeId = recommendation?.sizeId ?? null;
+  useEffect(() => {
+    if (isFixed || !recSizeId || userTouchedSizeRef.current) return;
+    setSelectedSize((current) => (current === recSizeId ? current : recSizeId));
+  }, [recSizeId, isFixed]);
   const [imageFailed, setImageFailed] = useState(false);
   const [added, setAdded] = useState(false);
   const addedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -212,10 +248,15 @@ export function MealDetailScreen() {
     selected.count > 0 &&
     selected.count <= LOW_STOCK_THRESHOLD;
   const stockLocked = allSoldOut || selected.soldOut;
+  // Advisory mirror of BreakfastWindowRules.cs — the server refuses the
+  // order regardless. This page had no lock at all before (the header
+  // comment said the web's isBreakfastTime was "not ported yet"), so the
+  // CTA was live and the refusal only arrived at checkout.
+  const breakfastLocked = meal ? isBreakfastLocked(meal, language) : false;
 
   // Same guard + call + 1.8s confirmation as the web page's handleAdd.
   const handleAdd = () => {
-    if (!meal || stockLocked || personalAddPending) return;
+    if (!meal || stockLocked || breakfastLocked || personalAddPending) return;
     if (personalData) {
       // Server macros and grams, and the server's EXACT öre price
       // (customPriceOre) — the same number this page displays, so the cart
@@ -608,18 +649,29 @@ export function MealDetailScreen() {
 
         <Pressable
           onPress={handleAdd}
-          disabled={stockLocked || personalAddPending}
+          disabled={stockLocked || breakfastLocked || personalAddPending}
           style={({ pressed }) => [
             styles.cta,
-            (stockLocked || personalAddPending) && styles.ctaLocked,
-            pressed && !stockLocked && !personalAddPending && { backgroundColor: colors.accentHover },
+            (stockLocked || breakfastLocked || personalAddPending) && styles.ctaLocked,
+            pressed &&
+              !stockLocked &&
+              !breakfastLocked &&
+              !personalAddPending && { backgroundColor: colors.accentHover },
           ]}
           accessibilityRole="button"
-          accessibilityState={{ disabled: stockLocked || personalAddPending }}
-          accessibilityLabel={t("mealDetail.add")}
+          accessibilityState={{ disabled: stockLocked || breakfastLocked || personalAddPending }}
+          accessibilityLabel={
+            breakfastLocked
+              ? t("menu.breakfastClosed", { window: BREAKFAST_WINDOW_LABEL })
+              : t("mealDetail.add")
+          }
         >
           {allSoldOut ? (
             <ThemedText style={styles.ctaLockedText}>{t("menu.soldOutToday")}</ThemedText>
+          ) : breakfastLocked ? (
+            <ThemedText style={styles.ctaLockedText}>
+              {t("menu.breakfastClosed", { window: BREAKFAST_WINDOW_LABEL })}
+            </ThemedText>
           ) : selected.soldOut ? (
             <ThemedText style={styles.ctaLockedText}>
               {t("mealDetail.sizeSoldOutChoose", {
