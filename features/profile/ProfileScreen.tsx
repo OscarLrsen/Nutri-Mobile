@@ -48,19 +48,18 @@ import { colors, fontFamily, spacing } from "@/theme";
 import {
   deriveTrainingSessionsFromWeeklySchedule,
 } from "./profileOptions";
+import { EditSectionModal, type EditSection } from "./EditSectionModal";
 import {
-  EditSectionModal,
-  menopauseFromApi,
-  menopauseToApi,
-  type EditSection,
-} from "./EditSectionModal";
-import {
+  formFromProfile,
   hasValidAge,
   hasValidHeight,
   hasValidWeight,
   isProfileComplete,
+  menopauseToApi,
   type ProfileFormState,
 } from "./profileRequirements";
+import { deriveProfileCompletion } from "./profileCompletion";
+import { DeleteAccountSection } from "./DeleteAccountSection";
 import { TrainingScheduleSheet } from "./TrainingScheduleSheet";
 import { OrderHistory } from "./OrderHistory";
 import { PushNotificationsSection } from "@/features/push/PushNotificationsSection";
@@ -107,23 +106,9 @@ const EMPTY_FORM: ProfileFormState = {
   cyclePhase: null,
 };
 
-function formFromProfile(np: ApiNutritionProfile): ProfileFormState {
-  return {
-    gender: np.gender as "Male" | "Female",
-    ageYears: np.ageYears > 0 ? String(np.ageYears) : "",
-    weightKg: np.weightKg > 0 ? String(np.weightKg) : "",
-    heightCm: np.heightCm > 0 ? String(np.heightCm) : "",
-    bodyFatLevel: np.bodyFatLevel,
-    activityType: np.activityType as ProfileFormState["activityType"],
-    stepsRange: np.stepsRange,
-    trainingSessions: np.trainingSessions,
-    primaryGoal: np.primaryGoal as ProfileFormState["primaryGoal"],
-    goalPace: np.goalPace,
-    planFocus: (np.planFocus as ProfileFormState["planFocus"]) ?? null,
-    menopause: menopauseFromApi(np.isPostmenopausal, np.gender),
-    cyclePhase: np.cyclePhase,
-  };
-}
+// formFromProfile now lives in profileRequirements, next to the rules that
+// decide whether the result is complete — the screen and the completion
+// check must read a stored profile the same way.
 
 /**
  * How far Nutri's recalculated recommendation must move before the weight
@@ -157,7 +142,7 @@ export function ProfileScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user, signOut } = useAuth();
-  const { isOnboardingComplete } = useOnboardingStatus();
+  const { isOnboardingComplete, isKnown: onboardingKnown } = useOnboardingStatus();
   const { t } = useTranslation();
   const { language } = useLanguage();
   const [languageSheetOpen, setLanguageSheetOpen] = useState(false);
@@ -329,12 +314,27 @@ export function ProfileScreen() {
     void reloadResult(nutritionProfile);
   }, [todayQuery.dataUpdatedAt, nutritionProfile, reloadResult]);
 
-  // Onboarding modal (web parity: shows when profile onboarding !== true).
+  // ── What this customer should be told about their profile ──────────
+  //
+  // ONE derivation, from profileCompletion.ts. It used to be two unrelated
+  // checks against the Supabase flag, and that flag reads `null` while it is
+  // still loading and `null` again when the read fails — the same value that
+  // means "never onboarded". So the "Welcome to Nutri!" modal appeared on
+  // cold starts and network hiccups for customers who had onboarded long
+  // ago. The stored nutrition profile is now the evidence; the flag is only
+  // consulted when there is no profile to look at.
+  const completion = deriveProfileCompletion({
+    onboardingFlag: isOnboardingComplete,
+    onboardingKnown: onboardingKnown,
+    profileLoading: nutritionLoading,
+    profile: nutritionProfile,
+  });
+
+  // The welcome modal is now reachable ONLY by a genuine first-time user.
   useEffect(() => {
-    if (isOnboardingComplete !== true && isOnboardingComplete !== undefined) {
-      setShowOnboardingModal(isOnboardingComplete === null);
-    }
-  }, [isOnboardingComplete]);
+    if (completion.state === "new-user") setShowOnboardingModal(true);
+    else setShowOnboardingModal(false);
+  }, [completion.state]);
 
   // Weekly schedule loads once the profile exists (web parity).
   const loadWeeklySchedule = useCallback(async () => {
@@ -755,15 +755,20 @@ export function ProfileScreen() {
         </Modal>
       )}
 
-      {/* ── Onboarding resumption banner ── */}
-      {isOnboardingComplete === false && (
+      {/* ── "Complete your profile" — for RETURNING customers only ──
+          Never a welcome. This is the state a long-standing customer lands
+          in when their stored profile predates fields the engine now reads;
+          the copy says so, and the CTA opens the full editor, which lists
+          exactly what is missing. A first-time user gets the modal above
+          instead, and a complete profile gets nothing at all. */}
+      {completion.state === "needs-completion" && (
         <View style={styles.banner}>
           <View style={{ flex: 1 }}>
             <ThemedText style={styles.bannerTitle}>{t("profile.bannerIncompleteTitle")}</ThemedText>
             <ThemedText style={styles.bannerBody}>{t("profile.bannerIncompleteBody")}</ThemedText>
           </View>
           <Pressable
-            onPress={() => openEdit("grunddata")}
+            onPress={() => openEdit(nutritionProfile ? "profil" : "grunddata")}
             style={styles.bannerCta}
             accessibilityRole="button"
           >
@@ -1145,11 +1150,14 @@ export function ProfileScreen() {
         </Pressable>
       </View>
 
-      {/* ── 5. Footer (logout only — no account deletion in V1) ── */}
+      {/* ── 5. Footer — sign out, then account deletion ──
+          Deletion sits below sign-out and renders as small destructive text
+          rather than a button: it must be findable, never prominent. */}
       <View style={styles.footer}>
         <Pressable onPress={handleLogout} accessibilityRole="button" style={{ padding: spacing[2] }}>
           <ThemedText style={styles.footerLink}>{t("auth.navLogout")}</ThemedText>
         </Pressable>
+        <DeleteAccountSection />
       </View>
 
       {/* ── Language picker sheet ── */}
