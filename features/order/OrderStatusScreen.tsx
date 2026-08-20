@@ -227,8 +227,11 @@ export function OrderStatusScreen() {
             it can never appear before an order exists; its own server-truth
             gating (shouldShow) makes it one-time — and finishing it simply
             unmounts the overlay, landing the customer right back here on the
-            live order status. */}
-        <OnboardingSurveyOverlay />
+            live order status. It now waits ~2.5s after this screen is
+            focused before covering it, so the customer lands on their order
+            first; orderId keys that wait, so a different order restarts it
+            rather than inheriting the previous one's timer. */}
+        <OnboardingSurveyOverlay orderId={order.id} />
       </>
     );
   }

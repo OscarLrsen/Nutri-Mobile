@@ -1,5 +1,6 @@
-import { useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check } from "lucide-react-native";
 
@@ -43,12 +44,31 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  * Visibility additionally requires consent state to be KNOWN safe
  * (requiresAcceptance === false), never assumed.
  */
-export function OnboardingSurveyOverlay() {
+/**
+ * How long the customer gets to see the order status before the survey
+ * covers it. Long enough to read the order number and the first status
+ * line; short enough that the survey still reads as part of the same
+ * moment rather than an interruption later on.
+ */
+export const SURVEY_DELAY_MS = 2500;
+
+export function OnboardingSurveyOverlay({ orderId }: { orderId?: string }) {
   const { user } = useAuth();
   const introSeen = useSyncExternalStore(subscribeIntroSeen, getIntroSeenCached);
   const nudgeActive = useSyncExternalStore(
     subscribeNudgeOverlayActivity,
     isAnyNudgeOverlayActive
+  );
+  // Focus, not mount: expo-router keeps a screen mounted underneath a push,
+  // so an unmount check alone would let the survey appear on top of whatever
+  // the customer navigated to. It also covers the navigation transition —
+  // the screen is not focused until the transition finishes.
+  const [focused, setFocused] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, [])
   );
 
   const consentsQuery = useQuery({
@@ -71,7 +91,36 @@ export function OnboardingSurveyOverlay() {
     consentsQuery.data?.requiresAcceptance === false &&
     surveyQuery.data?.shouldShow === true;
 
-  if (!eligible) return null;
+  // ── The 2.5s landing delay ────────────────────────────────────────
+  //
+  // The survey used to appear the instant the queries resolved, which on a
+  // warm cache is the same frame the order status mounts — the customer had
+  // just paid and was covered by a questionnaire before they could see
+  // their order number.
+  //
+  // The clock starts only when everything is true at once: the server says
+  // shouldShow, the screen is FOCUSED (so not during the push transition,
+  // and not while the customer is somewhere else), and the survey is
+  // actually eligible. One timer, created in one effect, cleared by that
+  // effect's own cleanup — so a re-render cannot stack a second one, and
+  // leaving the screen or a change of order cancels it rather than firing
+  // into a screen nobody is looking at.
+  //
+  // `armed` is reset to false whenever the conditions stop holding, so a
+  // return to the screen restarts the wait instead of appearing instantly.
+  // This affects THIS survey only; the food-feedback prompt has its own
+  // trigger and is untouched.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!eligible || !focused) {
+      setArmed(false);
+      return;
+    }
+    const timer = setTimeout(() => setArmed(true), SURVEY_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [eligible, focused, orderId]);
+
+  if (!eligible || !armed) return null;
 
   // While a nudge modal is up the survey is HIDDEN but stays MOUNTED —
   // display:none keeps step/selection state alive, so a nudge appearing
