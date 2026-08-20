@@ -49,19 +49,25 @@ export function LanguagePickerSheet({
         />
         {/* Drag-to-dismiss: same close path as the X and the backdrop, so a
             swipe simply closes the picker without changing the language. */}
-        <SwipeDownSheet style={styles.sheet} onDismiss={onClose}>
-          <View style={styles.header}>
-            <ThemedText style={styles.title}>{t("language.selectLanguage")}</ThemedText>
-            <Pressable
-              onPress={onClose}
-              style={styles.closeButton}
-              accessibilityRole="button"
-              accessibilityLabel={t("language.close")}
-            >
-              <X size={13} color={colors.accent} strokeWidth={1.7} />
-            </Pressable>
-          </View>
-
+        <SwipeDownSheet
+          style={styles.sheet}
+          onDismiss={onClose}
+          // The title row joins the drag zone — grabbing the top of the card
+          // pulls it down, rather than having to find the thin grabber.
+          header={
+            <View style={styles.header}>
+              <ThemedText style={styles.title}>{t("language.selectLanguage")}</ThemedText>
+              <Pressable
+                onPress={onClose}
+                style={styles.closeButton}
+                accessibilityRole="button"
+                accessibilityLabel={t("language.close")}
+              >
+                <X size={13} color={colors.accent} strokeWidth={1.7} />
+              </Pressable>
+            </View>
+          }
+        >
           <View style={styles.list}>
             {SUPPORTED_LANGUAGES.map((lang, i) => {
               const selected = lang.code === language;
