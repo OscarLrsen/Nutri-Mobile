@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
-import { ChevronRight } from "lucide-react-native";
 
+import { ThemedText } from "@/components/ui/ThemedText";
 import { DayPlanSlotList } from "@/features/dayplan/DayPlanSlotList";
 import { visibleSlotsFor } from "@/features/dayplan/dayPlanSlots";
 import { categoryForSlot, parseSlot } from "@/features/menu/mealRecommendation";
 import { useTodayDayPlanQuery, useTodayNutritionQuery } from "@/services/api/nutritionQueries";
 import { useTranslation } from "@/i18n";
-import { colors, spacing } from "@/theme";
+import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
  * The day plan, on Home.
@@ -87,13 +87,56 @@ export function HomeDayPlan() {
           if (!wizardSlot) return;
           router.navigate({
             pathname: "/(tabs)/meny",
-            params: { category: categoryForSlot(wizardSlot), slot: wizardSlot },
+            params: {
+              category: categoryForSlot(wizardSlot),
+              slot: wizardSlot,
+              // The menu applies an incoming category through an effect keyed
+              // on the params. Tapping the SAME slot twice is the same two
+              // params, so without a changing third the effect would not run
+              // again and a chip switched by hand in between would stand —
+              // the tap would look dead. The menu already reads this; nothing
+              // used to send it.
+              navKey: String(Date.now()),
+            },
           });
         }}
-        renderAction={() => (
-          <ChevronRight size={16} color={colors.textMuted} strokeWidth={2} />
-        )}
+        // THE EDIT AFFORDANCE, restored. The planner's rows have carried an
+        // "Ändra" button since patch 12; Home's rows were given a decorative
+        // chevron instead and the only door to the planner (the menu's
+        // "Planera din dag" card) was removed in the same change, which left
+        // every slot un-editable. Same control, same copy, same look as the
+        // planner — and it carries the slot, so Lunch and Middag open their
+        // own row rather than whichever the clock would have guessed.
+        renderAction={(slot) => {
+          const wizardSlot = parseSlot(slot.label);
+          if (!wizardSlot) return null;
+          const label = t(`planDay.slots.${slot.label}`, { defaultValue: slot.label });
+          return (
+            <Pressable
+              onPress={() =>
+                router.push({ pathname: "/planera-dagen", params: { slot: wizardSlot } })
+              }
+              style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button"
+              accessibilityLabel={t("planDay.editSlotAria", { slot: label })}
+            >
+              <ThemedText style={styles.editBtnText}>{t("planDay.edit")}</ThemedText>
+            </Pressable>
+          );
+        }}
       />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  editBtn: {
+    borderRadius: radius.btn,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  editBtnText: { fontSize: 12, fontFamily: fontFamily.bodySemibold, color: colors.textPrimary },
+});

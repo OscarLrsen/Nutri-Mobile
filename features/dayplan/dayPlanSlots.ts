@@ -32,6 +32,24 @@ export function orderForDisplay(meals: ApiMealDistribution[]): ApiMealDistributi
 }
 
 /**
+ * Whether a visible slot row may be edited in the current view.
+ *
+ * ONE definition, used by the planner's "Ändra" button and by the deep link
+ * that opens a slot's editor straight from Home — they must agree, or a
+ * customer could be sent to an editor that then refuses to exist.
+ *
+ * 3-meal mode with four stored meals is the exception: the rows there show
+ * SCALED numbers (the snack's calories spread across the three main meals)
+ * while the stored slot still holds the unscaled ones. Opening an editor on
+ * a slot whose numbers differ from the row the customer just tapped would be
+ * a lie about what is being changed, so the tab is switched first. This rule
+ * predates the Home move and is kept exactly as it was.
+ */
+export function isSlotEditable(mealTab: "3" | "4", mealCount: number): boolean {
+  return mealTab === "4" || mealCount < 4;
+}
+
+/**
  * The slots a 3- or 4-meal view shows. In 4-meal mode every slot is shown as
  * it stands. In 3-meal mode the snack is dropped and its calories are scaled
  * back into the three main meals, so the day still adds up to the same total

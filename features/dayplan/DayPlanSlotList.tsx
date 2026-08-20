@@ -71,7 +71,6 @@ export function DayPlanSlotList({
                   {slot.carbsG}g {t("menu.carbsShort")} · {slot.fatG}g {t("menu.fatShort")}
                 </ThemedText>
               </View>
-              {renderAction?.(slot) ?? null}
             </>
           );
 
@@ -79,21 +78,33 @@ export function DayPlanSlotList({
             return (
               <View key={slot.label} style={styles.slotCard}>
                 {body}
+                {renderAction?.(slot) ?? null}
               </View>
             );
           }
 
+          // A ROW THAT NAVIGATES **AND** CARRIES ITS OWN BUTTON.
+          //
+          // The press area is the dot and the text, not the whole card, and
+          // the action sits beside it rather than inside it. Nesting the
+          // button in the row's Pressable would have made it one target for
+          // a screen reader — the row's label would be spoken and the
+          // button would be unreachable — and would have left the two
+          // competing for the same touch. Same card, same spacing, same
+          // order on screen; the difference is only in who owns the tap.
           return (
-            <Pressable
-              key={slot.label}
-              onPress={() => onSlotPress(slot)}
-              style={({ pressed }) => [styles.slotCard, pressed && styles.slotCardPressed]}
-              accessibilityRole="button"
-              accessibilityLabel={label}
-              accessibilityHint={slotAccessibilityHint}
-            >
-              {body}
-            </Pressable>
+            <View key={slot.label} style={styles.slotCard}>
+              <Pressable
+                onPress={() => onSlotPress(slot)}
+                style={({ pressed }) => [styles.slotMain, pressed && styles.slotCardPressed]}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                accessibilityHint={slotAccessibilityHint}
+              >
+                {body}
+              </Pressable>
+              {renderAction?.(slot) ?? null}
+            </View>
           );
         })}
       </View>
@@ -133,6 +144,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
+  },
+  // The navigating half of a row. Lays out exactly as the card's own
+  // children did, so the visual result is unchanged.
+  slotMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
   },
   slotCardPressed: { opacity: 0.82 },
   slotDot: { width: 8, height: 8, borderRadius: radius.pill },

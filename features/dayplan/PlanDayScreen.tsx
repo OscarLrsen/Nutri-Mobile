@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Check, Package, RotateCcw } from "lucide-react-native";
 
@@ -19,7 +19,7 @@ import type { ApiMealDistribution } from "@/services/api/nutrition";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { DayPlanSlotList } from "./DayPlanSlotList";
-import { visibleSlotsFor } from "./dayPlanSlots";
+import { isSlotEditable, visibleSlotsFor } from "./dayPlanSlots";
 
 /**
  * "Planera din dag" (patch 12) — the mobile port of the web's existing
@@ -95,6 +95,35 @@ export function PlanDayScreen() {
     setEdit({ calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG });
     setEditingIdx(idx);
   };
+  /**
+   * Opened from a Home slot: land on THAT slot's editor, not on the list.
+   *
+   * Home sends the slot label because Lunch and Middag are two rows of the
+   * same plan — arriving without it would mean the customer has to find
+   * their row again, and would make "ändra middagen" and "ändra lunchen"
+   * the same action.
+   *
+   * Applied once, after hydration, so the editor opens on the SAVED values
+   * rather than on the baseline that is about to be replaced. The ref makes
+   * it once per visit: reopening the modal by hand and closing it must not
+   * be undone by a re-render.
+   */
+  const params = useLocalSearchParams<{ slot?: string }>();
+  const requestedSlot = params.slot;
+  const slotOpened = useRef(false);
+  useEffect(() => {
+    if (slotOpened.current || !hydrated || !requestedSlot) return;
+    slotOpened.current = true;
+    const idx = localMeals.findIndex((m) => m.label === requestedSlot);
+    if (idx < 0) return;
+    // Same rule the "Ändra" button uses — never open an editor the screen
+    // itself would not offer.
+    if (!isSlotEditable(mealTab, localMeals.length)) return;
+    const m = localMeals[idx];
+    setEdit({ calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG });
+    setEditingIdx(idx);
+  }, [hydrated, requestedSlot, localMeals, mealTab]);
+
   const adjustMacro = (key: "proteinG" | "carbsG" | "fatG", delta: number) => {
     setEdit((prev) => {
       const updated = { ...prev, [key]: Math.max(0, prev[key] + delta) };
@@ -282,8 +311,7 @@ export function PlanDayScreen() {
           slots={visibleSlots}
           renderAction={(slot) => {
             const realIdx = localMeals.findIndex((m) => m.label === slot.label);
-            const editable = mealTab === "4" || localMeals.length < 4;
-            if (!editable || realIdx < 0) return null;
+            if (!isSlotEditable(mealTab, localMeals.length) || realIdx < 0) return null;
             return (
               <Pressable
                 onPress={() => openEdit(realIdx)}
