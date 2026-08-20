@@ -29,9 +29,10 @@ import { colors, fontFamily, spacing } from "@/theme";
  *
  * Adaptations (documented, not guessed):
  * - `next` param mirrors the web's ?next= return-to flow; without it we
- *   router.back() (mobile has a navigation stack; the web defaults to "/").
- *   Only in-app paths are accepted — same open-redirect guard idea as the
- *   web's getSafeNext, trivially satisfied since Href values are app routes.
+ *   replace to the tabs. Only in-app paths are accepted — same
+ *   open-redirect guard idea as the web's getSafeNext, trivially satisfied
+ *   since Href values are app routes. (This used to go backwards through
+ *   the stack; see goNext below for why it cannot.)
  * - "Håll mig inloggad" is not ported: the web toggles localStorage vs
  *   sessionStorage, a browser-tab concept with no RN equivalent — the
  *   session always persists in SecureStore.
@@ -41,23 +42,44 @@ import { colors, fontFamily, spacing } from "@/theme";
 export function LoginScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { next } = useLocalSearchParams<{ next?: string }>();
+  // `email` is prefilled when registration hands the customer over here —
+  // they have just typed it, and asking for it again reads as a failure.
+  const { next, email: prefillEmail } = useLocalSearchParams<{
+    next?: string;
+    email?: string;
+  }>();
   const { user, loading: authLoading } = useAuth();
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(prefillEmail ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [loading, setLoading] = useState(false);
 
+  /**
+   * Where to go once there is a session.
+   *
+   * NEVER `back()`. This runs the moment a sign-in succeeds, and signing in
+   * rebuilds the whole navigator: `Stack.Protected guard={!signedIn}` drops
+   * `logga-in` and `registrera`, `guard={signedIn}` adds the app. Any
+   * history this screen had belonged to the group that just disappeared.
+   *
+   * `canGoBack()` was read BEFORE that rebuild and could still answer true,
+   * so the `GO_BACK` action was dispatched afterwards into a navigator with
+   * nothing to go back to — which is the "GO_BACK was not handled by any
+   * navigator" line in the console. Harmless in effect, because the guard
+   * flip had already moved the customer, but it was a real dead dispatch on
+   * every direct login.
+   *
+   * A replace states the destination instead of guessing at a stack, and
+   * the `next` deep-link intent still wins when there is one.
+   */
   const goNext = () => {
     if (next && next.startsWith("/")) {
       router.replace(next as Href);
-    } else if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace("/(tabs)");
+      return;
     }
+    router.replace("/(tabs)");
   };
 
   // Auth guard — an already-authenticated user shouldn't see the login form

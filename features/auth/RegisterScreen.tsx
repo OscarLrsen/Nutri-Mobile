@@ -74,7 +74,9 @@ export function RegisterScreen() {
   const [isDuplicateEmail, setIsDuplicateEmail] = useState(false);
   const [sent, setSent] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [sessionError, setSessionError] = useState(false);
+  /** Why "Jag har verifierat" did not get through, when it did not. Three
+   *  outcomes are possible and only one of them means "not verified". */
+  const [verifyMessage, setVerifyMessage] = useState<"notConfirmed" | "failed" | null>(null);
 
   // The backend consent record can only be written once a session exists,
   // which happens on THREE paths (instant session, the 4s poll, the "I have
@@ -256,15 +258,71 @@ export function RegisterScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sent]);
 
+  /**
+   * "Jag har verifierat".
+   *
+   * WHAT IT USED TO DO, AND WHY IT FAILED. It asked `getSession()` and
+   * treated a null answer as "not verified". But getSession() only reads
+   * LOCAL STORAGE — it never asks the server anything. After an ordinary
+   * e-mail verification the app has no local session at all: signUp() with
+   * confirmation required returns `session: null`, and clicking the link in
+   * a browser establishes a session there, not here. So a fully confirmed
+   * account was told it was unverified, while logging in on the next screen
+   * with the same credentials worked immediately. The button was asking
+   * "do I already have a session?" when the question is "is this account
+   * usable now?".
+   *
+   * WHAT IT DOES NOW. The session is still the fast path — if the deep link
+   * already brought one back, nothing else is needed. Otherwise it ANSWERS
+   * THE REAL QUESTION by signing in with the credentials this very screen
+   * still holds: the form lives in this component, so the password is in
+   * state, and no new storage or architecture is introduced to reach it.
+   *
+   * That also makes the three outcomes honest and distinguishable:
+   *   verified              → signed in, straight on to onboarding
+   *   not verified yet      → Supabase says email_not_confirmed, say so
+   *   network/other failure → say that instead, never "not verified"
+   */
   const handleCheckVerification = async () => {
     setChecking(true);
-    setSessionError(false);
-    const { data } = await supabase.auth.getSession();
-    if (data.session) {
-      await submitConsentsOnce();
-      goNext();
-    } else {
-      setSessionError(true);
+    setVerifyMessage(null);
+
+    try {
+      // Fast path: the confirmation deep link already established a session.
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        await submitConsentsOnce();
+        goNext();
+        return;
+      }
+
+      // No local session. That says nothing about the ACCOUNT, so ask the
+      // server the question that matters.
+      if (!password) {
+        // The password is gone (the customer navigated back and forth).
+        // Nothing to prove it with — hand them to login rather than claim
+        // the account is unverified.
+        router.replace({ pathname: "/logga-in", params: { email } });
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (!error) {
+        await submitConsentsOnce();
+        goNext();
+        return;
+      }
+
+      // The one answer that genuinely means "not verified yet".
+      const notConfirmed =
+        error.code === "email_not_confirmed" ||
+        /not confirmed/i.test(error.message);
+
+      setVerifyMessage(notConfirmed ? "notConfirmed" : "failed");
+    } catch {
+      setVerifyMessage("failed");
+    } finally {
       setChecking(false);
     }
   };
@@ -298,8 +356,16 @@ export function RegisterScreen() {
               {checking ? t("auth.checking") : t("auth.verified")}
             </ThemedText>
           </Pressable>
-          {sessionError ? (
-            <ThemedText style={styles.inboxHint}>{t("auth.noSession")}</ThemedText>
+          {/* Only "notConfirmed" says the mail is unverified. A failure to
+              reach Supabase says so instead — the old screen called both
+              "no verified session yet", which is how a confirmed account
+              was told it was not confirmed. */}
+          {verifyMessage ? (
+            <ThemedText style={styles.inboxHint}>
+              {verifyMessage === "notConfirmed"
+                ? t("auth.notConfirmedYet")
+                : t("auth.verifyFailed")}
+            </ThemedText>
           ) : null}
           <View style={styles.promptRow}>
             <ThemedText style={styles.promptText}>{t("auth.noMail")}</ThemedText>
