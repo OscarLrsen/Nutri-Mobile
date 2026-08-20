@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, TriangleAlert } from "lucide-react-native";
 
@@ -29,6 +30,7 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
 export function DeleteAccountSection() {
   const { t } = useTranslation();
   const { signOut } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
@@ -60,8 +62,14 @@ export function DeleteAccountSection() {
       // one last time on the way out.
       queryClient.clear();
       await signOut();
-      // No navigation call: signing out unmounts the whole signed-in stack
-      // and _layout's Stack.Protected lands on the logged-out screens.
+
+      // Say where to go rather than trusting the guard to fall somewhere
+      // sensible. Signing out drops every guarded screen and the navigator
+      // lands on whichever route is still standing — which is exactly how a
+      // deleted account ended up parked on the auth/callback screen. The
+      // guard ordering is fixed, but the outcome of deleting an account
+      // should not depend on fallback semantics at all.
+      router.replace("/logga-in");
     } catch {
       setError(t("account.deleteError"));
       setBusy(false);

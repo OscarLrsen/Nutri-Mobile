@@ -77,13 +77,6 @@ function RootNavigator() {
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
-      {/* OUTSIDE both guards on purpose. The confirmation deep link
-          (nutri://auth/callback#…) arrives while signed OUT, and the session
-          lands a moment later — so this route has to resolve in BOTH states.
-          Inside either guard it would be missing on one side of that flip and
-          Expo Router would fall through to +not-found, which is the 404 the
-          confirmation mail used to end on. */}
-      <Stack.Screen name="auth/callback" />
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="beloningar" />
@@ -108,6 +101,23 @@ function RootNavigator() {
         <Stack.Screen name="logga-in" />
         <Stack.Screen name="registrera" />
       </Stack.Protected>
+      {/* OUTSIDE both guards on purpose: the confirmation deep link arrives
+          while signed OUT and the session lands a moment later, so this
+          route has to resolve in BOTH states. Inside either guard it would
+          be missing on one side of that flip and Expo Router would fall
+          through to +not-found — the 404 the confirmation mail used to end
+          on.
+
+          DECLARED LAST, equally on purpose. An always-available route is
+          one the navigator can fall back to when the focused screen is
+          guarded away, and first place is where that fallback goes. Put
+          first, it took the slot this file's header promises to login: a
+          sign-out (account deletion, or an ordinary logout) dropped every
+          guarded screen and left the app sitting on "Signing you in…".
+          Last, the first available screen is `logga-in` again — and the
+          screen itself now leaves on its own if it is ever landed on
+          without a real exchange to wait for. */}
+      <Stack.Screen name="auth/callback" />
     </Stack>
   );
 }

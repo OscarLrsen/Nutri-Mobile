@@ -65,6 +65,7 @@
     "dayplan:check": "node scripts/check-home-day-plan.mjs",
     "final5:check": "node scripts/check-final-five.mjs",
     "qa3:check": "node scripts/check-three-qa-bugs.mjs",
+    "authreset:check": "node scripts/check-auth-reset.mjs",
     "doctor": "expo-doctor"
   },
   "private": true

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import * as Linking from "expo-linking";
 
 import { supabase } from "./supabase";
+import { beginAuthLink, endAuthLink } from "./authLinkActivity";
 
 /**
  * Turns an auth deep link back into a real session in THIS app.
@@ -51,17 +52,28 @@ export function AuthDeepLinkHandler() {
       if (!tokens) return;
 
       handledRef.current = url;
-      const { error } = await supabase.auth.setSession({
-        access_token: tokens.accessToken,
-        refresh_token: tokens.refreshToken,
-      });
 
-      if (error && __DEV__) {
-        // Never log the tokens themselves — only that the exchange failed.
-        console.warn("[auth] deep-link setSession failed:", error.message);
+      // Announce the exchange so the auth/callback screen knows there is
+      // something real to wait for. Without this it cannot tell a genuine
+      // confirmation from having been landed on as a fallback route.
+      beginAuthLink();
+      try {
+        const { error } = await supabase.auth.setSession({
+          access_token: tokens.accessToken,
+          refresh_token: tokens.refreshToken,
+        });
+
+        if (error && __DEV__) {
+          // Never log the tokens themselves — only that the exchange failed.
+          console.warn("[auth] deep-link setSession failed:", error.message);
+        }
+      } finally {
+        // Always ends the wait: a failed exchange must release the callback
+        // screen just as a successful one does, or it spins forever.
+        endAuthLink();
       }
-      // Success needs no navigation: AuthProvider's onAuthStateChange fires,
-      // RootNavigator's guard flips, and the app lands on Home by itself.
+      // Success needs no navigation here — AuthProvider's onAuthStateChange
+      // fires and the callback screen moves on once a user exists.
     };
 
     // Cold start: the app was launched BY the link.

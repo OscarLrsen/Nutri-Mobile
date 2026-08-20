@@ -44,12 +44,13 @@ check("app/auth/callback.tsx finns", existsSync("app/auth/callback.tsx"));
 const layout = readFileSync("app/_layout.tsx", "utf8");
 check("routen är registrerad", layout.includes('<Stack.Screen name="auth/callback" />'));
 
-// It must sit OUTSIDE both guards: the link arrives signed out and the
-// session lands a moment later.
+// It must sit OUTSIDE both guards — the link arrives signed out and the
+// session lands a moment later — but NOT first. Declared first it became
+// the navigator's fallback screen and a sign-out parked the app on it; see
+// check-auth-reset, which owns that invariant in full.
 const routeIdx = layout.indexOf('<Stack.Screen name="auth/callback" />');
-const firstGuardIdx = layout.indexOf("<Stack.Protected");
 check("routen ligger utanför båda Stack.Protected-grupperna",
-  routeIdx > 0 && firstGuardIdx > 0 && routeIdx < firstGuardIdx);
+  routeIdx > 0 && routeIdx > layout.lastIndexOf("</Stack.Protected>"));
 
 const register = readFileSync("features/auth/RegisterScreen.tsx", "utf8");
 const callbackScreen = readFileSync("app/auth/callback.tsx", "utf8");
@@ -57,8 +58,14 @@ check("returlänken pekar på exakt den path routen ligger på",
   register.includes('Linking.createURL("auth/callback")'));
 check("callback-skärmen gör ingen egen auth (handlern äger den)",
   !callbackScreen.includes("setSession") && !callbackScreen.includes("supabase"));
-check("callback-skärmen navigerar inte (guarden gör det)",
-  !callbackScreen.includes("router.replace") && !callbackScreen.includes("router.push"));
+// CORRECTED. This originally asserted the screen navigates nowhere,
+// "because the guard moves the app" — which is false for a route that sits
+// OUTSIDE the guards: nothing removes it when the session lands, so the app
+// stayed on it. The screen must navigate, and check-auth-reset pins where.
+check("callback-skärmen kan lämna sig själv",
+  callbackScreen.includes("router.replace"));
+check("callback-skärmen gör fortfarande ingen egen auth",
+  !callbackScreen.includes("setSession"));
 
 const handler = readFileSync("services/auth/AuthDeepLinkHandler.tsx", "utf8");
 check("handlern fångar både kall- och varmstart",
