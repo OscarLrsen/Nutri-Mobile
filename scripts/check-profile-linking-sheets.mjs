@@ -107,23 +107,34 @@ for (const file of [
 }
 
 // ── 4: kroppsfettsguiden ────────────────────────────────────────────────
-// Pinned on the IMPORT, not on the string: the block comment above the
-// guide chip deliberately records what the old external link did.
-check("guiden är in-app — ingen extern länk, ingen webbläsare",
-  !/^import .*\bLinking\b.*$/m.test(modal)
-  && !/[^ ]Linking\.openURL\(/.test(modal));
-check("guiden är könsspecifik",
+// REVERSED by a later decision: the guide is the EXTERNAL ruled.me page
+// again, because it has photographs at each percentage and our own list of
+// numbers did not. What must not come back is the silent failure.
+check("guiden öppnar exakt ruled.me-URL:en",
+  modal.includes('"https://www.ruled.me/visually-estimate-body-fat-percentage/"'));
+check("den interna guide-modalen är helt borta",
+  !modal.includes("guideOpen")
+  && !modal.includes("guideBackdrop")
+  && !modal.includes("guideCard")
+  && !modal.includes("bodyFatGuideIntro"));
+check("öppningen kan inte misslyckas tyst",
+  modal.includes("Linking.canOpenURL")
+  && modal.includes("Linking.openURL")
+  && /catch\s*\{[\s\S]{0,120}Alert\.alert/.test(modal));
+check("chippet är fortfarande könsspecifikt i texten",
   modal.includes('form.gender === "Female"')
   && modal.includes("bodyFatGuideFemale")
   && modal.includes("bodyFatGuideMale"));
-check("man kan välja nivå direkt i guiden",
-  /onChange\(\{ bodyFatLevel: opt\.value \}\);\s*setGuideOpen\(false\);/s.test(modal));
 check('"Hoppa över" finns inte kvar i profilformuläret',
   !modal.includes('t("profile.skip")') && !modal.includes("unsureSkip"));
 
 for (const locale of ["sv", "en", "da"]) {
   const json = JSON.parse(readFileSync(`i18n/locales/${locale}.json`, "utf8"));
-  check(`${locale}: guidetexten finns`, typeof json.profile?.bodyFatGuideIntro === "string");
+  check(`${locale}: felmeddelande för guiden finns`,
+    typeof json.profile?.bodyFatGuideErrorTitle === "string"
+    && typeof json.profile?.bodyFatGuideErrorBody === "string");
+  check(`${locale}: den döda guide-introtexten är borta`,
+    json.profile?.bodyFatGuideIntro === undefined);
   check(`${locale}: den gamla skip-texten är borta`, json.profile?.unsureSkip === undefined);
   check(`${locale}: fokus- och cykelval är översatta`,
     typeof json.profileOptions?.planFocus?.Balance?.label === "string"
@@ -194,4 +205,4 @@ console.log("    confirmation mail returns to the app, not a dead Safari page");
 console.log("    profile collects every field the engine reads — no invented defaults");
 console.log("    a profile edit can no longer wipe the female cycle answers");
 console.log("    bottom sheets swipe down, but never mid-save");
-console.log("    the body-fat guide is in-app, gender-specific, no 'Hoppa över'");
+console.log("    the body-fat guide opens ruled.me and cannot fail silently");

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -32,6 +34,7 @@ import {
   TRAINING_OPTIONS,
 } from "./profileOptions";
 import {
+  menopauseToApi,
   missingRequiredSteps,
   nextIncompleteAnchor,
   type ProfileAnchorId,
@@ -56,6 +59,11 @@ export type { ProfileFormState } from "./profileRequirements";
  * number, validated and saved through the exact same full-profile upsert.
  */
 export type EditSection = "grunddata" | "aktivitet" | "mal" | "profil" | "vikt";
+
+/** The visual body-fat guide. Photographs at each percentage, covering both
+ *  men and women, which is what makes an estimate possible at all. */
+export const BODY_FAT_GUIDE_URL =
+  "https://www.ruled.me/visually-estimate-body-fat-percentage/";
 
 /**
  * Edit modal — port of the web profile page's section modals. Behaviour
@@ -119,9 +127,25 @@ export function EditSectionModal({
   /** Every algorithm field on one page — the combined page and the first run. */
   const showAll = combined || isNewProfile;
 
-  // The in-app body-fat guide (replaces the old external link — see the
-  // chip below).
-  const [guideOpen, setGuideOpen] = useState(false);
+  /**
+   * Opens the external body-fat guide.
+   *
+   * `canOpenURL` first so a device with no browser is told, rather than
+   * being handed a promise that rejects into nothing; `openURL` is still
+   * wrapped because canOpenURL passing does not guarantee the open
+   * succeeds. Either way the customer gets a message — the previous version
+   * of this had no catch at all, which is exactly how it came to look like
+   * a dead button.
+   */
+  const openBodyFatGuide = async () => {
+    try {
+      const supported = await Linking.canOpenURL(BODY_FAT_GUIDE_URL);
+      if (!supported) throw new Error("unsupported");
+      await Linking.openURL(BODY_FAT_GUIDE_URL);
+    } catch {
+      Alert.alert(t("profile.bodyFatGuideErrorTitle"), t("profile.bodyFatGuideErrorBody"));
+    }
+  };
 
   // ── Auto-progression ────────────────────────────────────────────────
   // Each block reports its y-offset inside the ScrollView; a completed
@@ -203,16 +227,22 @@ export function EditSectionModal({
             style={styles.sheet}
             enabled={!saving && !saveDone}
             onDismiss={onCancel}
+            // Centred card: the height cap has to reserve the top inset on
+            // both sides, or a 90%-tall sheet still reaches the camera.
+            anchor="center"
+            // The title row joins the drag zone, so the whole top of the
+            // card can be grabbed. The X still takes its own taps.
+            header={
+              <View style={styles.sheetHeader}>
+                <ThemedText style={styles.sheetTitle}>
+                  {isNewProfile ? t("profile.editBasicData") : title}
+                </ThemedText>
+                <Pressable onPress={onCancel} style={styles.closeButton} accessibilityRole="button">
+                  <X size={15} color={colors.accent} />
+                </Pressable>
+              </View>
+            }
           >
-            <View style={styles.sheetHeader}>
-              <ThemedText style={styles.sheetTitle}>
-                {isNewProfile ? t("profile.editBasicData") : title}
-              </ThemedText>
-              <Pressable onPress={onCancel} style={styles.closeButton} accessibilityRole="button">
-                <X size={15} color={colors.accent} />
-              </Pressable>
-            </View>
-
             <ScrollView
               ref={scrollRef}
               contentContainerStyle={styles.sheetContent}
@@ -292,21 +322,24 @@ export function EditSectionModal({
                   </FieldLabel>
                   <HelperText>{t("profile.bodyFatHelper")}</HelperText>
                   <View style={styles.chipRow}>
-                    {/* WAS: Linking.openURL to ruled.me — the same third-
-                        party page for both genders, so "Visa guide för
-                        män" never showed a men's guide, and an
-                        openURL rejection failed silently with no catch,
-                        which is what made it look dead. The guide is now
-                        in-app and gender-specific, built from the
-                        percentages the app already has in
-                        BODY_FAT_OPTIONS. No browser, no dead end.
-                        The "Vet inte – hoppa över" chip next to it was
-                        removed: the field is already marked optional, so
-                        it only offered a second way to do nothing. */}
+                    {/* Opens ruled.me's visual body-fat guide in the browser.
+                        A previous pass replaced this with an in-app guide;
+                        that decision is reversed — the external page has
+                        photographs at each percentage, which is the thing
+                        that actually helps someone estimate, and a list of
+                        our own percentages does not.
+                        BOTH genders open the same page: it covers men and
+                        women, and the chip label is what differs.
+                        What is NOT restored is the silent failure. The old
+                        call had no catch, so a refused open looked like a
+                        dead button — that is the whole reason this was
+                        reported broken. It now says so.
+                        The "Vet inte – hoppa över" chip stays removed. */}
                     <Pressable
-                      onPress={() => setGuideOpen(true)}
+                      onPress={openBodyFatGuide}
                       style={styles.linkChip}
-                      accessibilityRole="button"
+                      accessibilityRole="link"
+                      accessibilityHint={t("profile.bodyFatGuideHint")}
                     >
                       <ThemedText style={styles.linkChipText}>
                         {form.gender === "Female"
@@ -578,79 +611,8 @@ export function EditSectionModal({
         <NumericDoneBar />
       </View>
 
-      {/* Gender-specific body-fat guide. Stacked inside this Modal rather
-          than as a second top-level Modal: iOS will not present one over an
-          already-open Modal, which would be a second dead end. */}
-      {guideOpen && (
-        <View style={styles.guideBackdrop}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => setGuideOpen(false)}
-            accessibilityRole="button"
-            accessibilityLabel={t("common.close")}
-          />
-          <View style={styles.guideCard} pointerEvents="box-none">
-            <View style={styles.sheetHeader}>
-              <ThemedText style={styles.sheetTitle}>
-                {form.gender === "Female"
-                  ? t("profile.bodyFatGuideFemale")
-                  : t("profile.bodyFatGuideMale")}
-              </ThemedText>
-              <Pressable
-                onPress={() => setGuideOpen(false)}
-                style={styles.closeButton}
-                accessibilityRole="button"
-              >
-                <X size={15} color={colors.accent} />
-              </Pressable>
-            </View>
-            <ScrollView contentContainerStyle={styles.guideContent}>
-              <HelperText>{t("profile.bodyFatGuideIntro")}</HelperText>
-              {bfOptions.map((opt) => (
-                <Pressable
-                  key={opt.value}
-                  onPress={() => {
-                    // Picking straight from the guide is the point: read the
-                    // range, tap it, the guide closes with the value set.
-                    onChange({ bodyFatLevel: opt.value });
-                    setGuideOpen(false);
-                  }}
-                  style={styles.guideRow}
-                  accessibilityRole="button"
-                >
-                  <ThemedText style={styles.guideRowLabel}>{opt.label}</ThemedText>
-                  <ThemedText style={styles.guideRowDesc}>
-                    {t(`profileOptions.bodyFatDesc.${opt.value}`)}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      )}
     </Modal>
   );
-}
-
-/** Form tri-state → the backend's nullable bool. "PreferNotToSay" and
- *  "never asked" both send null; the difference matters to the form, not to
- *  the engine (which applies no adjustment either way). */
-export function menopauseToApi(v: ProfileFormState["menopause"]): boolean | null {
-  if (v === "Postmenopausal") return true;
-  if (v === "Cycling") return false;
-  return null;
-}
-
-/** Backend nullable bool → form tri-state. A stored null on a female
- *  profile is shown as unanswered, so the question gets asked once. */
-export function menopauseFromApi(
-  isPostmenopausal: boolean | null,
-  gender: string
-): ProfileFormState["menopause"] {
-  if (gender !== "Female") return null;
-  if (isPostmenopausal === true) return "Postmenopausal";
-  if (isPostmenopausal === false) return "Cycling";
-  return null;
 }
 
 /** Calm section divider for the combined profile page (P13). */
@@ -719,34 +681,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   linkChipText: { fontSize: 12, fontFamily: fontFamily.bodyMedium, color: "rgba(255,255,255,0.72)" },
-  // In-app body-fat guide, stacked above the edit sheet.
-  guideBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.72)",
-    justifyContent: "flex-end",
-  },
-  guideCard: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingBottom: spacing[5],
-    maxHeight: "80%",
-  },
-  guideContent: { paddingHorizontal: spacing[5], paddingBottom: spacing[4], gap: spacing[2] },
-  guideRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing[3],
-    paddingVertical: spacing[3],
-    paddingHorizontal: spacing[4],
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  guideRowLabel: { fontSize: 15, fontFamily: fontFamily.bodySemibold, color: colors.textPrimary },
-  guideRowDesc: { fontSize: 13, fontFamily: fontFamily.body, color: "rgba(255,255,255,0.66)" },
   maintainNote: {
     flexDirection: "row",
     alignItems: "flex-start",

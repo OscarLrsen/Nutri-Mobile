@@ -63,6 +63,7 @@
     "snags:check": "node scripts/check-oscar-snags.mjs",
     "profile:check": "node scripts/check-profile-linking-sheets.mjs",
     "dayplan:check": "node scripts/check-home-day-plan.mjs",
+    "final5:check": "node scripts/check-final-five.mjs",
     "doctor": "expo-doctor"
   },
   "private": true
