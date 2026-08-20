@@ -18,6 +18,7 @@ import {
 } from "@/features/nutrition/activeDailyNutrition";
 import { useActiveOrder } from "@/features/order/useActiveOrder";
 import { HomeDayPlan } from "@/features/home/HomeDayPlan";
+import { NutritionRingsCard } from "@/features/home/NutritionRingsCard";
 import { GLASS_ML, useWaterLog } from "@/features/home/waterLog";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
@@ -127,13 +128,21 @@ export function TodayCard() {
         ) : null}
       </View>
 
-      <View style={styles.kcalRow}>
-        <ThemedText variant="monoLarge" style={styles.kcalValue}>
-          {target.calories}
-        </ThemedText>
-        <ThemedText variant="caption" style={styles.kcalLabel}>
-          {t("home.kcalPerDay")}
-        </ThemedText>
+      {/* The daily number, with the progress rings in the free space to its
+          right — a small dashboard indicator at the top of the card. It is
+          fed the SAME `target` and `consumedToday` printed below, so the
+          rings cannot disagree with the text, and it fetches nothing of its
+          own. Nothing else in this card moves. */}
+      <View style={styles.kcalRingRow}>
+        <View style={styles.kcalRow}>
+          <ThemedText variant="monoLarge" style={styles.kcalValue}>
+            {target.calories}
+          </ThemedText>
+          <ThemedText variant="caption" style={styles.kcalLabel}>
+            {t("home.kcalPerDay")}
+          </ThemedText>
+        </View>
+        <NutritionRingsCard target={target} consumed={remaining?.consumedToday ?? null} />
       </View>
 
       <View style={styles.macroRow}>
@@ -309,6 +318,12 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bodySemibold,
     letterSpacing: 1,
     color: colors.accent,
+  },
+  kcalRingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[3],
   },
   kcalRow: {
     flexDirection: "row",
