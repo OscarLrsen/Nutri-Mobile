@@ -1,57 +1,48 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { BadgePercent, X } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
-import { useAuth } from "@/services/auth/AuthProvider";
 import { useCart } from "@/context/CartContext";
 import { useCoupon } from "@/context/CouponContext";
-import {
-  claimWelcomeCoupon,
-  getMyCoupons,
-  isCouponUsable,
-  WELCOME_COUPON_SOURCE,
-} from "@/services/api/coupons";
+import { claimWelcomeCoupon, isCouponUsable } from "@/services/api/coupons";
 import { setNudgeOverlayActive } from "@/features/overlays/overlayActivity";
+import { useFirstLoginFlow } from "@/features/onboarding/useFirstLoginFlow";
+import { useWelcomeCouponStatus } from "./useWelcomeCouponStatus";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
 /**
- * Welcome-coupon modal — shown once per user after login, when the backend
- * says no welcome coupon exists yet for the account (GET /api/coupons has no
- * source:"welcome" row). "First login" is therefore decided by the backend's
- * data, not a local heuristic: an existing user reinstalling the app already
- * has the coupon row and never sees the modal.
+ * Welcome-coupon modal — STEP 2 of the first-login order
+ * (ONBOARDING → WELCOME DISCOUNT → FILL PROFILE). Shown once per user,
+ * after the first-run intro is done and before the profile prompt.
  *
- * A per-user AsyncStorage flag stops the modal from re-appearing after it
- * has been answered OR dismissed; a dismissed user can still claim later
- * from Mina kuponger (the claim endpoint is idempotent, all users eligible).
+ * Eligibility is unchanged and lives in useWelcomeCouponStatus: the
+ * backend says no welcome coupon exists yet for the account (GET
+ * /api/coupons has no source:"welcome" row), and a per-user AsyncStorage
+ * flag stops the modal re-appearing once it has been answered OR
+ * dismissed. "First login" is therefore decided by the backend's data,
+ * not a local heuristic — an existing user reinstalling the app already
+ * has the coupon row and never sees the modal. A dismissed user can still
+ * claim later from Mina kuponger (the claim endpoint is idempotent, all
+ * users eligible).
+ *
+ * WHEN it is allowed to open is not decided here — see useFirstLoginFlow.
  *
  * "Använd nu" claims + selects the coupon for checkout and continues to the
  * cart (if it has items) or the menu; "Lägg till i mina kuponger" only
  * claims.
  */
 
-/** Exported so the weekly-reward launch nudge (SpinNudgeSheet) can defer to
- * this modal: the nudge skips any launch where the welcome prompt hasn't
- * been answered yet, so two sheets never compete on first login. */
-export const WELCOME_PROMPTED_KEY_PREFIX = "nutri-welcome-coupon-prompted:";
-
-const PROMPTED_KEY_PREFIX = WELCOME_PROMPTED_KEY_PREFIX;
-
 export function WelcomeCouponModal() {
   const router = useRouter();
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { user, loading: authLoading } = useAuth();
   const { items } = useCart();
   const { selectCoupon } = useCoupon();
 
-  // null = flag not read yet; true/false = read.
-  const [alreadyPrompted, setAlreadyPrompted] = useState<boolean | null>(null);
   const [visible, setVisible] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState(false);
@@ -64,49 +55,44 @@ export function WelcomeCouponModal() {
     return () => setNudgeOverlayActive("welcomeCoupon", false);
   }, [visible]);
 
-  const userId = user?.id ?? null;
+  const { markHandled } = useWelcomeCouponStatus();
 
-  // Read the per-user prompted flag whenever the signed-in user changes.
+  /**
+   * ── STEP 2 OF THREE ───────────────────────────────────────────────
+   *
+   * This modal does not decide when it appears. useFirstLoginFlow does,
+   * for all three first-login steps at once:
+   *
+   *   onboarding       → the intro is still running; stay closed
+   *   welcome-discount → our turn
+   *   profile-prompt   → the discount is already dealt with
+   *   loading          → something is unknown; show NOTHING
+   *
+   * Two things were wrong before, and they were opposite mistakes. The
+   * modal originally consulted nothing at all, so a brand-new account
+   * met a 20% discount before the app had asked it a single question.
+   * The fix for that then over-corrected and made the discount wait for
+   * a COMPLETE nutrition profile — which put step 2 after step 3 and is
+   * how "Vill du ange din kostprofil nu?" came to be the very first
+   * thing a new customer saw. The order is stated once now, in
+   * firstLoginFlow.ts, and this component only obeys it.
+   *
+   * `step` already contains the eligibility rules (never prompted for
+   * this account, and the backend holds no welcome coupon) — see
+   * useWelcomeCouponStatus. No coupon state is invented to get here.
+   */
+  const { step } = useFirstLoginFlow();
+
   useEffect(() => {
-    setAlreadyPrompted(null);
-    setVisible(false);
-    setClaimError(false);
-    if (!userId) return;
-    let mounted = true;
-    AsyncStorage.getItem(PROMPTED_KEY_PREFIX + userId)
-      .then((v) => {
-        if (mounted) setAlreadyPrompted(v === "1");
-      })
-      .catch(() => {
-        // Can't read the flag — err on the quiet side and never prompt.
-        if (mounted) setAlreadyPrompted(true);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [userId]);
-
-  const couponsQuery = useQuery({
-    queryKey: ["coupons", userId],
-    queryFn: getMyCoupons,
-    enabled: !!userId && !authLoading && alreadyPrompted === false,
-  });
-
-  const hasWelcomeCoupon = couponsQuery.data?.some((c) => c.source === WELCOME_COUPON_SOURCE);
-
-  // Open exactly once: flag says never prompted, fresh data says no coupon.
-  useEffect(() => {
-    if (alreadyPrompted === false && couponsQuery.isSuccess && hasWelcomeCoupon === false) {
+    if (step === "welcome-discount") {
       setVisible(true);
+    } else {
+      setVisible(false);
+      setClaimError(false);
     }
-  }, [alreadyPrompted, couponsQuery.isSuccess, hasWelcomeCoupon]);
+  }, [step]);
 
-  const markPrompted = async () => {
-    setAlreadyPrompted(true);
-    if (userId) {
-      await AsyncStorage.setItem(PROMPTED_KEY_PREFIX + userId, "1").catch(() => {});
-    }
-  };
+  const markPrompted = markHandled;
 
   const claim = async () => {
     const coupon = await claimWelcomeCoupon();

@@ -9,7 +9,7 @@ import { ThemedText } from "@/components/ui/ThemedText";
 import { SwipeDownSheet } from "@/components/ui/SwipeDownSheet";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { getRewardStatus } from "@/services/api/rewards";
-import { WELCOME_PROMPTED_KEY_PREFIX } from "@/features/coupons/WelcomeCouponModal";
+import { WELCOME_PROMPTED_KEY_PREFIX } from "@/features/coupons/useWelcomeCouponStatus";
 import { setNudgeOverlayActive } from "@/features/overlays/overlayActivity";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";

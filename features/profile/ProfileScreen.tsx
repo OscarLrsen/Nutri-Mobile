@@ -9,6 +9,7 @@ import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { useOnboardingStatus } from "@/services/auth/useOnboardingStatus";
+import { useFirstLoginFlow } from "@/features/onboarding/useFirstLoginFlow";
 import { supabase } from "@/services/auth/supabase";
 import {
   deleteMacroOverride,
@@ -331,11 +332,27 @@ export function ProfileScreen() {
     profile: nutritionProfile,
   });
 
-  // The welcome modal is now reachable ONLY by a genuine first-time user.
+  // ── "Vill du ange din kostprofil nu?" — STEP 3 of three ────────────
+  //
+  // Reachable ONLY by a genuine first-time user (completion.state), and
+  // ONLY once the two steps ahead of it are done (firstLogin.step). Both
+  // conditions are required and they answer different questions:
+  //
+  //   completion.state === "new-user"   WHO should be asked
+  //   step === "profile-prompt"         WHEN they may be asked
+  //
+  // The percentage model is untouched — deriveProfileCompletion still
+  // owns everything this screen shows. What is added is the order: this
+  // prompt used to open the instant Konto mounted, which meant a redirect
+  // fired on a raw backend profile gap could put it on screen before the
+  // first-run intro had finished and before the 20% welcome discount had
+  // ever been offered.
+  const firstLogin = useFirstLoginFlow();
   useEffect(() => {
-    if (completion.state === "new-user") setShowOnboardingModal(true);
-    else setShowOnboardingModal(false);
-  }, [completion.state]);
+    const isNewUser = completion.state === "new-user";
+    const isOurTurn = firstLogin.step === "profile-prompt";
+    setShowOnboardingModal(isNewUser && isOurTurn);
+  }, [completion.state, firstLogin.step]);
 
   // Weekly schedule loads once the profile exists (web parity).
   const loadWeeklySchedule = useCallback(async () => {

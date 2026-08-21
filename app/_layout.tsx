@@ -22,6 +22,7 @@ import { WelcomeCouponModal } from "@/features/coupons/WelcomeCouponModal";
 import { SpinNudgeSheet } from "@/features/rewards/SpinNudgeSheet";
 import { ConsentGateModal } from "@/features/consents/ConsentGateModal";
 import { FirstRunOnboardingGate } from "@/features/onboarding/FirstRunOnboardingGate";
+import { FirstLoginOnboardingRedirect } from "@/features/onboarding/FirstLoginOnboardingRedirect";
 import { CartToast } from "@/components/feedback/CartToast";
 import { FoodFeedbackPrompt } from "@/features/feedback/FoodFeedbackPrompt";
 import { PushNotificationResponder } from "@/features/push/PushNotificationResponder";
@@ -173,6 +174,13 @@ export default function RootLayout() {
                       {/* Central auth gate (patch 11): the app is fully
                           account-based — see RootNavigator below. */}
                       <RootNavigator />
+                      {/* First-login order, step 3: takes a new customer to
+                          the profile prompt, which lives inside Konto and
+                          so is unreachable from Home. Renders nothing, and
+                          waits its turn — the intro (step 1) and the
+                          welcome discount (step 2) come first. All three
+                          steps read one machine, useFirstLoginFlow. */}
+                      <FirstLoginOnboardingRedirect />
                       {/* App-wide modal overlays mount once the startup
                           screen is gone — RN Modals would otherwise render
                           above it. Their own show/defer logic is unchanged,
