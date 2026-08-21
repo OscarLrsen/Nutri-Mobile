@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
+import { CalendarRange } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { DayPlanSlotList } from "@/features/dayplan/DayPlanSlotList";
-import { visibleSlotsFor } from "@/features/dayplan/dayPlanSlots";
-import { categoryForSlot, parseSlot } from "@/features/menu/mealRecommendation";
+import { savedPlanTargets, visibleSlotsFor } from "@/features/dayplan/dayPlanSlots";
+import { menuHrefForSlot, PLAN_DAY_ROUTE } from "@/features/dayplan/dayPlanNavigation";
+import { parseSlot } from "@/features/menu/mealRecommendation";
 import { useTodayDayPlanQuery, useTodayNutritionQuery } from "@/services/api/nutritionQueries";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
@@ -40,34 +42,43 @@ export function HomeDayPlan() {
   const baseMeals = useMemo(() => todayQuery.data?.meals ?? [], [todayQuery.data]);
   const saved = dayPlanQuery.data;
 
-  // The saved server plan wins over the backend baseline — the planner's
-  // rule, so Home and the planner never disagree about today.
-  const meals = useMemo(() => {
-    if (saved && saved.meals.length > 0) {
-      return saved.meals.map((m) => ({
-        label: m.label,
-        calories: m.calories,
-        proteinG: m.proteinG,
-        carbsG: m.carbsG,
-        fatG: m.fatG,
+  /**
+   * The numbers on these rows are the SAVED PLAN's, derived exactly the way
+   * the menu derives the targets it recommends against — one function,
+   * `savedPlanTargets`, reading the plan's own meal count.
+   *
+   * Home no longer keeps a 3/4 toggle of its own. It only ever changed what
+   * Home displayed (it wrote nothing), so switching it moved these numbers
+   * away from the plan while the menu kept recommending against the stored
+   * one — the same slot showing two different sets of numbers. The meal
+   * count is changed in the planner, where it is saved and where every
+   * reader picks it up.
+   */
+  const mealTab: "3" | "4" = saved?.mealCount === 3 ? "3" : "4";
+
+  const visibleSlots = useMemo(() => {
+    const fromPlan = savedPlanTargets(saved);
+    if (fromPlan.length > 0) {
+      // Carry the timing copy across from the backend baseline; the saved
+      // plan does not store it.
+      return fromPlan.map((m) => ({
+        ...m,
         timingPurpose: baseMeals.find((bm) => bm.label === m.label)?.timingPurpose ?? "",
       }));
     }
-    return baseMeals;
+    // No saved plan yet — the backend's automatic distribution, shown as-is.
+    return visibleSlotsFor("4", baseMeals);
   }, [saved, baseMeals]);
 
-  // Hydrated from the saved plan once it arrives, then owned by the user's
-  // taps. `hydrated` (rather than comparing values) is what keeps a later
-  // refetch from yanking the toggle back under a finger.
-  const [mealTab, setMealTab] = useState<"3" | "4">("4");
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => {
-    if (hydrated || !dayPlanQuery.isFetched) return;
-    if (saved && saved.meals.length > 0) setMealTab(saved.mealCount === 3 ? "3" : "4");
-    setHydrated(true);
-  }, [hydrated, dayPlanQuery.isFetched, saved]);
-
-  const visibleSlots = useMemo(() => visibleSlotsFor(mealTab, meals), [mealTab, meals]);
+  /** The one navigation the row and its Beställ button share. */
+  const openMenuForSlot = useCallback(
+    (label: string) => {
+      const wizardSlot = parseSlot(label);
+      if (!wizardSlot) return;
+      router.navigate(menuHrefForSlot(wizardSlot, Date.now()));
+    },
+    [router]
+  );
 
   if (visibleSlots.length === 0) return null;
 
@@ -75,68 +86,74 @@ export function HomeDayPlan() {
     <View style={{ gap: spacing[2] }}>
       <DayPlanSlotList
         mealTab={mealTab}
-        onMealTabChange={setMealTab}
         slots={visibleSlots}
         slotAccessibilityHint={t("home.dayPlanSlotHint")}
-        onSlotPress={(slot) => {
-          // Straight into the menu with that category selected — no
-          // intermediate screen. The SLOT rides along because Lunch and
-          // Middag share the Huvudmåltider chip, and it is the slot (not the
-          // chip) that decides the recommended portion.
-          const wizardSlot = parseSlot(slot.label);
-          if (!wizardSlot) return;
-          router.navigate({
-            pathname: "/(tabs)/meny",
-            params: {
-              category: categoryForSlot(wizardSlot),
-              slot: wizardSlot,
-              // The menu applies an incoming category through an effect keyed
-              // on the params. Tapping the SAME slot twice is the same two
-              // params, so without a changing third the effect would not run
-              // again and a chip switched by hand in between would stand —
-              // the tap would look dead. The menu already reads this; nothing
-              // used to send it.
-              navKey: String(Date.now()),
-            },
-          });
-        }}
-        // THE EDIT AFFORDANCE, restored. The planner's rows have carried an
-        // "Ändra" button since patch 12; Home's rows were given a decorative
-        // chevron instead and the only door to the planner (the menu's
-        // "Planera din dag" card) was removed in the same change, which left
-        // every slot un-editable. Same control, same copy, same look as the
-        // planner — and it carries the slot, so Lunch and Middag open their
-        // own row rather than whichever the clock would have guessed.
+        onSlotPress={(slot) => openMenuForSlot(slot.label)}
+        // ORDER, NOT EDIT. These four buttons used to open the planner on
+        // their own slot — four separate doors to the same screen. Editing
+        // the plan is now one shared entry below the list; what a row offers
+        // is the thing you actually came to Home to do, which is order the
+        // meal it describes.
+        //
+        // Same destination as the row press, through the same helper, so the
+        // two can never drift apart.
         renderAction={(slot) => {
           const wizardSlot = parseSlot(slot.label);
           if (!wizardSlot) return null;
           const label = t(`planDay.slots.${slot.label}`, { defaultValue: slot.label });
           return (
             <Pressable
-              onPress={() =>
-                router.push({ pathname: "/planera-dagen", params: { slot: wizardSlot } })
-              }
-              style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.7 }]}
+              onPress={() => openMenuForSlot(slot.label)}
+              style={({ pressed }) => [styles.orderBtn, pressed && { opacity: 0.7 }]}
               accessibilityRole="button"
-              accessibilityLabel={t("planDay.editSlotAria", { slot: label })}
+              accessibilityLabel={`${t("planDay.order")} — ${label}`}
             >
-              <ThemedText style={styles.editBtnText}>{t("planDay.edit")}</ThemedText>
+              <ThemedText style={styles.orderBtnText}>{t("planDay.order")}</ThemedText>
             </Pressable>
           );
         }}
       />
+
+      {/* ONE way into the planner, for the whole day. The four per-slot
+          buttons that used to lead here are gone: the planner shows all four
+          slots anyway, so four doors into the same room was three too many —
+          and it left the rows with no way to do the obvious thing. */}
+      <Pressable
+        onPress={() => router.push(PLAN_DAY_ROUTE)}
+        style={({ pressed }) => [styles.planCta, pressed && { opacity: 0.8 }]}
+        accessibilityRole="button"
+        accessibilityLabel={t("planDay.title")}
+      >
+        <CalendarRange size={14} color={colors.accent} strokeWidth={2} />
+        <ThemedText style={styles.planCtaText}>{t("planDay.title")}</ThemedText>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  editBtn: {
+  // Same shape the planner's row control has always had — this replaces
+  // "Ändra" in place rather than introducing a new visual language.
+  orderBtn: {
     borderRadius: radius.btn,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    borderColor: colors.accentBorder,
+    backgroundColor: colors.accentSoft,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
   },
-  editBtnText: { fontSize: 12, fontFamily: fontFamily.bodySemibold, color: colors.textPrimary },
+  orderBtnText: { fontSize: 12, fontFamily: fontFamily.bodySemibold, color: colors.accent },
+  planCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing[2],
+    marginTop: spacing[1],
+    borderRadius: radius.btn,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    paddingVertical: spacing[3],
+  },
+  planCtaText: { fontSize: 13, fontFamily: fontFamily.bodySemibold, color: colors.textPrimary },
 });

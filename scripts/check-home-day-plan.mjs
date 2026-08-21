@@ -53,10 +53,16 @@ check("Home återanvänder den delade komponenten, ingen kopia",
   home.includes("DayPlanSlotList") && home.includes("visibleSlotsFor"));
 check("Home lägger inte till egna nätverksanrop",
   home.includes("useTodayNutritionQuery") && home.includes("useTodayDayPlanQuery"));
-check("Home navigerar till menyn med kategori OCH slot",
-  home.includes('pathname: "/(tabs)/meny"')
-  && home.includes("categoryForSlot(wizardSlot)")
-  && home.includes("slot: wizardSlot"));
+// Home no longer builds the menu href inline — it moved to
+// features/dayplan/dayPlanNavigation.ts so the row press and the row's
+// "Beställ" button cannot drift apart. This assertion used to require the
+// inline construction, which is precisely what got duplicated.
+const dayPlanNav = readFileSync("features/dayplan/dayPlanNavigation.ts", "utf8");
+check("Home navigerar till menyn med kategori OCH slot, via den delade helpern",
+  home.includes("menuHrefForSlot(wizardSlot, Date.now())")
+  && dayPlanNav.includes('pathname: "/(tabs)/meny"')
+  && dayPlanNav.includes("category: categoryForSlot(slot)")
+  && dayPlanNav.includes("slot,"));
 check("Home sparar ingen plan (bara planeraren skriver)",
   !home.includes("saveTodayDayPlan"));
 
