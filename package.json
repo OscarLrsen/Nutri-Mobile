@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "nutri-mobile",
   "version": "1.0.0",
   "main": "expo-router/entry",
@@ -73,7 +73,7 @@
     "qa3:check": "node scripts/check-three-qa-bugs.mjs",
     "authreset:check": "node scripts/check-auth-reset.mjs",
     "signup:check": "node scripts/check-signup-verify.mjs",
-    "onboardingorder:check": "node scripts/check-onboarding-order.mjs",
+    "firstloginorder:check": "node scripts/check-first-login-order.mjs",
     "doctor": "expo-doctor"
   },
   "private": true

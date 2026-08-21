@@ -37,17 +37,53 @@ export function subscribeIntroSeen(listener: () => void): () => void {
   };
 }
 
+/**
+ * If the storage read has not resolved within this window, fail open into
+ * the app — a hanging storage layer must never stick the launch on a
+ * covered screen (verification requirement 10).
+ */
+export const INTRO_READ_TIMEOUT_MS = 2000;
+
+/** Set once the timeout below has fired, so a read that arrives afterwards
+ * cannot pull the app BACK into an intro it already let the user past. */
+let failedOpen = false;
+
 export async function loadIntroSeen(): Promise<boolean> {
   try {
     const seen = (await AsyncStorage.getItem(INTRO_SEEN_KEY)) === "1";
-    cachedSeen = seen;
-    notify();
+    if (!failedOpen) {
+      cachedSeen = seen;
+      notify();
+    }
     return seen;
   } catch {
     cachedSeen = true;
     notify();
     return true;
   }
+}
+
+/**
+ * The read every first-login consumer must use. Shared rather than
+ * duplicated: the first-run gate used to race this timeout privately and
+ * commit to "seen" in its own local state, leaving the in-memory mirror
+ * `null` forever. Anything else waiting on the intro — the first-login
+ * order machine — then waited for a signal that was never coming, so a
+ * hung disk would silently swallow the welcome discount AND the profile
+ * prompt. One read, one timeout, one answer, broadcast to everyone.
+ */
+export function loadIntroSeenWithTimeout(): Promise<boolean> {
+  const timeout = new Promise<boolean>((resolve) => {
+    setTimeout(() => {
+      failedOpen = true;
+      if (cachedSeen === null) {
+        cachedSeen = true;
+        notify();
+      }
+      resolve(true);
+    }, INTRO_READ_TIMEOUT_MS);
+  });
+  return Promise.race([loadIntroSeen(), timeout]);
 }
 
 export async function markIntroSeen(): Promise<void> {

@@ -174,12 +174,12 @@ export default function RootLayout() {
                       {/* Central auth gate (patch 11): the app is fully
                           account-based — see RootNavigator below. */}
                       <RootNavigator />
-                      {/* Takes a customer who still needs onboarding to it.
-                          Renders nothing. Nothing used to do this — a new
-                          account landed on Home and only met onboarding if
-                          it found Konto on its own, which is how the
-                          welcome-coupon modal came to greet people before
-                          the app had asked them anything. */}
+                      {/* First-login order, step 3: takes a new customer to
+                          the profile prompt, which lives inside Konto and
+                          so is unreachable from Home. Renders nothing, and
+                          waits its turn — the intro (step 1) and the
+                          welcome discount (step 2) come first. All three
+                          steps read one machine, useFirstLoginFlow. */}
                       <FirstLoginOnboardingRedirect />
                       {/* App-wide modal overlays mount once the startup
                           screen is gone — RN Modals would otherwise render

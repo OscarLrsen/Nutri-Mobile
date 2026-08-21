@@ -1,15 +1,10 @@
-import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { IntroCarousel } from "./IntroCarousel";
-import { loadIntroSeen, markIntroSeen } from "./introStorage";
+import { markIntroSeen } from "./introStorage";
+import { useIntroSeen } from "./useIntroSeen";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { colors } from "@/theme";
-
-/** If the storage read has not resolved within this window, fail open into
- * the app — a hanging storage layer must never stick the launch on a
- * covered screen (verification requirement 10). */
-const READ_TIMEOUT_MS = 2000;
 
 /**
  * First-run gate (patch 3, reordered by patch 11): mounted in
@@ -39,20 +34,11 @@ const READ_TIMEOUT_MS = 2000;
  */
 export function FirstRunOnboardingGate() {
   const { user, loading } = useAuth();
-  const [seen, setSeen] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    const timeout = new Promise<boolean>((resolve) => {
-      setTimeout(() => resolve(true), READ_TIMEOUT_MS);
-    });
-    void Promise.race([loadIntroSeen(), timeout]).then((value) => {
-      if (active) setSeen(value);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+  // The SHARED read (introStorage), not a private one. This gate is step 1
+  // of the first-login order, and steps 2 and 3 wait on the same signal —
+  // so "the intro is done" has to be one fact, not this component's
+  // private opinion. Timeout/fail-open semantics live in introStorage.
+  const seen = useIntroSeen();
 
   // No valid session → login owns the screen (patch 11). Rendering null
   // here also means logout instantly drops any visible intro.
@@ -69,8 +55,10 @@ export function FirstRunOnboardingGate() {
       <IntroCarousel
         mode="first-run"
         onFinish={() => {
+          // Flips the shared mirror synchronously and notifies every
+          // subscriber, so step 2 becomes eligible the same instant this
+          // cover disappears — no gap where nothing is showing.
           void markIntroSeen();
-          setSeen(true);
         }}
       />
     </View>
