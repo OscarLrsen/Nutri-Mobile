@@ -74,6 +74,7 @@
     "authreset:check": "node scripts/check-auth-reset.mjs",
     "signup:check": "node scripts/check-signup-verify.mjs",
     "firstloginorder:check": "node scripts/check-first-login-order.mjs",
+    "devicefamily:check": "node scripts/check-device-family.mjs",
     "doctor": "expo-doctor"
   },
   "private": true

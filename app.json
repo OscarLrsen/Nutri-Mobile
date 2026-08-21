@@ -30,7 +30,7 @@
       ]
     ],
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.nutrifoodtruck.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
