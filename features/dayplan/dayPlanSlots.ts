@@ -31,6 +31,45 @@ export function orderForDisplay(meals: ApiMealDistribution[]): ApiMealDistributi
   return [...meals].sort((a, b) => (DISPLAY_ORDER[a.label] ?? 99) - (DISPLAY_ORDER[b.label] ?? 99));
 }
 
+/**
+ * The saved plan as the customer is SHOWN it — the single derivation Home,
+ * the planner and the menu all read.
+ *
+ * ── WHY THIS EXISTS ──────────────────────────────────────────────────
+ *
+ * Home renders `visibleSlotsFor(tab, meals)`. The menu used to read the
+ * STORED rows straight off the saved plan. In 4-meal mode those agree, so it
+ * looked fine. In 3-MEAL MODE they do not: the snack is dropped and its
+ * calories are scaled back into the three main meals, which on a 2000 kcal
+ * plan puts Lunch 150 kcal apart between the two screens — and the menu then
+ * recommended M or L against a target the customer had never been shown.
+ *
+ * The meal count comes from the PLAN, not from whatever tab a screen
+ * happens to be showing, so every reader derives the same numbers without
+ * having to know about each other.
+ *
+ * Pure, and deliberately free of the app graph, so the guard can exercise
+ * the real rule rather than a copy of it.
+ */
+export interface SavedPlanShape {
+  mealCount?: number;
+  meals?: { label: string; calories: number; proteinG: number; carbsG: number; fatG: number }[];
+}
+
+export function savedPlanTargets(plan: SavedPlanShape | null | undefined): ApiMealDistribution[] {
+  const meals = plan?.meals ?? [];
+  if (meals.length === 0) return [];
+  const stored: ApiMealDistribution[] = meals.map((m) => ({
+    label: m.label,
+    calories: m.calories,
+    proteinG: m.proteinG,
+    carbsG: m.carbsG,
+    fatG: m.fatG,
+    timingPurpose: "",
+  }));
+  return visibleSlotsFor(plan?.mealCount === 3 ? "3" : "4", stored);
+}
+
 /** The slot editor's working copy — never the plan itself. */
 export interface SlotDraft {
   calories: number;

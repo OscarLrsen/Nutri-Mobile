@@ -30,7 +30,17 @@ export function DayPlanSlotList({
   slotAccessibilityHint,
 }: {
   mealTab: "3" | "4";
-  onMealTabChange: (tab: "3" | "4") => void;
+  /**
+   * Omitted = the count is not changeable here, and the pills are not shown.
+   *
+   * Home does that deliberately. The toggle only ever changed what Home
+   * DISPLAYED — it wrote nothing — so switching it moved Home's numbers away
+   * from the saved plan while the menu, which reads that plan, kept
+   * recommending against the stored one. A control that silently creates two
+   * sets of numbers for the same slot is worse than no control; the meal
+   * count is changed in the planner, where it is saved.
+   */
+  onMealTabChange?: (tab: "3" | "4") => void;
   slots: ApiMealDistribution[];
   onSlotPress?: (slot: ApiMealDistribution) => void;
   renderAction?: (slot: ApiMealDistribution) => ReactNode;
@@ -41,22 +51,24 @@ export function DayPlanSlotList({
 
   return (
     <>
-      <View style={styles.tabRow}>
-        {(["3", "4"] as const).map((tab) => (
-          <Pressable
-            key={tab}
-            onPress={() => onMealTabChange(tab)}
-            style={[styles.tab, mealTab === tab && styles.tabActive]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: mealTab === tab }}
-            accessibilityLabel={t("planDay.mealCount", { count: Number(tab) })}
-          >
-            <ThemedText style={[styles.tabText, mealTab === tab && styles.tabTextActive]}>
-              {t("planDay.mealCount", { count: Number(tab) })}
-            </ThemedText>
-          </Pressable>
-        ))}
-      </View>
+      {onMealTabChange ? (
+        <View style={styles.tabRow}>
+          {(["3", "4"] as const).map((tab) => (
+            <Pressable
+              key={tab}
+              onPress={() => onMealTabChange(tab)}
+              style={[styles.tab, mealTab === tab && styles.tabActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: mealTab === tab }}
+              accessibilityLabel={t("planDay.mealCount", { count: Number(tab) })}
+            >
+              <ThemedText style={[styles.tabText, mealTab === tab && styles.tabTextActive]}>
+                {t("planDay.mealCount", { count: Number(tab) })}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.slotList}>
         {slots.map((slot, i) => {
