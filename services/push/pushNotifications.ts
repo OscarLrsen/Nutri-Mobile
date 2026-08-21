@@ -66,9 +66,20 @@ export async function getPushPermissionStatus(): Promise<PushPermissionStatus> {
   }
 }
 
-/** Shows the SYSTEM permission prompt. Only ever called from an explicit
- * user action (the pre-prompt's "Aktivera notiser" or the profile section)
- * — never automatically at app start, per the launch spec. */
+/**
+ * Shows the SYSTEM permission prompt.
+ *
+ * Called from PushTokenSync once per install for a signed-in user whose
+ * status is still "undetermined", and from the two explicit user actions —
+ * the order-status pre-prompt's "Aktivera notiser" and the profile's Notiser
+ * section.
+ *
+ * It used to be reachable ONLY from those two explicit actions, "never
+ * automatically at app start". The pre-prompt renders only on the order
+ * status screen and only for an order just placed, so anyone who had not
+ * ordered was never asked at all — and iOS shows the dialog only when this
+ * is actually called. That is why the prompt never appeared in TestFlight.
+ */
 export async function requestPushPermission(): Promise<PushPermissionStatus> {
   if (!Device.isDevice) return "unavailable";
   try {

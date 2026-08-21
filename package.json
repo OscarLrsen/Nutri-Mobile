@@ -68,6 +68,7 @@
     "dayplanorder:check": "node scripts/check-day-plan-order-consistency.mjs",
     "nutritionui:check": "node scripts/check-nutrition-ring-ui.mjs",
     "prodconfig:check": "node scripts/check-production-config.mjs",
+    "push:check": "node scripts/check-push-permission.mjs",
     "final5:check": "node scripts/check-final-five.mjs",
     "qa3:check": "node scripts/check-three-qa-bugs.mjs",
     "authreset:check": "node scripts/check-auth-reset.mjs",
