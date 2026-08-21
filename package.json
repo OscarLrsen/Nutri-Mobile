@@ -65,6 +65,7 @@
     "profilescroll:check": "node scripts/check-profile-scroll.mjs",
     "dayplan:check": "node scripts/check-home-day-plan.mjs",
     "dayplanedit:check": "node scripts/check-day-plan-editing.mjs",
+    "dayplanorder:check": "node scripts/check-day-plan-order-consistency.mjs",
     "nutritionui:check": "node scripts/check-nutrition-ring-ui.mjs",
     "prodconfig:check": "node scripts/check-production-config.mjs",
     "final5:check": "node scripts/check-final-five.mjs",
