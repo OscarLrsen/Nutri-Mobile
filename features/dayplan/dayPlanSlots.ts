@@ -31,6 +31,36 @@ export function orderForDisplay(meals: ApiMealDistribution[]): ApiMealDistributi
   return [...meals].sort((a, b) => (DISPLAY_ORDER[a.label] ?? 99) - (DISPLAY_ORDER[b.label] ?? 99));
 }
 
+/** The slot editor's working copy — never the plan itself. */
+export interface SlotDraft {
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+}
+
+export const EMPTY_DRAFT: SlotDraft = { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 };
+
+/**
+ * A fresh draft, seeded from the slot as it is stored RIGHT NOW.
+ *
+ * The one seeding rule, shared by the planner's "Ändra" button and by the
+ * deep link that opens a slot straight from Home. Because every open goes
+ * through here, an edit abandoned by tapping the backdrop can never come
+ * back: the next open reads the plan, not the draft that was thrown away.
+ * That is the whole mechanism by which unsaved changes are discarded —
+ * nothing is undone, because nothing was written.
+ */
+export function draftFor(meal: ApiMealDistribution | undefined): SlotDraft {
+  if (!meal) return EMPTY_DRAFT;
+  return {
+    calories: meal.calories,
+    proteinG: meal.proteinG,
+    carbsG: meal.carbsG,
+    fatG: meal.fatG,
+  };
+}
+
 /**
  * Whether a visible slot row may be edited in the current view.
  *

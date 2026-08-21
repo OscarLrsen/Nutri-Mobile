@@ -88,6 +88,54 @@ check("den öppnas en gång per besök, inte om och om igen",
 check("deep-linken och Ändra-knappen delar samma editerbarhetsregel",
   (planner.match(/isSlotEditable\(mealTab, localMeals\.length\)/g) ?? []).length === 2);
 
+// ── 4b: the slot editor can be left without saving ──────────────────────
+// The backdrop was a plain <View>: nothing outside the card was tappable,
+// so from Home's "Ändra" the editor read as a popup you could not put down.
+// The app's centred-modal pattern (NutritionRingsCard) is a full-bleed
+// Pressable BEHIND the card, and that is what is pinned here.
+const plannerCode = codeOf("features/dayplan/PlanDayScreen.tsx");
+const backdropBlock = plannerCode.slice(
+  plannerCode.indexOf("styles.modalBackdrop"),
+  plannerCode.indexOf("styles.modalCard")
+);
+check("backdroppen är tryckbar",
+  /<Pressable\b/.test(backdropBlock) && backdropBlock.includes("StyleSheet.absoluteFill"));
+check("backdroppen täcker hela ytan bakom kortet",
+  /style=\{StyleSheet\.absoluteFill\}/.test(backdropBlock));
+check("backdroppen stänger editorn och gör inget annat",
+  backdropBlock.includes("onPress={closeEditor}")
+  // Never a save, and never a way out of the whole planner.
+  && !/onPress=\{[^}]*handleSave/.test(backdropBlock)
+  && !/onPress=\{[^}]*router\./.test(backdropBlock)
+  && !/onPress=\{[^}]*setLocalMeals/.test(backdropBlock));
+check("backdroppen är avstängd medan en plan sparas",
+  backdropBlock.includes('disabled={saveStatus === "saving"}'));
+check("kortet ligger EFTER backdroppen och behåller sina egna tryck",
+  plannerCode.indexOf("StyleSheet.absoluteFill") < plannerCode.indexOf("styles.modalCard"));
+check("Android-bakåtknappen använder samma stängning",
+  plannerCode.includes("onRequestClose={closeEditor}"));
+check("stängningen sparar aldrig något",
+  /const closeEditor = \(\) => setEditingIdx\(null\);/.test(plannerCode));
+check("varje väg ut ur editorn går genom closeEditor",
+  // Apply commits first and then closes; Cancel and the backdrop just close.
+  (plannerCode.match(/closeEditor/g) ?? []).length >= 4
+  && !/setEditingIdx\(null\)/.test(plannerCode.replace(/const closeEditor[^;]*;/, "")));
+
+// Ett kastat utkast får aldrig komma tillbaka: varje öppning läser planen.
+check("öppning och deep link använder SAMMA seedning från planen",
+  (plannerCode.match(/setEdit\(draftFor\(localMeals\[idx\]\)\)/g) ?? []).length === 2
+  && !/setEdit\(\{ calories: m\.calories/.test(plannerCode));
+check("utkastet nollställs inte vid stängning (det skulle blinka under fade-out)",
+  !/closeEditor = \(\) => \{[\s\S]*?setEdit\(/.test(plannerCode));
+// Inuti modalen finns exakt EN skrivning till planen: Använd-knappen.
+// Backdroppen och Avbryt rör den inte.
+const modalBlock = plannerCode.slice(plannerCode.indexOf("styles.modalBackdrop"));
+check("bara Använd skriver till planen inifrån editorn",
+  (modalBlock.match(/setLocalMeals\(/g) ?? []).length === 1);
+check("skrivningen sitter i Använd, inte i Avbryt eller backdroppen",
+  modalBlock.indexOf("setLocalMeals(") < modalBlock.indexOf("planDay.applySlot")
+  && modalBlock.indexOf("setLocalMeals(") > modalBlock.indexOf("modalActions"));
+
 // ── 5: Lunch and Middag stay apart ──────────────────────────────────────
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -99,7 +147,31 @@ const emit = (dir, name) => {
   writeFileSync(join(outDir, `${name}.mjs`), js);
   return import(pathToFileURL(join(outDir, `${name}.mjs`)).href);
 };
-const { isSlotEditable, visibleSlotsFor } = await emit("features/dayplan", "dayPlanSlots");
+const { isSlotEditable, visibleSlotsFor, draftFor, EMPTY_DRAFT } = await emit(
+  "features/dayplan",
+  "dayPlanSlots"
+);
+
+// ── 4c: the discard rule, exercised ─────────────────────────────────────
+const stored = { label: "Lunch", calories: 600, proteinG: 40, carbsG: 60, fatG: 20, timingPurpose: "" };
+check("ett nytt utkast speglar den lagrade sloten exakt",
+  JSON.stringify(draftFor(stored))
+    === JSON.stringify({ calories: 600, proteinG: 40, carbsG: 60, fatG: 20 }));
+check("utkastet är en KOPIA — att ändra det rör inte planen",
+  (() => {
+    const draft = draftFor(stored);
+    draft.proteinG = 999;
+    draft.calories = 9999;
+    return stored.proteinG === 40 && stored.calories === 600;
+  })());
+check("att öppna igen efter ett kastat utkast ger de lagrade värdena",
+  (() => {
+    const abandoned = draftFor(stored);
+    abandoned.fatG = 5; // stepped down, then the backdrop was tapped
+    return draftFor(stored).fatG === 20;
+  })());
+check("en saknad slot ger ett tomt utkast i stället för att krascha",
+  JSON.stringify(draftFor(undefined)) === JSON.stringify(EMPTY_DRAFT));
 
 // categoryForSlot is the piece that decides which chip a slot opens; it is
 // the reason the slot has to travel separately.
@@ -217,6 +289,7 @@ if (failures.length > 0) {
 console.log("✓ Day-plan editing holds:");
 console.log("    every slot row carries its own Ändra, and /planera-dagen is reachable");
 console.log("    Ändra opens THAT slot's editor — Lunch is not Middag");
+console.log("    the editor closes on a backdrop tap, discarding the draft, never mid-save");
 console.log("    a repeated slot tap re-applies the menu category (navKey)");
 console.log("    row press and edit button are separate touch and a11y targets");
 console.log("    the TODAY nutrition ring does not overlap the day plan");

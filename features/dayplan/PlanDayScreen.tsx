@@ -19,7 +19,7 @@ import type { ApiMealDistribution } from "@/services/api/nutrition";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 import { DayPlanSlotList } from "./DayPlanSlotList";
-import { isSlotEditable, visibleSlotsFor } from "./dayPlanSlots";
+import { draftFor, EMPTY_DRAFT, isSlotEditable, visibleSlotsFor, type SlotDraft } from "./dayPlanSlots";
 
 /**
  * "Planera din dag" (patch 12) — the mobile port of the web's existing
@@ -46,6 +46,7 @@ import { isSlotEditable, visibleSlotsFor } from "./dayPlanSlots";
 
 const AUTO_PCTS_3 = [0.32, 0.34, 0.34];
 const AUTO_PCTS_4 = [0.25, 0.3, 0.25, 0.2];
+
 
 export function PlanDayScreen() {
   const { t } = useTranslation();
@@ -89,12 +90,27 @@ export function PlanDayScreen() {
 
   // ── Editing modal state (web's mealEditInput, ±5 g steppers) ──
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
-  const [edit, setEdit] = useState({ calories: 0, proteinG: 0, carbsG: 0, fatG: 0 });
+  const [edit, setEdit] = useState<SlotDraft>(EMPTY_DRAFT);
   const openEdit = (idx: number) => {
-    const m = localMeals[idx];
-    setEdit({ calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG });
+    setEdit(draftFor(localMeals[idx]));
     setEditingIdx(idx);
   };
+
+  /**
+   * Leave the editor without committing anything.
+   *
+   * WHERE THE UNSAVED EDIT GOES. Nowhere — and that is the point. The
+   * steppers only ever move `edit`, a draft that lives beside the plan;
+   * "Använd" is the one thing that copies it into `localMeals`. Closing
+   * simply stops rendering the draft, so nothing was written and nothing
+   * needs undoing.
+   *
+   * The draft is deliberately NOT zeroed here. `openEdit` re-seeds it from
+   * the stored slot every single time, so a stale draft can never be shown;
+   * clearing it on the way out would only make the card flash "0 g" during
+   * the fade-out.
+   */
+  const closeEditor = () => setEditingIdx(null);
   /**
    * Opened from a Home slot: land on THAT slot's editor, not on the list.
    *
@@ -119,8 +135,7 @@ export function PlanDayScreen() {
     // Same rule the "Ändra" button uses — never open an editor the screen
     // itself would not offer.
     if (!isSlotEditable(mealTab, localMeals.length)) return;
-    const m = localMeals[idx];
-    setEdit({ calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG });
+    setEdit(draftFor(localMeals[idx]));
     setEditingIdx(idx);
   }, [hydrated, requestedSlot, localMeals, mealTab]);
 
@@ -426,9 +441,30 @@ export function PlanDayScreen() {
         visible={editingIdx !== null && editingMeal !== null}
         transparent
         animationType="fade"
-        onRequestClose={() => setEditingIdx(null)}
+        onRequestClose={closeEditor}
       >
         <View style={styles.modalBackdrop}>
+          {/* TAP OUTSIDE TO LEAVE. The backdrop used to be a plain View, so
+              the only ways out were the Avbryt button and the Android back
+              key — from Home's "Ändra" it read as a popup you could not put
+              down. This is the app's existing centred-modal pattern (see
+              NutritionRingsCard): a full-bleed Pressable BEHIND the card.
+              The card is a sibling rendered after it, so it sits on top and
+              keeps its own taps — Använd and Avbryt cannot be triggered
+              through it, and it cannot be triggered through them.
+              It closes the editor and nothing else: no save, no navigation
+              away from the planner. */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={closeEditor}
+            // Defensive: a plan being written must not be interrupted. The
+            // screen's Save sits behind this modal and cannot be reached
+            // while it is open, so this should never engage — but "never"
+            // is cheaper to guarantee than to argue.
+            disabled={saveStatus === "saving"}
+            accessibilityRole="button"
+            accessibilityLabel={t("planDay.cancel")}
+          />
           <View style={styles.modalCard}>
             <ThemedText style={styles.modalTitle}>
               {editingMeal
@@ -501,7 +537,7 @@ export function PlanDayScreen() {
                         : m
                     )
                   );
-                  setEditingIdx(null);
+                  closeEditor();
                 }}
                 disabled={!canSaveMeal}
                 style={[styles.primaryBtn, styles.modalPrimary, !canSaveMeal && styles.primaryBtnDisabled]}
@@ -511,7 +547,7 @@ export function PlanDayScreen() {
                 <ThemedText style={styles.primaryBtnText}>{t("planDay.applySlot")}</ThemedText>
               </Pressable>
               <Pressable
-                onPress={() => setEditingIdx(null)}
+                onPress={closeEditor}
                 style={({ pressed }) => [styles.secondaryBtn, pressed && { opacity: 0.8 }]}
                 accessibilityRole="button"
               >
