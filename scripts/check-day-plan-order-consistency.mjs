@@ -130,6 +130,64 @@ for (const mealCount of [4, 3]) {
 }
 check(`Home och Meny läser samma tal (avvikelse: ${mismatch})`, mismatch === null);
 
+// ── E2: HOME_TARGET == MENU_TARGET, slot by slot, named explicitly ──────
+// Spelled out per slot rather than only in the loop above, so a failure
+// names the meal rather than "something diverged".
+for (const mealCount of [4, 3]) {
+  const plan = { mealCount, meals: stored };
+  const rows = savedPlanTargets(plan);
+  const slots = mealCount === 3
+    ? ["Frukost", "Lunch", "Middag"]
+    : ["Frukost", "Mellanmål", "Lunch", "Middag"];
+  for (const name of slots) {
+    const homeRow = rows.find((m) => m.label === name);
+    const menuRow = savedPlanTargets(plan).find((m) => m.label === name);
+    check(
+      `${mealCount} måltider: HOME_TARGET == MENU_TARGET för ${name}`,
+      homeRow != null &&
+        menuRow != null &&
+        homeRow.calories === menuRow.calories &&
+        homeRow.proteinG === menuRow.proteinG &&
+        homeRow.carbsG === menuRow.carbsG &&
+        homeRow.fatG === menuRow.fatG
+    );
+  }
+  // Lunch and Middag must remain distinct rows, not one collapsed target.
+  const lunch = rows.find((m) => m.label === "Lunch");
+  const dinner = rows.find((m) => m.label === "Middag");
+  check(`${mealCount} måltider: Lunch och Middag är skilda mål`,
+    lunch != null && dinner != null && lunch.calories !== dinner.calories);
+}
+
+// ── E3: the MENU SHOWS the target, it does not only compute with it ─────
+// This was the whole reported complaint: the number existed but was never
+// on screen, so the only thing to compare Home against was a meal card.
+const menuScreen = codeOf("features/menu/MenuScreen.tsx");
+const banner = codeOf("features/menu/SlotTargetBanner.tsx");
+check("menyn renderar slotens mål, inte bara räknar med det",
+  menuScreen.includes("<SlotTargetBanner slot={activeSlot} target={activeSlotTarget} />"));
+check("bannern visas bara när menyn öppnats FÖR den sloten",
+  menuScreen.includes("activeSlot && requestedSlot === activeSlot"));
+check("samma target-objekt driver både bannern och M/L-valet",
+  menuScreen.includes("recommendSize(item.meal, activeSlotTarget, activeSlot)")
+  && (menuScreen.match(/activeSlotTarget/g) ?? []).length >= 3);
+check("bannern räknar inte om något själv",
+  !/[*/]\s*\d|Math\.round|Math\.max|multiplier/.test(banner));
+check("bannern visar inget när målet saknas",
+  banner.includes("if (!target || target.calories <= 0) return null;"));
+check("bannern visar alla fyra makrona",
+  banner.includes("target.calories") && banner.includes("target.proteinG")
+  && banner.includes("target.carbsG") && banner.includes("target.fatG"));
+
+// ── E4: target and meal nutrition are never conflated ───────────────────
+const mealCard = codeOf("features/menu/MealCard.tsx");
+check("MealCard visar MÅLTIDENS näring, aldrig slotens mål",
+  !mealCard.includes("slotTarget(") && !mealCard.includes("savedPlanTargets"));
+check("MealCard får bara rekommendationen, inte targetet",
+  /recommendation\?: MealRecommendation \| null/.test(readFileSync("features/menu/MealCard.tsx", "utf8")));
+check("copyn säger vilket tal som är vilket",
+  banner.includes('t("menu.slotTarget.label")') && banner.includes('t("menu.slotTarget.mealNote")'));
+
 // The derivation must actually DO the 3-meal scaling — otherwise the two
 // sides agree only because both are wrong.
 const four = savedPlanTargets({ mealCount: 4, meals: stored });
@@ -174,6 +232,10 @@ for (const locale of ["sv", "en", "da"]) {
   check(`${locale}: planDay.title finns`, typeof json.planDay?.title === "string");
   check(`${locale}: profile.planDay + planDaySub finns`,
     typeof json.profile?.planDay === "string" && typeof json.profile?.planDaySub === "string");
+  check(`${locale}: menu.slotTarget-copyn finns och skiljer målet från måltiden`,
+    typeof json.menu?.slotTarget?.label === "string"
+    && typeof json.menu?.slotTarget?.mealNote === "string"
+    && json.menu.slotTarget.mealNote.length > 20);
 }
 const sv = JSON.parse(readFileSync("i18n/locales/sv.json", "utf8"));
 const en = JSON.parse(readFileSync("i18n/locales/en.json", "utf8"));
@@ -196,5 +258,7 @@ console.log("    every slot row offers Beställ, and it goes where the row goes"
 console.log("    Lunch and Middag keep their own slot through one shared helper");
 console.log("    one Planera din dag entry on Home, one on Mina sidor, same route");
 console.log("    Home and the menu read slot targets from ONE derivation");
+console.log("    the menu SHOWS that target, per slot, in 3- and 4-meal plans");
+console.log("    a meal card still shows the meal's own nutrition, and says so");
 console.log("    3-meal scaling is applied by the plan's own meal count");
 console.log("    the slot editor still dismisses on backdrop without saving");
