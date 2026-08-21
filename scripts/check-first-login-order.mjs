@@ -58,14 +58,20 @@ const WELCOME = "features/coupons/WelcomeCouponModal.tsx";
 const WELCOME_STATUS = "features/coupons/useWelcomeCouponStatus.ts";
 const REDIRECT = "features/onboarding/FirstLoginOnboardingRedirect.tsx";
 const PROFILE = "features/profile/ProfileScreen.tsx";
+const INTRO_RULE = "features/onboarding/introSeenRule.ts";
+const INTRO_HOOK = "features/onboarding/useIntroSeen.ts";
+const DELETE_ACCOUNT = "features/profile/DeleteAccountSection.tsx";
 
 const hook = codeOf(HOOK);
 const introGate = codeOf(INTRO_GATE);
 const introStore = codeOf(INTRO_STORE);
+const introSeenHook = codeOf(INTRO_HOOK);
 const welcome = codeOf(WELCOME);
 const welcomeStatus = codeOf(WELCOME_STATUS);
 const redirect = codeOf(REDIRECT);
 const profile = codeOf(PROFILE);
+const deleteAccount = codeOf(DELETE_ACCOUNT);
+const survey = codeOf("features/survey/OnboardingSurveyOverlay.tsx");
 
 // ── The pure machine, exercised for real ────────────────────────────────
 const require_ = createRequire(import.meta.url);
@@ -80,6 +86,7 @@ const emit = (src, name) => {
 check("prioriteringen finns som en ren, testbar funktion", existsSync(FLOW));
 check("orkestreringen finns som EN delad hook", existsSync(HOOK));
 check("welcome-status finns som en delad modul", existsSync(WELCOME_STATUS));
+check("legacy-regeln finns som en ren, testbar funktion", existsSync(INTRO_RULE));
 
 /** No machine → every ordering assertion below fails by name. */
 let deriveFirstLoginStep = () => ({ step: "MISSING" });
@@ -89,6 +96,24 @@ if (existsSync(FLOW)) {
     pathToFileURL(join(outDir, "firstLoginFlow.mjs")).href
   ));
 }
+
+/** No rule → every account-isolation assertion below fails by name. */
+let deriveIntroSeen = () => ({ seen: "MISSING", persist: "MISSING" });
+if (existsSync(INTRO_RULE)) {
+  emit(INTRO_RULE, "introSeenRule");
+  ({ deriveIntroSeen } = await import(
+    pathToFileURL(join(outDir, "introSeenRule.mjs")).href
+  ));
+}
+
+/** Intro decision for one account; defaults are "read, nothing stored". */
+const intro = (over) =>
+  deriveIntroSeen({
+    storedSeen: false,
+    legacySeen: false,
+    profileGate: "profile-gap",
+    ...over,
+  });
 
 /** Everything settled except what a case overrides. */
 const at = (over) =>
@@ -135,19 +160,96 @@ check("omstart efter onboarding men före rabatten → rabatten",
 check("omstart efter rabatten → profil-prompten",
   at({ introSeen: true, welcomeHandled: true, profileGate: "profile-gap" }) === "profile-prompt");
 
-// ── D: nytt konto efter delete ──────────────────────────────────────────
-// Intro is device-scoped (nutri_intro_seen_v1, no user id) and stays seen;
-// the two PER-USER steps run again for the new account. Pinned because it
-// is a deliberate product decision, not an accident of key naming.
-check("intro-flaggan är device-scopad, inte per användare",
-  introStore.includes('export const INTRO_SEEN_KEY = "nutri_intro_seen_v1";')
-  && !/INTRO_SEEN_KEY \+ (userId|user)/.test(introStore));
-check("nytt konto på samma telefon: rabatt + profil-prompt kommer igen",
-  at({ introSeen: true, welcomeHandled: false, profileGate: "profile-gap" }) === "welcome-discount");
+// ── D: FIRST-LOGIN STATE IS PER ACCOUNT, NOT PER PHONE ─────────────────
+//
+// THE BUG: `nutri_intro_seen_v1` was one flag for the whole installation.
+// An account was deleted and recreated with the same email; the new
+// account got a new user id, but the phone still held the DELETED
+// account's flag, so step 1 was skipped and the brand-new customer landed
+// straight on the welcome discount. Steps 2 and 3 were already
+// account-scoped, which is exactly why only step 1 went missing.
+check("intro-flaggan är keyad per användare",
+  introStore.includes('export const INTRO_SEEN_KEY_PREFIX = "nutri_intro_seen_v2:";')
+  && introStore.includes("INTRO_SEEN_KEY_PREFIX + userId"));
+check("den gamla globala nyckeln skrivs aldrig mer",
+  introStore.includes('export const LEGACY_INTRO_SEEN_KEY = "nutri_intro_seen_v1";')
+  && !/setItem\(\s*LEGACY_INTRO_SEEN_KEY/.test(introStore));
+check("cachen är keyad per användare, så A:s svar aldrig svarar för B",
+  introStore.includes("const seenByUser = new Map<string, boolean>();")
+  && /getIntroSeenCached\(userId: string \| null\)/.test(introStore));
+check("intro-hooken läser om när användaren byts",
+  /\}, \[userId\]\);/.test(introSeenHook) && introSeenHook.includes("useAuth()"));
 check("welcome-flaggan är per användare",
   welcomeStatus.includes("WELCOME_PROMPTED_KEY_PREFIX + userId"));
 check("den läses om när användaren byts",
   /useEffect\(\(\) => \{[\s\S]{0,600}\}, \[userId\]\);/.test(welcomeStatus));
+check("delete rensar BARA den raderade användarens nyckel",
+  introStore.includes("export async function forgetIntroSeen(userId: string)")
+  && introStore.includes("removeItem(introSeenKeyFor(userId))")
+  && deleteAccount.includes("forgetIntroSeen(deletedUserId)"));
+check("men fixen hänger inte på delete-städningen",
+  // A new user id must be enough on its own: no stored flag for that id.
+  intro({ storedSeen: false, legacySeen: false }).seen === false);
+
+// ── D2: THE SEVEN ACCOUNT-LIFECYCLE CASES ──────────────────────────────
+// `intro(...)` answers "has THIS user seen it?"; `at(...)` turns that into
+// which surface may show. Both are exercised, because the defect was a
+// correct order fed a wrong input.
+
+// CASE 1 — User A, first login ever: full sequence, in order.
+check("CASE 1a: ny användare → intro krävs",
+  intro({ storedSeen: false, legacySeen: false }).seen === false);
+check("CASE 1b: → onboarding, sedan rabatt, sedan profil",
+  at({ introSeen: false, welcomeHandled: false, profileGate: "profile-gap" }) === "onboarding"
+  && at({ introSeen: true, welcomeHandled: false, profileGate: "profile-gap" }) === "welcome-discount"
+  && at({ introSeen: true, welcomeHandled: true, profileGate: "profile-gap" }) === "profile-prompt");
+
+// CASE 2 — User A returning: their own flag settles it, no server needed.
+check("CASE 2: returnerande A → ingen intro igen",
+  intro({ storedSeen: true }).seen === true
+  && intro({ storedSeen: true, profileGate: "loading" }).seen === true);
+
+// CASE 3 — logout A, brand-new User B on the same phone.
+// B reads B's key, which is absent — A's flag cannot answer for B.
+check("CASE 3: ny användare B på samma telefon → intro för B",
+  intro({ storedSeen: false, legacySeen: false }).seen === false
+  && at({ introSeen: false }) === "onboarding");
+
+// CASE 4 — delete A, recreate the SAME EMAIL with a new user id.
+// This is the reported defect. The phone still carries the legacy flag.
+check("CASE 4: raderat + återskapat konto (nytt userId) → intro igen",
+  intro({ storedSeen: false, legacySeen: true, profileGate: "profile-gap" }).seen === false);
+check("CASE 4b: och det nya kontot krediteras INTE tyst",
+  intro({ storedSeen: false, legacySeen: true, profileGate: "profile-gap" }).persist === false);
+
+// CASE 5 — the legacy global flag must never speak for a new account.
+check("CASE 5: gammal global v1=true + genuint ny användare → ÄNDÅ intro",
+  intro({ storedSeen: false, legacySeen: true, profileGate: "profile-gap" }).seen === false);
+check("CASE 5b: den globala flaggan migreras aldrig blint till en ny user",
+  intro({ storedSeen: false, legacySeen: true, profileGate: "profile-gap" }).persist === false);
+
+// CASE 6 — an established customer upgrading must NOT replay the intro.
+check("CASE 6: etablerad kund (server säger ready) → ingen intro-repris",
+  intro({ storedSeen: false, legacySeen: true, profileGate: "ready" }).seen === true);
+check("CASE 6b: och svaret pinnas per user, så gaten frågas bara en gång",
+  intro({ storedSeen: false, legacySeen: true, profileGate: "ready" }).persist === true);
+check("CASE 6c: nätverksfel drar inte tillbaka etablerade kunder i intron",
+  intro({ storedSeen: false, legacySeen: true, profileGate: "error" }).seen === true
+  && intro({ storedSeen: false, legacySeen: true, profileGate: "error" }).persist === false);
+
+// CASE 7 — unknowns show nothing, at the rule level and the order level.
+check("CASE 7a: oläst flagga → inget svar",
+  intro({ storedSeen: null }).seen === null && intro({ legacySeen: null }).seen === null);
+check("CASE 7b: legacy-anspråk + gaten laddar → inget svar (ingen flash)",
+  intro({ storedSeen: false, legacySeen: true, profileGate: "loading" }).seen === null);
+check("CASE 7c: okänt intro-läge visar varken rabatt eller profil-prompt",
+  at({ introSeen: null, welcomeHandled: false, profileGate: "profile-gap" }) === "loading");
+
+// The gate is consulted ONLY to adjudicate a legacy claim — a phone with
+// no legacy flag must not wait on the network to show the intro.
+check("utan legacy-anspråk väntar intron inte på backend",
+  intro({ storedSeen: false, legacySeen: false, profileGate: "loading" }).seen === false
+  && intro({ storedSeen: false, legacySeen: false, profileGate: "error" }).seen === false);
 
 // ── E: UNKNOWN IS NEVER A VERDICT ───────────────────────────────────────
 // Any unknown that sits BEFORE the step in question must show nothing.
@@ -165,8 +267,13 @@ check("ett okänt welcome-läge får inte visa profil-prompten",
 check("intro-gaten och flödet läser SAMMA intro-signal",
   introGate.includes("useIntroSeen()") && !introGate.includes("useState<boolean | null>"));
 check("intro-timeouten är delad, inte privat",
-  introStore.includes("export function loadIntroSeenWithTimeout()")
+  introStore.includes("export const INTRO_READ_TIMEOUT_MS")
+  && /Promise\.race\(/.test(introStore)
   && !introGate.includes("READ_TIMEOUT_MS"));
+check("intron krediteras den inloggade användaren, inte telefonen",
+  introGate.includes("markIntroSeen(user.id)"));
+check("survey:n läser samma upplösta signal, inte den råa flaggan",
+  survey.includes("useIntroSeen()") && !survey.includes("getIntroSeenCached"));
 check("welcome-modalen frågar flödet",
   welcome.includes("useFirstLoginFlow()"));
 check("welcome-modalen öppnar BARA på sin tur",
@@ -259,3 +366,10 @@ console.log("    unknown and network errors show NOTHING — no step guesses");
 console.log("    a cold start resumes the sequence where it stopped");
 console.log("    all three components read one machine and add no request");
 console.log("    the profile percentage model is unchanged");
+console.log("");
+console.log("✓ First-login state is PER ACCOUNT:");
+console.log("    all three steps keyed by user id — none by the installation");
+console.log("    delete + recreate the same email = new id = its own onboarding");
+console.log("    a second person on the same phone never inherits the first's");
+console.log("    the legacy device flag is adjudicated by server state, never copied");
+console.log("    established customers still do not replay the intro on upgrade");

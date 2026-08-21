@@ -16,7 +16,7 @@ import {
   skipOnboardingSurvey,
   submitOnboardingSurvey,
 } from "@/services/api/onboardingSurvey";
-import { getIntroSeenCached, subscribeIntroSeen } from "@/features/onboarding/introStorage";
+import { useIntroSeen } from "@/features/onboarding/useIntroSeen";
 import {
   isAnyNudgeOverlayActive,
   subscribeNudgeOverlayActivity,
@@ -54,7 +54,12 @@ export const SURVEY_DELAY_MS = 2500;
 
 export function OnboardingSurveyOverlay({ orderId }: { orderId?: string }) {
   const { user } = useAuth();
-  const introSeen = useSyncExternalStore(subscribeIntroSeen, getIntroSeenCached);
+  // The same account-scoped answer the intro gate itself acts on, so the
+  // survey and the intro can never disagree about whether the intro is up.
+  // Reading the raw stored flag here would go wrong the moment the two
+  // differ — a new account on a phone carrying the legacy device flag has
+  // a stored "seen" that does NOT apply to them.
+  const introSeen = useIntroSeen();
   const nudgeActive = useSyncExternalStore(
     subscribeNudgeOverlayActivity,
     isAnyNudgeOverlayActive

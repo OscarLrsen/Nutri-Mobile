@@ -66,13 +66,18 @@ export type FirstLoginInput = {
   /** A valid session exists. Without one, none of these steps exist. */
   signedIn: boolean;
   /**
-   * The first-run intro has been completed on this installation.
-   * null = the local flag has not been read yet.
+   * The CURRENT USER has completed the first-run intro.
+   * null = not known yet.
    *
-   * Device-scoped by design (the flag is `nutri_intro_seen_v1`, not
-   * per-user): the intro explains the APP, so a second account on the
-   * same phone does not sit through it again. Steps 2 and 3 are
-   * per-user and do still run for that account.
+   * ACCOUNT-scoped, like the two steps after it. It was device-scoped
+   * once (`nutri_intro_seen_v1`, no user id) on the theory that the intro
+   * explains the APP rather than the account — and that cost a real
+   * defect: an account was deleted and recreated with the same email, the
+   * phone still held the deleted account's flag, and the brand-new
+   * customer was skipped past step 1 straight into the welcome discount.
+   * A flag about the PHONE cannot answer a question about the PERSON.
+   * introSeenRule.ts handles the legacy flag without either replaying the
+   * intro for established customers or leaking it to new accounts.
    */
   introSeen: boolean | null;
   /**

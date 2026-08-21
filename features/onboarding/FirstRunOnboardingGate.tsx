@@ -14,9 +14,11 @@ import { colors } from "@/theme";
  * screen on a signed-out installation, so this gate renders NOTHING
  * without a valid session — the auth gate's login screen owns that state.
  * The intro instead appears right AFTER the first successful sign-in /
- * registration on an installation that hasn't seen it (the local
- * versioned flag is unchanged), and right after every later sign-in
- * until it has been completed once. The full order is:
+ * registration for an ACCOUNT that hasn't seen it, and right after every
+ * later sign-in until that account has completed it once. Per account,
+ * not per phone: a deleted-and-recreated login is a new user id and gets
+ * its own intro, and a second person signing in here never inherits the
+ * first person's. The full order is:
  * login → session → consent gate (an RN Modal, always stacks above this
  * View) → intro → survey (subscribes to the intro-seen signal) → Home.
  *
@@ -55,10 +57,11 @@ export function FirstRunOnboardingGate() {
       <IntroCarousel
         mode="first-run"
         onFinish={() => {
-          // Flips the shared mirror synchronously and notifies every
-          // subscriber, so step 2 becomes eligible the same instant this
-          // cover disappears — no gap where nothing is showing.
-          void markIntroSeen();
+          // Credited to THIS user id. Flips the shared mirror
+          // synchronously and notifies every subscriber, so step 2 becomes
+          // eligible the same instant this cover disappears — no gap where
+          // nothing is showing.
+          void markIntroSeen(user.id);
         }}
       />
     </View>

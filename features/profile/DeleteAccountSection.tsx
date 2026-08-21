@@ -6,6 +6,7 @@ import { Check, TriangleAlert } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { deleteMyAccount } from "@/services/api/account";
+import { forgetIntroSeen } from "@/features/onboarding/introStorage";
 import { useAuth } from "@/services/auth/AuthProvider";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
@@ -29,7 +30,7 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
  */
 export function DeleteAccountSection() {
   const { t } = useTranslation();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -53,6 +54,7 @@ export function DeleteAccountSection() {
     inFlightRef.current = true;
     setBusy(true);
     setError("");
+    const deletedUserId = user?.id ?? null;
     try {
       await deleteMyAccount();
 
@@ -61,6 +63,19 @@ export function DeleteAccountSection() {
       // sign-out re-renders the app, or a stale user-scoped screen can paint
       // one last time on the way out.
       queryClient.clear();
+
+      // Tidy this account's first-login state off the phone. ONLY this
+      // user's key — the legacy device flag and every other account's flag
+      // are left alone, so deleting one login cannot drag someone else
+      // back through onboarding.
+      //
+      // NOT load-bearing, deliberately. Correctness comes from the state
+      // being keyed by user id in the first place: a recreated account
+      // gets a NEW user id and therefore a fresh, absent flag whether or
+      // not this line ever runs. Which is why it is allowed to fail
+      // silently, and why it is not awaited into the failure path below.
+      if (deletedUserId) void forgetIntroSeen(deletedUserId);
+
       await signOut();
 
       // Say where to go rather than trusting the guard to fall somewhere
