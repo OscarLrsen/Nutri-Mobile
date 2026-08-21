@@ -73,6 +73,7 @@
     "qa3:check": "node scripts/check-three-qa-bugs.mjs",
     "authreset:check": "node scripts/check-auth-reset.mjs",
     "signup:check": "node scripts/check-signup-verify.mjs",
+    "onboardingorder:check": "node scripts/check-onboarding-order.mjs",
     "doctor": "expo-doctor"
   },
   "private": true

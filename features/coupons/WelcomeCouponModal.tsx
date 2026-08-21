@@ -16,6 +16,7 @@ import {
   WELCOME_COUPON_SOURCE,
 } from "@/services/api/coupons";
 import { setNudgeOverlayActive } from "@/features/overlays/overlayActivity";
+import { useNutritionProfileGate } from "@/features/onboarding/useNutritionProfileGate";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
 
@@ -94,12 +95,43 @@ export function WelcomeCouponModal() {
 
   const hasWelcomeCoupon = couponsQuery.data?.some((c) => c.source === WELCOME_COUPON_SOURCE);
 
-  // Open exactly once: flag says never prompted, fresh data says no coupon.
+  /**
+   * ── ONBOARDING COMES FIRST ────────────────────────────────────────
+   *
+   * A brand-new customer met this modal before they had ever been asked
+   * for their goals: the two conditions above are both true the moment a
+   * new account signs in — nothing has been prompted locally, and a new
+   * account has no welcome coupon — so the discount landed on top of an
+   * app the customer had not been introduced to yet.
+   *
+   * The gate is the backend's own answer about the nutrition profile, the
+   * same shared ["nutrition","today"] row Home already mounts, so this
+   * costs no request. It is four-valued on purpose:
+   *
+   *   loading     → say nothing; we do not know yet
+   *   profile-gap → onboarding is REQUIRED, it owns the screen
+   *   error       → say nothing; a network failure is not a verdict
+   *   ready       → the profile is good, the welcome may show
+   *
+   * Only `ready` opens the modal. Deferring costs nothing — the prompt is
+   * once per account and is driven by backend data, so it simply appears
+   * on the next launch after onboarding is done.
+   */
+  const profileGate = useNutritionProfileGate();
+  const onboardingSettled = profileGate.status === "ready";
+
+  // Open exactly once: onboarding done, flag says never prompted, fresh
+  // data says no coupon.
   useEffect(() => {
-    if (alreadyPrompted === false && couponsQuery.isSuccess && hasWelcomeCoupon === false) {
+    if (
+      onboardingSettled &&
+      alreadyPrompted === false &&
+      couponsQuery.isSuccess &&
+      hasWelcomeCoupon === false
+    ) {
       setVisible(true);
     }
-  }, [alreadyPrompted, couponsQuery.isSuccess, hasWelcomeCoupon]);
+  }, [onboardingSettled, alreadyPrompted, couponsQuery.isSuccess, hasWelcomeCoupon]);
 
   const markPrompted = async () => {
     setAlreadyPrompted(true);
