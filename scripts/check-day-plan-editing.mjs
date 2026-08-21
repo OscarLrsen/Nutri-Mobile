@@ -131,12 +131,14 @@ check("alla fyra slot-typerna är synliga och därmed editerbara i 4-läget",
   ["Frukost", "Mellanmål", "Lunch", "Middag"].every((l) => visible.includes(l)));
 
 // ── 7: the nutrition ring is not on top of the day plan ─────────────────
-// It was named as a suspect. It is a flex child in the kcal row, which is a
-// SIBLING above the day-plan block — not an overlay. Pinned so a later
-// "make the ring bigger" cannot quietly turn it into one.
-check("ringen ligger i kcal-raden, inte ovanpå något",
-  today.includes("<NutritionRingsCard target={target} consumed={remaining?.consumedToday ?? null} />")
-  && today.includes("kcalRingRow"));
+// It was named as a suspect and ruled out. The ring has since MOVED to the
+// card's top-right corner and is now absolutely positioned — so the old
+// assertions ("it lives in the kcal row", "that row has no absolute
+// positioning") described a layout that no longer exists. What matters for
+// the day plan is unchanged and is what is pinned now: the ring is anchored
+// to the TOP of the card, reserves its own space, and cannot reach the rows.
+check("ringen renderas fortfarande med samma data som texten",
+  today.includes("<NutritionRingsCard target={target} consumed={remaining?.consumedToday ?? null} />"));
 /**
  * One named entry out of a StyleSheet.create block.
  *
@@ -156,14 +158,25 @@ const styleBlock = (src, name) => {
   return null;
 };
 
-const kcalRow = styleBlock(today, "kcalRingRow");
+const ringCorner = styleBlock(today, "ringCorner");
+check("ringen är förankrad i kortets ÖVRE högra hörn",
+  ringCorner !== null
+  && ringCorner.includes('position: "absolute"')
+  && ringCorner.includes("top: CARD_PADDING")
+  && ringCorner.includes("right: CARD_PADDING")
+  // No bottom anchor: an absolute box that also reached down could cover
+  // the rows below.
+  && !ringCorner.includes("bottom:")
+  && !ringCorner.includes("zIndex"));
 check("kcal-raden är en vanlig flexrad utan absolut positionering",
-  kcalRow !== null
-  && kcalRow.includes('flexDirection: "row"')
-  && !kcalRow.includes("position:")
-  && !kcalRow.includes("zIndex"));
-check("day-plan-blocket är ett syskon EFTER kcal-raden",
-  today.indexOf("kcalRingRow") < today.indexOf("<HomeDayPlan />"));
+  (() => {
+    const row = styleBlock(today, "kcalRow");
+    return row !== null && row.includes('flexDirection: "row"') && !row.includes("position:");
+  })());
+check("ringen ligger FÖRE day-planen i trädet och kan inte måla över den",
+  today.indexOf("styles.ringCorner") < today.indexOf("<HomeDayPlan />"));
+check("day-plan-blocket delar inget lager med ringen",
+  today.indexOf("<HomeDayPlan />") > today.indexOf("styles.macroRow"));
 const compact = styleBlock(rings, "compact");
 check("ringens tryckyta är inte absolut och lyfts inte med zIndex",
   compact !== null

@@ -9,7 +9,10 @@ import { NutritionRings } from "./NutritionRingStack";
 import {
   buildNutrientRings,
   formatRingValue,
+  nutritionPopupLayout,
   overallProgressPercent,
+  LEGEND_DOT,
+  LEGEND_GAP,
   type NutrientKey,
   type NutrientRing,
 } from "./nutritionRings";
@@ -29,6 +32,14 @@ import type { MacroTargetDto } from "@/services/api/nutrition";
  * not come from the bottom would be a lie about how it behaves. It closes
  * on the X and on the backdrop, which is this app's centred-modal pattern.
  */
+/**
+ * Edge length of the compact indicator. Exported because TodayCard places it
+ * in the card's corner and has to reserve exactly this much room beside the
+ * heading and the calorie number — two files agreeing on one number by
+ * importing it rather than by both writing 54.
+ */
+export const COMPACT_RING_SIZE = 54;
+
 export function NutritionRingsCard({
   target,
   consumed,
@@ -50,7 +61,7 @@ export function NutritionRingsCard({
         accessibilityLabel={t("home.ringsAria", { percent })}
         accessibilityHint={t("home.ringsHint")}
       >
-        <NutritionRings rings={rings} size={54} strokeWidth={4} gap={1.5} />
+        <NutritionRings rings={rings} size={COMPACT_RING_SIZE} strokeWidth={4} gap={1.5} />
       </Pressable>
 
       {open && (
@@ -92,10 +103,10 @@ function NutritionDetail({ rings, onClose }: { rings: NutrientRing[]; onClose: (
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
 
-  // Side by side when there is room for both; stacked on a narrow phone so
-  // nothing is clipped and the popup still fits without scrolling.
-  const sideBySide = width >= 380;
-  const circleSize = sideBySide ? 168 : 150;
+  // STACKED, ALWAYS — see nutritionPopupLayout for the arithmetic. Putting
+  // the ring beside the legend is what squeezed the labels down to "Cal…";
+  // no phone is wide enough to do both, so the legend gets the whole card.
+  const { circleSize } = nutritionPopupLayout(width);
 
   return (
     <View style={styles.card}>
@@ -111,7 +122,7 @@ function NutritionDetail({ rings, onClose }: { rings: NutrientRing[]; onClose: (
         </Pressable>
       </View>
 
-      <View style={[styles.body, sideBySide ? styles.bodyRow : styles.bodyColumn]}>
+      <View style={styles.body}>
         <View style={styles.circleWrap}>
           <NutritionRings rings={rings} size={circleSize} strokeWidth={11} gap={3.5} />
         </View>
@@ -120,12 +131,17 @@ function NutritionDetail({ rings, onClose }: { rings: NutrientRing[]; onClose: (
           {rings.map((ring) => (
             <View key={ring.key} style={styles.legendRow}>
               <View style={[styles.dot, { backgroundColor: ring.color }]} />
-              <ThemedText style={styles.legendLabel} numberOfLines={1}>
+              {/* No numberOfLines: a label that does not fit must wrap, not
+                  disappear behind an ellipsis. With the stacked layout it
+                  has ~200pt on a normal phone and never needs to. */}
+              <ThemedText style={styles.legendLabel}>
                 <NutrientLabel nutrient={ring.key} />
               </ThemedText>
               {/* The real numbers — deliberately NOT clamped like the arc,
                   so going over the goal is visible here even though a ring
-                  cannot draw past full. */}
+                  cannot draw past full. flexShrink 0 states what was already
+                  true: this text never gives way, so the label must never be
+                  the only thing that can. */}
               <ThemedText style={styles.legendValue}>{formatRingValue(ring)}</ThemedText>
             </View>
           ))}
@@ -170,15 +186,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  body: { gap: spacing[5] },
-  bodyRow: { flexDirection: "row", alignItems: "center" },
-  bodyColumn: { flexDirection: "column", alignItems: "center" },
+  body: { gap: spacing[5], flexDirection: "column", alignItems: "center" },
   circleWrap: { alignItems: "center", justifyContent: "center" },
-  legend: { flex: 1, minWidth: 0, gap: spacing[3], width: "100%" },
-  legendRow: { flexDirection: "row", alignItems: "center", gap: spacing[3] },
-  dot: { width: 9, height: 9, borderRadius: 4.5 },
+  legend: { alignSelf: "stretch", gap: spacing[3] },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: LEGEND_GAP },
+  dot: { width: LEGEND_DOT, height: LEGEND_DOT, borderRadius: LEGEND_DOT / 2, flexShrink: 0 },
   legendLabel: { flex: 1, minWidth: 0, fontSize: 13, color: colors.textSecondary },
   legendValue: {
+    flexShrink: 0,
     fontSize: 13,
     fontFamily: fontFamily.monoMedium,
     color: colors.textPrimary,

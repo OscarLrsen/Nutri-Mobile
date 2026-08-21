@@ -91,6 +91,74 @@ export function formatRingValue(ring: NutrientRing): string {
   return `${ring.consumed}${suffix} / ${ring.target}${suffix}`;
 }
 
+/**
+ * ── THE DETAIL POPUP'S LAYOUT ────────────────────────────────────────
+ *
+ * Why this is arithmetic rather than a magic breakpoint: the labels were
+ * being truncated to "Cal…", "Kol…", "Pr…", and the reason is measurable.
+ *
+ * The popup used to put the ring beside the legend whenever the window was
+ * at least 380 wide — which is every modern iPhone. On a 390pt phone that
+ * leaves the legend 130pt: subtract the colour dot and two gaps and 97pt is
+ * left for a label AND its value. The value is mono text with no flexShrink,
+ * so it took the ~88pt it needs and the label — the only flexible thing in
+ * the row — collapsed into an ellipsis.
+ *
+ * Side by side cannot be rescued by nudging the breakpoint: the card is
+ * capped at 420 wide, so the widest legend a phone can ever offer beside a
+ * legible ring stack is ~192pt, and a label plus a value needs ~205pt. So
+ * the popup stacks — ring above, legend across the full card width — which
+ * gives the label roughly 200pt on a normal phone and 127pt on an iPhone SE.
+ * "Kolhydrater", the longest label we ship, is about 80pt.
+ *
+ * Exported so the guard can check every phone width without a simulator.
+ */
+const CARD_SIDE_MARGIN = 16; // backdrop paddingHorizontal
+const CARD_MAX_WIDTH = 420;
+const CARD_PADDING = 20;
+
+/** The legend row's fixed furniture, and the space its two texts need. */
+export const LEGEND_DOT = 9;
+export const LEGEND_GAP = 12;
+/** "Kolhydrater" at 13px, with slack. */
+export const LEGEND_LABEL_MIN = 84;
+/** "1780 / 1780" in DM Mono at 13px. */
+export const LEGEND_VALUE_MIN = 88;
+export const LEGEND_MIN_WIDTH =
+  LEGEND_DOT + LEGEND_GAP + LEGEND_LABEL_MIN + LEGEND_GAP + LEGEND_VALUE_MIN;
+
+/** Ring diameter bounds for the stacked layout. */
+const CIRCLE_MIN = 136;
+const CIRCLE_MAX = 176;
+
+export interface NutritionPopupLayout {
+  /** Usable width inside the card's padding. */
+  innerWidth: number;
+  /** Diameter of the big ring stack. */
+  circleSize: number;
+  /** Width the legend column actually gets. */
+  legendWidth: number;
+  /** What is left for the label text once dot, gaps and value are paid for. */
+  labelWidth: number;
+}
+
+export function nutritionPopupLayout(windowWidth: number): NutritionPopupLayout {
+  // An unmeasured window — which useWindowDimensions really can report for a
+  // frame while a Modal presents — must not become NaN arithmetic. A NaN
+  // diameter reaches react-native-svg as an invalid circle and blanks the
+  // whole stack, the same way an unguarded 0/0 would (see ringProgress).
+  const usable = Number.isFinite(windowWidth) && windowWidth > 0 ? windowWidth : 0;
+  const innerWidth =
+    Math.min(Math.max(usable - CARD_SIDE_MARGIN * 2, 0), CARD_MAX_WIDTH) - CARD_PADDING * 2;
+  const circleSize = Math.max(CIRCLE_MIN, Math.min(CIRCLE_MAX, Math.round(innerWidth * 0.55)));
+  return {
+    innerWidth,
+    circleSize,
+    legendWidth: innerWidth,
+    labelWidth: innerWidth - LEGEND_DOT - LEGEND_GAP * 2 - LEGEND_VALUE_MIN,
+  };
+}
+
 /** Geometry for one ring in a stack, outermost first (index 0). */
 export function ringGeometry(size: number, strokeWidth: number, gap: number, index: number) {
   const radius = size / 2 - strokeWidth / 2 - index * (strokeWidth + gap);

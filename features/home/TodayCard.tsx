@@ -18,7 +18,7 @@ import {
 } from "@/features/nutrition/activeDailyNutrition";
 import { useActiveOrder } from "@/features/order/useActiveOrder";
 import { HomeDayPlan } from "@/features/home/HomeDayPlan";
-import { NutritionRingsCard } from "@/features/home/NutritionRingsCard";
+import { COMPACT_RING_SIZE, NutritionRingsCard } from "@/features/home/NutritionRingsCard";
 import { GLASS_ML, useWaterLog } from "@/features/home/waterLog";
 import { useTranslation } from "@/i18n";
 import { colors, fontFamily, radius, spacing } from "@/theme";
@@ -118,8 +118,22 @@ export function TodayCard() {
 
   return (
     <Card style={styles.card} accessibilityLabel={t("home.todayHead")}>
+      {/* ── The progress rings, in the card's top-right corner ──────
+          Absolutely placed rather than laid out in a row, so putting them
+          in the corner moves NOTHING else in TODAY — the heading, the
+          number, the macros, the day plan and the tally all stay exactly
+          where they were. The two rows that reach up here reserve
+          `ringReserve` on their right, so no text can ever pass underneath
+          it; it therefore needs no zIndex and overlaps nothing. Its touch
+          area is the ring itself and nothing more.
+          Fed the SAME `target` and `consumedToday` printed below, so the
+          rings cannot disagree with the text, and it fetches nothing. */}
+      <View style={styles.ringCorner} pointerEvents="box-none">
+        <NutritionRingsCard target={target} consumed={remaining?.consumedToday ?? null} />
+      </View>
+
       {/* ── The goal ─────────────────────────────────────────────── */}
-      <View style={styles.headRow}>
+      <View style={[styles.headRow, styles.ringReserve]}>
         <SectionLabel />
         {dayTypeName ? (
           <View style={styles.dayTypeChip}>
@@ -128,21 +142,13 @@ export function TodayCard() {
         ) : null}
       </View>
 
-      {/* The daily number, with the progress rings in the free space to its
-          right — a small dashboard indicator at the top of the card. It is
-          fed the SAME `target` and `consumedToday` printed below, so the
-          rings cannot disagree with the text, and it fetches nothing of its
-          own. Nothing else in this card moves. */}
-      <View style={styles.kcalRingRow}>
-        <View style={styles.kcalRow}>
-          <ThemedText variant="monoLarge" style={styles.kcalValue}>
-            {target.calories}
-          </ThemedText>
-          <ThemedText variant="caption" style={styles.kcalLabel}>
-            {t("home.kcalPerDay")}
-          </ThemedText>
-        </View>
-        <NutritionRingsCard target={target} consumed={remaining?.consumedToday ?? null} />
+      <View style={[styles.kcalRow, styles.ringReserve]}>
+        <ThemedText variant="monoLarge" style={styles.kcalValue}>
+          {target.calories}
+        </ThemedText>
+        <ThemedText variant="caption" style={styles.kcalLabel}>
+          {t("home.kcalPerDay")}
+        </ThemedText>
       </View>
 
       <View style={styles.macroRow}>
@@ -290,6 +296,11 @@ function Macro({
   );
 }
 
+/** Card's own padding — the ring is inset by exactly this to sit in the
+ *  corner of the content box rather than on the border. */
+const CARD_PADDING = spacing[4];
+const RING_SIZE = COMPACT_RING_SIZE;
+
 const styles = StyleSheet.create({
   card: {
     gap: spacing[3],
@@ -319,11 +330,18 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: colors.accent,
   },
-  kcalRingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing[3],
+  // The corner itself. `top`/`right` equal the Card's own padding, so the
+  // ring sits flush inside the card's content box.
+  ringCorner: {
+    position: "absolute",
+    top: CARD_PADDING,
+    right: CARD_PADDING,
+  },
+  // What the rows that reach up beside the ring must keep clear. Reserving
+  // the space is what makes the absolute placement safe: text cannot end up
+  // underneath something it is laid out around.
+  ringReserve: {
+    paddingRight: RING_SIZE + spacing[3],
   },
   kcalRow: {
     flexDirection: "row",

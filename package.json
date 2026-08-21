@@ -65,6 +65,7 @@
     "profilescroll:check": "node scripts/check-profile-scroll.mjs",
     "dayplan:check": "node scripts/check-home-day-plan.mjs",
     "dayplanedit:check": "node scripts/check-day-plan-editing.mjs",
+    "nutritionui:check": "node scripts/check-nutrition-ring-ui.mjs",
     "final5:check": "node scripts/check-final-five.mjs",
     "qa3:check": "node scripts/check-three-qa-bugs.mjs",
     "authreset:check": "node scripts/check-auth-reset.mjs",
