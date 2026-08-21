@@ -631,10 +631,15 @@ export function EditSectionModal({
                 </Pressable>
               </View>
             </ScrollView>
+            {/* "Klar" for the iOS numeric pad, which has no return key.
+                INSIDE the sheet, below the scroll area: the
+                KeyboardAvoidingView rests the card on top of the keyboard,
+                so this strip is the space directly above it. It used to be
+                an InputAccessoryView mounted outside the sheet, which never
+                rendered at all from inside a Modal — see NumericDoneBar. */}
+            <NumericDoneBar visible={progression.numericFocused} />
           </SwipeDownSheet>
         </KeyboardAvoidingView>
-        {/* iOS "Klar" bar above the numeric pad (P8). */}
-        <NumericDoneBar />
       </View>
 
     </Modal>

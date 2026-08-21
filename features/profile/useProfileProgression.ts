@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, ScrollView, View } from "react-native";
 
 import { nextAnchorAfter, scrollTargetFor } from "./profileProgression";
@@ -50,6 +50,12 @@ export interface ProfileProgression {
   onNumericFocus: (fieldId: string) => void;
   /** A numeric field lost focus — advance unless another one took over. */
   onNumericBlur: (fieldId: string, from: ProfileAnchorId, form: ProfileFormState) => void;
+  /**
+   * True while a numeric field holds the keyboard. Drives the sheet's own
+   * "Klar" bar — see WHY THE DONE BAR IS NOT AN InputAccessoryView below.
+   * It does NOT flicker off while moving between two numeric fields.
+   */
+  numericFocused: boolean;
   /** Props to spread onto the sheet's ScrollView. */
   scrollViewProps: {
     onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
@@ -136,8 +142,26 @@ export function useProfileProgression(): ProfileProgression {
     });
   }, []);
 
+  /**
+   * ── WHY THE DONE BAR IS NOT AN InputAccessoryView ──────────────────
+   *
+   * It was one, and it never appeared. `InputAccessoryView` attaches to the
+   * first responder of the app's root window; this whole sheet lives inside
+   * a React Native `Modal`, which iOS presents in a window of its own, so
+   * the bar registered inside it is never the accessory of the field that
+   * has focus. MacroAdjustScreen uses the same pattern successfully — and
+   * it is a full screen, not a modal, which is the entire difference.
+   *
+   * A plain View at the bottom of the sheet cannot fail that way: the
+   * KeyboardAvoidingView already lifts the card to sit on top of the
+   * keyboard, so the sheet's own bottom edge IS the space above it. That
+   * needs a re-render, hence state rather than the ref alone.
+   */
+  const [numericFocused, setNumericFocused] = useState(false);
+
   const onNumericFocus = useCallback((fieldId: string) => {
     focusedNumeric.current = fieldId;
+    setNumericFocused(true);
     if (blurFrame.current !== null) {
       cancelAnimationFrame(blurFrame.current);
       blurFrame.current = null;
@@ -159,6 +183,7 @@ export function useProfileProgression(): ProfileProgression {
       blurFrame.current = requestAnimationFrame(() => {
         blurFrame.current = null;
         if (focusedNumeric.current !== null) return;
+        setNumericFocused(false);
         advanceFrom(from, form);
       });
     },
@@ -197,6 +222,7 @@ export function useProfileProgression(): ProfileProgression {
     advanceFrom,
     onNumericFocus,
     onNumericBlur,
+    numericFocused,
     scrollViewProps,
   };
 }

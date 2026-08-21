@@ -114,15 +114,62 @@ for (const f of HALF_FILLED) {
 check(`inget block pekar bakåt (fann: ${backwards})`, backwards === null);
 
 // ── 2: it still moves people FORWARD when there is somewhere to go ──────
-check("valt kön med ifyllda siffror går vidare till aktivitet",
-  nextAnchorAfter(form({ gender: "Male", ...NUMBERS }), "basics") === "activityType");
+// NOTE — after the three numbers the next block is KROPPSFETT, not
+// Aktivitet. An earlier version of this file asserted the opposite, because
+// progression filtered on `step.required` and body fat is the one optional
+// input. That skipped a question the customer could see on screen; the rule
+// is now "next unanswered question that applies", and required-ness is left
+// to the save gate alone. See section 2b.
+check("valt kön med ifyllda siffror går vidare till kroppsfett",
+  nextAnchorAfter(form({ gender: "Male", ...NUMBERS }), "basics") === "bodyFat");
 check("tomma siffror stannar kvar i grunddata (scrollar inte bort fälten)",
   nextAnchorAfter(form({ gender: "Male" }), "basics") === null);
 check("numeriskt Klar går vidare först när ALLA tre talen är giltiga",
   nextAnchorAfter(form({ gender: "Male", ageYears: "30", weightKg: "80" }), "basics") === null
-  && nextAnchorAfter(form({ gender: "Male", ...NUMBERS }), "basics") === "activityType");
+  && nextAnchorAfter(form({ gender: "Male", ...NUMBERS }), "basics") === "bodyFat");
 check("orimliga tal räknas inte som ifyllda",
   nextAnchorAfter(form({ gender: "Male", ageYears: "3", weightKg: "800", heightCm: "12" }), "basics") === null);
+
+// ── 2b: kroppsfett är nästa SYNLIGA steg, men fortfarande valfritt ──────
+check("kroppsfett hoppas inte över efter siffrorna",
+  nextAnchorAfter(form({ gender: "Female", ...NUMBERS }), "basics") === "bodyFat");
+check("ett valt kroppsfett leder vidare till aktivitet",
+  nextAnchorAfter(form({ gender: "Male", ...NUMBERS, bodyFatLevel: 2 }), "bodyFat") === "activityType");
+check("redan ifyllt kroppsfett hoppas över på vägen från siffrorna",
+  nextAnchorAfter(form({ gender: "Male", ...NUMBERS, bodyFatLevel: 2 }), "basics") === "activityType");
+check("kroppsfett görs INTE obligatoriskt för att lösa scrollen",
+  missingRequiredSteps(form({ gender: "Male", ...NUMBERS, activityType: "Mixed",
+    stepsRange: "Under5K", trainingSessions: "None", primaryGoal: "Maintain",
+    planFocus: "Balance" })).length === 0
+  && !PROFILE_STEPS.find((s) => s.id === "bodyFat").required);
+check("ett ogiltigt kroppsfett för könet räknas inte som ifyllt",
+  // Level 6 exists for women only; a man with it stored must be asked again.
+  nextAnchorAfter(form({ gender: "Male", ...NUMBERS, bodyFatLevel: 99 }), "basics") === "bodyFat");
+check("kroppsfett frågas inte innan könet är valt",
+  nextAnchorAfter(form({ ...NUMBERS }), "basics") === "activityType");
+
+// UX-ordningen ska vara den man SER, hela vägen ned.
+const walk = [];
+let cursor = "basics";
+let state = form({ gender: "Male", ...NUMBERS });
+for (let i = 0; i < 12; i++) {
+  const next = nextAnchorAfter(state, cursor);
+  if (!next) break;
+  walk.push(next);
+  cursor = next;
+  // Answer whatever that block asks, so the walk can continue.
+  state = form({ ...state, ...({
+    bodyFat: { bodyFatLevel: 2 },
+    activityType: { activityType: "Mixed" },
+    steps: { stepsRange: "Under5K" },
+    training: { trainingSessions: "None" },
+    goal: { primaryGoal: "FatLoss" },
+    pace: { goalPace: "Moderate" },
+    planFocus: { planFocus: "Balance" },
+  }[next] ?? {}) });
+}
+check(`UX-ordningen följer skärmen (fick: ${walk.join(" → ")})`,
+  walk.slice(0, 5).join(",") === "bodyFat,activityType,steps,training,goal");
 check("aktivitet → steg", nextAnchorAfter(form({ activityType: "Mixed" }), "activityType") === "steps");
 check("steg → träning", nextAnchorAfter(form({ activityType: "Mixed", stepsRange: "Under5K" }), "steps") === "training");
 
@@ -145,10 +192,24 @@ check("en man får aldrig cykelfrågor",
   nextAnchorAfter(form({ gender: "Male", ...NUMBERS, activityType: "Mixed",
     stepsRange: "Under5K", trainingSessions: "None", primaryGoal: "Maintain" }), "planFocus") === null);
 
-// ── 4: kroppsfett är valfritt och blir aldrig ett mål ───────────────────
-check("den valfria kroppsfettsrutan är aldrig ett scrollmål",
-  !new Set(HALF_FILLED.flatMap((f) => [...new Set(ORDER)].map((a) => nextAnchorAfter(f, a))))
-    .has("bodyFat"));
+// ── 4: bara block som faktiskt gäller kunden blir mål ───────────────────
+// (This section used to assert that body fat was NEVER a target. That was
+//  the bug, not the rule — see 2b.)
+let inapplicable = null;
+for (const f of HALF_FILLED) {
+  for (const anchor of new Set(ORDER)) {
+    const next = nextAnchorAfter(f, anchor);
+    if (next === null) continue;
+    const step = PROFILE_STEPS.find((s) => s.anchor === next);
+    if (!step.applies(f)) inapplicable = `${anchor} → ${next}`;
+  }
+}
+check(`inget block som inte gäller kunden blir mål (fann: ${inapplicable})`,
+  inapplicable === null);
+check("en man skickas aldrig till menopaus eller cykelfas",
+  !["menopause", "cyclePhase"].includes(
+    nextAnchorAfter(form({ gender: "Male", ...NUMBERS, bodyFatLevel: 2, activityType: "Mixed",
+      stepsRange: "Under5K", trainingSessions: "None", primaryGoal: "Maintain" }), "goal")));
 
 // ── 5: scroll-beslutet ─────────────────────────────────────────────────
 const geo = (o) => ({
@@ -222,6 +283,38 @@ check("EditNumField släpper igenom både fokus och blur",
 check("iOS Klar-baren stänger fortfarande tangentbordet",
   fields.includes("onPress={() => Keyboard.dismiss()}"));
 
+// ── 7: Klar/Done på de numeriska fälten ────────────────────────────────
+// InputAccessoryView renderas aldrig inifrån en RN Modal — den registreras
+// mot rotfönstrets first responder, och sheeten ligger i ett eget fönster.
+// Därför är baren nu en vanlig View i sheeten.
+check("profil-sheeten använder INTE InputAccessoryView (den syns inte i en Modal)",
+  !fields.includes("InputAccessoryView") && !fields.includes("inputAccessoryViewID"));
+check("Klar-baren är en vanlig vy som styrs av fokus",
+  fields.includes("export function NumericDoneBar({ visible }")
+  && fields.includes('if (Platform.OS !== "ios" || !visible) return null;'));
+check("baren renderas i sheeten, under scrollytan",
+  /<\/ScrollView>\s*(?:\{[^}]*\}\s*)?<NumericDoneBar visible=\{progression\.numericFocused\} \/>/.test(
+    codeOf("features/profile/EditSectionModal.tsx")));
+check("fokusflaggan flimrar inte när man byter numeriskt fält",
+  hook.includes("setNumericFocused(true)")
+  && /if \(focusedNumeric\.current !== null\) return;\s*setNumericFocused\(false\);/.test(hook));
+check("Android behåller sin egen Done via tangentbordet",
+  fields.includes('returnKeyType="done"')
+  && fields.includes("onSubmitEditing={() => Keyboard.dismiss()}"));
+check("alla tre talen (och viktgenvägen) har en Klar-väg",
+  ["age", "weight", "height", "weight-quick"].every(
+    (id) => modal.includes(`progression.onNumericFocus("${id}")`) && modal.includes(`numericDone("${id}")`)));
+// MacroAdjustScreen är en HEL SKÄRM, inte en modal — dess accessory view
+// fungerar och ska inte röras av den här fixen.
+check("MacroAdjust-skärmens egen accessory view är orörd",
+  readFileSync("features/profile/MacroAdjustScreen.tsx", "utf8")
+    .includes('<InputAccessoryView nativeID="nutri-macro-kcal-done">'));
+
+for (const locale of ["sv", "en", "da"]) {
+  const json = JSON.parse(readFileSync(`i18n/locales/${locale}.json`, "utf8"));
+  check(`${locale}: Klar-copyn finns`, typeof json.common?.done === "string" && json.common.done.length > 0);
+}
+
 const reqs = codeOf("features/profile/profileRequirements.ts");
 check("den gamla regeln är borttagen, inte bara oanvänd",
   !reqs.includes("export function nextIncompleteAnchor"));
@@ -236,10 +329,17 @@ check("en fullt ifylld man saknar ingenting",
   missingRequiredSteps(form({ gender: "Male", ...NUMBERS, activityType: "Mixed",
     stepsRange: "Under5K", trainingSessions: "None", primaryGoal: "Maintain",
     planFocus: "Balance" })).length === 0);
-check("en fullt ifylld man har heller inget kvar att scrolla till",
-  nextAnchorAfter(form({ gender: "Male", ...NUMBERS, activityType: "Mixed",
-    stepsRange: "Under5K", trainingSessions: "None", primaryGoal: "Maintain",
-    planFocus: "Balance" }), "basics") === null);
+// De två begreppen skiljer sig, och det är hela poängen: formuläret nedan
+// är KLART att spara men har kroppsfettet obesvarat, så det finns
+// fortfarande ett synligt steg kvar att gå till.
+const completeButNoBodyFat = form({ gender: "Male", ...NUMBERS, activityType: "Mixed",
+  stepsRange: "Under5K", trainingSessions: "None", primaryGoal: "Maintain",
+  planFocus: "Balance" });
+check("sparbart men med tomt kroppsfett → kroppsfett är fortfarande nästa synliga steg",
+  missingRequiredSteps(completeButNoBodyFat).length === 0
+  && nextAnchorAfter(completeButNoBodyFat, "basics") === "bodyFat");
+check("när ALLT är besvarat finns inget kvar att scrolla till",
+  nextAnchorAfter({ ...completeButNoBodyFat, bodyFatLevel: 2 }, "basics") === null);
 
 // ── Rapport ─────────────────────────────────────────────────────────────
 if (failures.length > 0) {
@@ -249,7 +349,9 @@ if (failures.length > 0) {
 }
 console.log("✓ Profile/onboarding scrolling holds:");
 console.log("    progression only ever looks FORWARD from the block answered");
+console.log("    body fat is the next VISIBLE step after the numbers, still optional to save");
 console.log("    a gap in the current block keeps the customer where they are");
 console.log("    positions are measured against the scroll content, not remembered");
 console.log("    an already-visible next question causes no scroll at all");
 console.log("    no path produces a backwards scroll, on any half-filled form");
+console.log("    the numeric pad has a Klar that renders from inside the modal");

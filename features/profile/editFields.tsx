@@ -1,12 +1,4 @@
-import {
-  InputAccessoryView,
-  Keyboard,
-  Platform,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from "react-native";
+import { Keyboard, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { Check } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
@@ -18,33 +10,50 @@ import { colors, fontFamily, spacing } from "@/theme";
  * EditOptionGroup / option-row buttons (same select styling: orange border +
  * tinted background + check marker on the active option).
  *
- * KEYBOARD DISMISSAL (release P8): the iOS numeric pad has NO return key,
- * so every numeric field attaches a shared "Klar" accessory bar above the
- * keyboard; Android gets returnKeyType="done" + dismissal on submit. The
- * keyboard could previously only be closed by luck.
+ * KEYBOARD DISMISSAL. The iOS numeric pad has NO return key, so a numeric
+ * field needs a "Klar" of its own or the keyboard can only be closed by
+ * luck. Android gets returnKeyType="done" + dismissal on submit, which its
+ * keyboard does show, and is left alone.
  */
 
-const NUMERIC_ACCESSORY_ID = "nutri-numeric-done";
-
-/** Mounted once per screen that hosts numeric fields (iOS only). */
-export function NumericDoneBar() {
+/**
+ * The "Klar" bar that sits above the keyboard.
+ *
+ * ── WHY THIS IS A PLAIN VIEW AND NOT AN InputAccessoryView ───────────
+ *
+ * It WAS an InputAccessoryView, and on the profile sheet it never appeared
+ * — the reported "det finns ingen tydlig Klar". That component attaches to
+ * the first responder of the app's ROOT window, and the profile sheet lives
+ * inside a React Native `Modal`, which iOS presents in a window of its own.
+ * The bar was registered in the wrong window, so nothing was ever shown
+ * above the numeric pad. (MacroAdjustScreen uses an InputAccessoryView too
+ * and it works there — because it is a full screen, not a modal. That
+ * contrast is the whole diagnosis, and it is why that screen is untouched.)
+ *
+ * The caller renders this at the bottom of the sheet, below the scroll area,
+ * while a numeric field has focus. The KeyboardAvoidingView already lifts
+ * the card to rest on the keyboard, so the sheet's own bottom edge is the
+ * strip directly above it — the same place the accessory view was supposed
+ * to occupy, reached by ordinary layout that cannot be in the wrong window.
+ */
+export function NumericDoneBar({ visible }: { visible: boolean }) {
   const { t } = useTranslation();
 
-  if (Platform.OS !== "ios") return null;
+  // iOS only: this exists because the numeric pad there has no return key.
+  if (Platform.OS !== "ios" || !visible) return null;
 
   return (
-    <InputAccessoryView nativeID={NUMERIC_ACCESSORY_ID}>
-      <View style={styles.accessoryBar}>
-        <Pressable
-          onPress={() => Keyboard.dismiss()}
-          accessibilityRole="button"
-          accessibilityLabel={t("common.done")}
-          style={({ pressed }) => [styles.accessoryDone, pressed && { opacity: 0.7 }]}
-        >
-          <ThemedText style={styles.accessoryDoneText}>{t("common.done")}</ThemedText>
-        </Pressable>
-      </View>
-    </InputAccessoryView>
+    <View style={styles.accessoryBar}>
+      <Pressable
+        onPress={() => Keyboard.dismiss()}
+        accessibilityRole="button"
+        accessibilityLabel={t("common.done")}
+        hitSlop={8}
+        style={({ pressed }) => [styles.accessoryDone, pressed && { opacity: 0.7 }]}
+      >
+        <ThemedText style={styles.accessoryDoneText}>{t("common.done")}</ThemedText>
+      </Pressable>
+    </View>
   );
 }
 
@@ -105,7 +114,6 @@ export function EditNumField({
           // blurs the input, and so does tapping the next one.
           onBlur={onDone}
           onSubmitEditing={() => Keyboard.dismiss()}
-          inputAccessoryViewID={Platform.OS === "ios" ? NUMERIC_ACCESSORY_ID : undefined}
           style={styles.input}
         />
         <ThemedText style={styles.unit}>{unit}</ThemedText>
@@ -241,7 +249,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[2],
   },
-  accessoryDone: { paddingHorizontal: spacing[3], paddingVertical: spacing[1] },
+  // A real touch target rather than the width of the word.
+  accessoryDone: {
+    minHeight: 36,
+    justifyContent: "center",
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[1],
+  },
   accessoryDoneText: {
     fontSize: 15,
     fontFamily: fontFamily.bodySemibold,
