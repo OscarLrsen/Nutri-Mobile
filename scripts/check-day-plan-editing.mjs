@@ -42,33 +42,43 @@ const menu = readFileSync("features/menu/MenuScreen.tsx", "utf8");
 const today = readFileSync("features/home/TodayCard.tsx", "utf8");
 const rings = readFileSync("features/home/NutritionRingsCard.tsx", "utf8");
 
-// ── 1: a filled slot has a real edit handler ────────────────────────────
-check("Home-raderna har en Ändra-åtgärd, inte bara en pil",
+// ── 1: every slot row carries a real action ─────────────────────────────
+//
+// THIS SECTION USED TO PIN "Ändra". The four per-slot edit buttons are gone
+// on purpose: they were four separate doors to the same planner, which shows
+// all four slots anyway, and they left the rows unable to do the obvious
+// thing. The row action is now "Beställ" and there is ONE planner entry.
+// Editing itself is unchanged and still guarded below and in
+// check-day-plan-order-consistency.
+const nav = readFileSync("features/dayplan/dayPlanNavigation.ts", "utf8");
+check("Home-raderna har en åtgärd, inte bara en pil",
   home.includes("renderAction={(slot)")
-  && home.includes('t("planDay.edit")')
+  && home.includes('t("planDay.order")')
   && !homeCode.includes("ChevronRight"));
-check("Ändra öppnar planeraren", home.includes('pathname: "/planera-dagen"'));
-check("Ändra skickar med sloten", home.includes("params: { slot: wizardSlot }"));
-check("Ändra-knappen har ett eget a11y-namn per slot",
-  home.includes('t("planDay.editSlotAria", { slot: label })'));
+check("åtgärden går till menyn för sin slot",
+  home.includes("openMenuForSlot(slot.label)"));
+check("åtgärden har ett eget a11y-namn per slot",
+  home.includes('`${t("planDay.order")} — ${label}`'));
 
-// The route is reachable again. This is the actual regression: grep the whole
-// app for anything that navigates to it.
-const NAV = /(router\.(push|navigate|replace)\(|pathname:\s*)["'{][^\n]*planera-dagen/;
-const linkers = ["features/home/HomeDayPlan.tsx", "features/menu/PersonalMenuSection.tsx"]
+// The planner is still reachable — now through one shared entry rather than
+// four per-slot ones. It is the ORPHANED route that was the old regression.
+const NAV = /(router\.(push|navigate|replace)\(|pathname:\s*)["'{]?[^\n]*(planera-dagen|PLAN_DAY_ROUTE)/;
+const linkers = ["features/home/HomeDayPlan.tsx", "features/profile/ProfileScreen.tsx"]
   .filter((f) => NAV.test(readFileSync(f, "utf8")));
-check("/planera-dagen är inte längre föräldralös", linkers.length > 0);
+check("/planera-dagen är inte längre föräldralös", linkers.length >= 2);
+check("route-konstanten är delad, inte inskriven på varje ställe",
+  nav.includes('PLAN_DAY_ROUTE = "/planera-dagen"'));
 
 // ── 2: tapping a slot works EVERY time, not just the first ──────────────
 check("menyn läser fortfarande navKey", menu.includes("const navKey = params.navKey;")
   && menu.includes("[requestedCategory, navKey]"));
-check("Home SKICKAR navKey (det gjorde ingen tidigare)",
-  home.includes("navKey: String(Date.now())"));
-check("Home skickar fortfarande kategori och slot",
-  home.includes("category: categoryForSlot(wizardSlot)") && home.includes("slot: wizardSlot"));
+check("navKey skickas fortfarande (det gjorde ingen före dee9d85)",
+  nav.includes("navKey: String(now)") && home.includes("Date.now()"));
+check("kategori och slot skickas fortfarande",
+  nav.includes("category: categoryForSlot(slot)") && nav.includes("slot,"));
 
-// ── 3: row press and edit button are separate targets ───────────────────
-check("Ändra-knappen ligger UTANFÖR radens Pressable",
+// ── 3: row press and the row action are separate targets ────────────────
+check("radens åtgärd ligger UTANFÖR radens Pressable",
   /<\/Pressable>\s*\{renderAction\?\.\(slot\) \?\? null\}/.test(list));
 check("raden är fortfarande klickbar i hela sin bredd",
   list.includes("styles.slotMain") && list.includes("flex: 1"));

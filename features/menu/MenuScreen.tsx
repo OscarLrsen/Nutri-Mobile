@@ -22,6 +22,7 @@ import { colors, fontFamily, radius, spacing } from "@/theme";
 import { MealCard } from "./MealCard";
 import { DrinkCard } from "./DrinkCard";
 import { PersonalMenuSection } from "./PersonalMenuSection";
+import { SlotTargetBanner } from "./SlotTargetBanner";
 import { GoWellFlavorCarousel } from "./GoWellFlavorCarousel";
 import {
   categoryForSlot,
@@ -332,6 +333,15 @@ export function MenuScreen() {
                     standard cards in the list below. */}
                 {activeId === "dryck" && goWellDrinks.length > 0 ? (
                   <GoWellFlavorCarousel drinks={goWellDrinks} />
+                ) : null}
+                {/* The slot's TARGET — shown only when the menu was opened
+                    from a day-plan row, and only for the slot that row
+                    named. The menu already knew this number (it is what
+                    picks M or L); it just never showed it, so the customer
+                    had nothing to compare Home against except a meal card,
+                    which is a different quantity entirely. */}
+                {activeSlot && requestedSlot === activeSlot ? (
+                  <SlotTargetBanner slot={activeSlot} target={activeSlotTarget} />
                 ) : null}
                 <ThemedText style={styles.sectionLabel}>
                   {t(`menu.categories.${activeId}`).toUpperCase()} ·{" "}

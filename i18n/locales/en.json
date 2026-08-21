@@ -160,6 +160,10 @@
       "explanation": "Based on your goal and today's plan.",
       "deviates": "Differs from your recommendation ({{size}}).",
       "cta": "Choose recommended"
+    },
+    "slotTarget": {
+      "label": "Your target",
+      "mealNote": "The numbers on each meal below are that meal’s own nutrition."
     }
   },
   "planDay": {
@@ -174,6 +178,7 @@
       "Mellanmål": "Snack"
     },
     "edit": "Edit",
+    "order": "Order",
     "editSlotAria": "Edit {{slot}}",
     "summaryHead": "Your plan",
     "goalRow": "Goal total",

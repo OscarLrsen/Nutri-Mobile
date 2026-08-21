@@ -160,6 +160,10 @@
       "explanation": "Baseret på dit mål og dagens plan.",
       "deviates": "Afviger fra din anbefaling ({{size}}).",
       "cta": "Vælg anbefalet"
+    },
+    "slotTarget": {
+      "label": "Dit mål",
+      "mealNote": "Tallene på hver ret nedenfor er rettens egen ernæring."
     }
   },
   "planDay": {
@@ -174,6 +178,7 @@
       "Mellanmål": "Mellemmåltid"
     },
     "edit": "Redigér",
+    "order": "Bestil",
     "editSlotAria": "Redigér {{slot}}",
     "summaryHead": "Din plan",
     "goalRow": "Målsum",

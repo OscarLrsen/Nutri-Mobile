@@ -9,6 +9,7 @@ import {
   matchSlotLabel,
 } from "@/features/heldag/heldagBuilder";
 import type { WizardSlot } from "@/features/anpassar/optimizer";
+import { savedPlanTargets } from "@/features/dayplan/dayPlanSlots";
 
 /**
  * Personal portion recommendation for menu cards (patch 12).
@@ -106,19 +107,19 @@ export function slotTarget(
 ): ApiMealDistribution | null {
   // 1. Saved plan wins — it is the server-persisted, possibly manually
   //    edited plan the day planner wrote (and Nutri Anpassar reads).
-  const savedSlot = savedPlan?.meals?.find(
-    (m) => m.calories > 0 && matchSlotLabel(slot, m.label)
-  );
-  if (savedSlot) {
-    return {
-      label: savedSlot.label,
-      calories: savedSlot.calories,
-      proteinG: savedSlot.proteinG,
-      carbsG: savedSlot.carbsG,
-      fatG: savedSlot.fatG,
-      timingPurpose: "",
-    };
-  }
+  //
+  //    ── THE SAME NUMBERS HOME SHOWS ──────────────────────────────────
+  //    Read through visibleSlotsFor, which is what Home and the planner
+  //    render from. It matters in 3-MEAL MODE: there the snack is dropped
+  //    and its calories are scaled back into the three main meals, so the
+  //    STORED row and the DISPLAYED row are deliberately different numbers.
+  //    This function used to return the stored row while Home displayed the
+  //    scaled one — 150 kcal apart on Lunch for a 2000 kcal plan — so the
+  //    menu recommended a size against a target the customer had never been
+  //    shown. One transformation, one set of numbers.
+  const visible = savedPlanTargets(savedPlan);
+  const savedSlot = visible.find((m) => m.calories > 0 && matchSlotLabel(slot, m.label));
+  if (savedSlot) return savedSlot;
 
   // 2–3. Automatic distribution, then fallback share.
   if (!today) return null;

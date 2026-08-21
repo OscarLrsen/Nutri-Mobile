@@ -3,7 +3,7 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, View } from "r
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Globe } from "lucide-react-native";
+import { CalendarRange, ChevronRight, Globe } from "lucide-react-native";
 
 import { ThemedText } from "@/components/ui/ThemedText";
 import { LoadingIndicator } from "@/components/feedback/LoadingIndicator";
@@ -48,6 +48,7 @@ import { colors, fontFamily, spacing } from "@/theme";
 import {
   deriveTrainingSessionsFromWeeklySchedule,
 } from "./profileOptions";
+import { PLAN_DAY_ROUTE } from "@/features/dayplan/dayPlanNavigation";
 import { EditSectionModal, type EditSection } from "./EditSectionModal";
 import {
   formFromProfile,
@@ -921,6 +922,29 @@ export function ProfileScreen() {
         </View>
       ) : null}
 
+      {/* ── 2b. PLANERA DIN DAG — part of the plan tool, not a settings row.
+          Sits directly under the active plan because that is what it acts
+          on: the plan above is the day's GOAL, this is how the day is spread
+          across Frukost / Mellanmål / Lunch / Middag. Same route constant
+          Home's CTA uses, so there is one way in and it cannot drift. ── */}
+      {np ? (
+        <Pressable
+          onPress={() => router.push(PLAN_DAY_ROUTE)}
+          style={({ pressed }) => [styles.planDayCard, pressed && { opacity: 0.85 }]}
+          accessibilityRole="button"
+          accessibilityLabel={t("profile.planDay")}
+        >
+          <View style={styles.planDayIcon}>
+            <CalendarRange size={16} color={colors.accent} strokeWidth={2} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <ThemedText style={styles.planDayTitle}>{t("profile.planDay")}</ThemedText>
+            <ThemedText style={styles.planDaySub}>{t("profile.planDaySub")}</ThemedText>
+          </View>
+          <ChevronRight size={14} color="rgba(255,255,255,0.3)" />
+        </Pressable>
+      ) : null}
+
       {/* ── 3. MITT KONTO — moved directly under the active plan (release
           QA): the account basics are what the customer comes here to change,
           so they must not sit below the navigation rows. Release P13: ONE
@@ -1312,6 +1336,30 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
   },
+  // Same surface as planCard above it — this belongs to the plan section,
+  // not to the account rows further down.
+  planDayCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    marginTop: spacing[3],
+    backgroundColor: "#17171A",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[4],
+  },
+  planDayIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: colors.accentSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  planDayTitle: { fontSize: 14, fontFamily: fontFamily.bodySemibold, color: colors.textPrimary },
+  planDaySub: { marginTop: 2, fontSize: 12, color: colors.textTertiary },
   planTop: {
     flexDirection: "row",
     alignItems: "flex-start",
