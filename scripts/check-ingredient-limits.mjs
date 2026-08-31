@@ -77,15 +77,24 @@ check(`MinAmountG respekteras (kyckling ${minned.prot} ≥ 80)`, minned.prot >= 
 check(`MinAmountG respekteras (puré ${minned.carb} ≥ 100)`, minned.carb >= 100);
 
 // ── 3. NULL = the historical 0/500 fallback, unchanged ──────────────────
-const fallback = amounts(optimizeIngredients(recipe, lib(null), bigTarget));
+// Needs a target that genuinely asks for more than 250 g of protein source.
+// Under the residual model the protein role only covers what the rest of the
+// meal leaves behind, so bigTarget's 60 P is met at ~168 g — that is the fit
+// working, not the cap moving. 90 P is what actually probes the ceiling.
+const proteinHeavyTarget = { ...bigTarget, calories: 1800, proteinG: 90 };
+const fallback = amounts(optimizeIngredients(recipe, lib(null), proteinHeavyTarget));
 check(`NULL-fallback tillåter > 250 (kyckling ${fallback.prot})`, fallback.prot > 250);
 check(`NULL-fallback stannar vid 500 (puré ${fallback.carb} ≤ 500)`, fallback.carb <= 500);
 
 // ── 4. Saturated M and L are identical → equivalence collapses them ─────
+// Same limits as before; the target pair is raised so BOTH sizes really do
+// saturate. At bigTarget the residual fit now lands M below the protein cap,
+// so that pair no longer tests saturation at all.
 const sat = { prot: [80, 200], carb: [100, 250] };
-const satM = optimizeIngredients(recipe, lib(sat), bigTarget);
+const satM = optimizeIngredients(recipe, lib(sat),
+  { ...bigTarget, calories: 2000, proteinG: 100, carbsG: 300, fatG: 40 });
 const satL = optimizeIngredients(recipe, lib(sat),
-  { ...bigTarget, calories: 1680, proteinG: 72, carbsG: 240, fatG: 36 });
+  { ...bigTarget, calories: 2400, proteinG: 120, carbsG: 360, fatG: 48 });
 check("mättade M/L blir ekvivalenta → L döljs",
   areCustomMealPortionsEquivalent({ ingredients: satM }, { ingredients: satL }));
 

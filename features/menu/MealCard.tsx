@@ -114,9 +114,6 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
     if (fallback) setSelectedSize(fallback.id);
   }, [availability, selectedSize, isFixed, stockBySize]);
 
-  const effectiveSize = isFixed ? "medium" : selectedSize;
-  const size = CUSTOMER_SIZE_OPTIONS.find((s) => s.id === effectiveSize) ?? CUSTOMER_SIZE_OPTIONS[0];
-
   // ── The personally computed meal (the real Anpassar engine) ──────────
   //
   // ready → grams/macros/price come from the BACKEND calculation for this
@@ -128,11 +125,30 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
   // must know whether L is genuinely a different portion before offering
   // it: when every ingredient is already saturated at max for M, the L
   // optimization returns the exact same grams and "L" would be a fake
-  // upgrade. The queries are cached per (user, target, meal, size) with a
-  // 5-min staleTime and shared with MealDetailScreen, so this is one extra
-  // calculate call per card, not per render.
-  const personalMedium = usePersonalizedMeal(meal, "medium");
-  const personalLarge = usePersonalizedMeal(meal, "large");
+  // upgrade. Since the personal target is no longer scaled by size (see
+  // personalizedMenu.ts) the two now always agree for a personalized meal,
+  // so L hides itself through the SAME rule rather than a second mechanism
+  // — and both hooks share one cache row, so it is one calculate call.
+  //
+  // The slot rides along so the tailoring matches the row the customer
+  // tapped on Home: at 12:00 a Middag card must not be served Lunch's
+  // target just because the clock says lunchtime.
+  const personalSlot = recommendation?.slot ?? null;
+  const personalMedium = usePersonalizedMeal(meal, "medium", personalSlot);
+  const personalLarge = usePersonalizedMeal(meal, "large", personalSlot);
+
+  // PERSONALIZED-ONLY. Once a personal portion exists it REPLACES the M/L
+  // choice — the customer sees one meal, computed for their own target, and
+  // there is no size left to pick. So no size may ride along downstream
+  // either: "medium" is the neutral value, and the one the backend hardcodes
+  // for custom lines anyway (OrdersController: Size = "medium" when
+  // MealId is null). Storing "large" here would have re-applied a 1.2×
+  // multiplier to the cart's weight display and put an "L" badge on a
+  // portion the kitchen must plate by grams.
+  const personalizedOnly = personalMedium.status === "ready";
+  const effectiveSize = isFixed || personalizedOnly ? "medium" : selectedSize;
+  const size = CUSTOMER_SIZE_OPTIONS.find((s) => s.id === effectiveSize) ?? CUSTOMER_SIZE_OPTIONS[0];
+
   const personal = effectiveSize === "large" ? personalLarge : personalMedium;
   const personalData = personal.status === "ready" ? personal.data : null;
 
@@ -174,7 +190,9 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
   // masquerade as it — the price slot shows a placeholder instead.
   const priceHidden = personal.status === "loading";
 
-  const hasRecommendation = !isFixed && recSizeId !== null;
+  // A size recommendation is meaningless when there are no sizes to choose
+  // between — personalized-only owns the portion outright.
+  const hasRecommendation = !isFixed && !personalizedOnly && recSizeId !== null;
   const recSizeLabel =
     CUSTOMER_SIZE_OPTIONS.find((s) => s.id === recSizeId)?.label ?? recSizeId ?? "";
   const isRecommendedSelected = hasRecommendation && effectiveSize === recSizeId;
@@ -381,9 +399,12 @@ export function MealCard({ meal, availability, recommendation = null }: MealCard
       </View>
       </Pressable>
 
-      {/* Footer: size selector (M/L) — small is customer-hidden, web parity */}
+      {/* Footer: size selector (M/L) — small is customer-hidden, web parity.
+          Personalized-only renders no selector at all: the portion is the
+          customer's own, and an M/L next to it would be a second, competing
+          answer to the same question. */}
       <View style={styles.footer}>
-        {!isFixed ? (
+        {!isFixed && !personalizedOnly ? (
           <View style={styles.sizeGroup}>
             {/* When personal M and L are provably the same portion, L is not
                 rendered — a second button for the identical recipe would be a
