@@ -228,7 +228,12 @@ export function MacroAdjustScreen() {
     }
 
     let proteinG = proteinBaseWeight * proteinPerKg;
-    let fatG = Math.max(0.6 * weightKg, 40);
+
+    // Fat floor: the highest of 0.6 g/kg actual body weight, a 20% share of the
+    // kcal target, and an absolute 40 g. The calorie share stops fat flat-lining
+    // at high kcal targets, where every extra kcal used to land in carbs.
+    const fatFloor = Math.max(Math.max(0.6 * weightKg, (userKcal * 0.2) / 9), 40);
+    let fatG = fatFloor;
 
     if (planFocus === "Satiety") {
       fatG *= 1.1;
@@ -242,6 +247,10 @@ export function MacroAdjustScreen() {
     // Absolute protein floor — 1.6 g per kg actual body weight. Applied after
     // planFocus so Health (×0.95) can never push protein under it.
     proteinG = Math.max(proteinG, 1.6 * weightKg);
+
+    // Fat floor re-applied after planFocus so Performance can still trim fat,
+    // but never below 20% of the kcal target (or the weight/absolute floors).
+    fatG = Math.max(fatG, fatFloor);
 
     const newProtein = Math.round(proteinG);
     const newFat = Math.round(fatG);
