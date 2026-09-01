@@ -28,7 +28,6 @@ import {
 } from "@/services/api/nutrition";
 import { formatNumber, useLanguage, useTranslation } from "@/i18n";
 import { colors, fontFamily, spacing } from "@/theme";
-import { mapBodyFat } from "./profileOptions";
 
 /**
  * Justera makros — port of the web's app/profil/justera-makros/page.tsx.
@@ -36,8 +35,9 @@ import { mapBodyFat } from "./profileOptions";
  * draft committed on blur, macro sliders/steppers (±5g; protein max 350,
  * carbs 600, fat 200), balance rule (macro kcal within 95–105% of target
  * AND |diff| ≤ 50 to save), the recalc CTA that resizes macros for a new
- * kcal target (protein per-kg by goal with lean-mass/BMI-25 base and
- * planFocus adjustments — mirrors NutritionEngineService), override
+ * kcal target (protein per-kg by goal on a BMI-25-capped body-weight base
+ * with a 1.6 g/kg floor and planFocus adjustments — mirrors
+ * NutritionEngineService), override
  * save/reset through PUT/DELETE /nutrition-profile/override, and the
  * Nutri-recommendation line (result when Auto, preview of the stored
  * profile when overridden).
@@ -63,8 +63,6 @@ export function MacroAdjustScreen() {
 
   const [weightKg, setWeightKg] = useState(0);
   const [heightCm, setHeightCm] = useState(0);
-  const [bodyFatLevel, setBodyFatLevel] = useState<number | null>(null);
-  const [gender, setGender] = useState("");
   const [planFocus, setPlanFocus] = useState<string | null>(null);
 
   const [userKcal, setUserKcal] = useState(0);
@@ -106,8 +104,6 @@ export function MacroAdjustScreen() {
       if (np) {
         setWeightKg(np.weightKg);
         setHeightCm(np.heightCm);
-        setBodyFatLevel(np.bodyFatLevel);
-        setGender(np.gender);
         setPlanFocus(np.planFocus ?? null);
       }
 
@@ -217,11 +213,13 @@ export function MacroAdjustScreen() {
     const goal = result.primaryGoal;
     const proteinPerKg = goal === "FatLoss" ? 2.2 : goal === "MuscleGain" ? 2.0 : 1.8;
 
+    // Protein base weight: actual body weight, with a BMI-25 cap above BMI 27.
+    // bodyFatLevel deliberately does NOT lower this base — it drives BMR only,
+    // server-side. Basing protein on lean mass collapsed the target (a 70 kg
+    // MuscleGain profile dropped 140 g → 101 g just by answering the body-fat
+    // question).
     let proteinBaseWeight = weightKg;
-    const bfPct = mapBodyFat(bodyFatLevel, gender);
-    if (bfPct !== null) {
-      proteinBaseWeight = weightKg * (1 - bfPct);
-    } else if (heightCm > 0) {
+    if (heightCm > 0) {
       const heightM = heightCm / 100;
       const bmi = weightKg / (heightM * heightM);
       if (bmi >= 27) {
@@ -240,6 +238,10 @@ export function MacroAdjustScreen() {
       proteinG = Math.max(proteinG * 0.95, 1.6 * proteinBaseWeight);
       fatG *= 1.1;
     }
+
+    // Absolute protein floor — 1.6 g per kg actual body weight. Applied after
+    // planFocus so Health (×0.95) can never push protein under it.
+    proteinG = Math.max(proteinG, 1.6 * weightKg);
 
     const newProtein = Math.round(proteinG);
     const newFat = Math.round(fatG);
