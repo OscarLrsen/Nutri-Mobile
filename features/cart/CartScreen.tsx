@@ -951,14 +951,22 @@ function CartItemCard({ item }: { item: CartItem }) {
           fiberG: Math.round(item.meal.macros.fiberG * macroMult),
         });
 
-  const totalGramsBase = item.meal.ingredients.reduce((s, ing) => s + (ing.amountG ?? 0), 0);
-  const grams =
-    !isDrink && totalGramsBase > 0 ? `${Math.round(totalGramsBase * macroMult)}g` : null;
+  // A custom/personalized line was ordered at the optimizer's grams, not at
+  // the recipe's — and no size multiplier applies to it.
+  const totalGramsBase =
+    item.isCustom && item.customIngredients
+      ? item.customIngredients.reduce((s, ing) => s + (ing.amountG ?? 0), 0)
+      : Math.round(item.meal.ingredients.reduce((s, ing) => s + (ing.amountG ?? 0), 0) * macroMult);
+  const grams = !isDrink && totalGramsBase > 0 ? `${totalGramsBase}g` : null;
   const sizeShort = isDrink
     ? item.drink?.volumeML
       ? `${item.drink.volumeML} ml`
       : null
-    : (SIZE_LABEL_SHORT[item.sizeId] ?? size?.label ?? "M");
+    : // A personalized line has no size — an "M"/"L" badge would name a
+      // portion that does not exist for it.
+      item.isCustom
+      ? null
+      : (SIZE_LABEL_SHORT[item.sizeId] ?? size?.label ?? "M");
   const isUnavailable = item.meal.available === false;
   const canSwitchSize = !isDrink && !item.isCustom && item.meal.portionMode !== "fixed";
 
@@ -1003,8 +1011,9 @@ function CartItemCard({ item }: { item: CartItem }) {
                 {sizeShort || grams ? (
                   <View style={styles.sizePill}>
                     <ThemedText style={styles.sizePillText}>
-                      {sizeShort}
-                      {grams ? ` · ${grams}` : ""}
+                      {/* A personalized line has no size, so the pill is
+                          grams alone — not a dangling " · " separator. */}
+                      {[sizeShort, grams].filter(Boolean).join(" · ")}
                     </ThemedText>
                   </View>
                 ) : null}

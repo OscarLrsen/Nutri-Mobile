@@ -53,6 +53,14 @@ export function getItemMacros(
  */
 export function getItemWeightG(item: CartItem): number {
   if (item.kind === "drink") return 0;
+  // A custom/personalized line's grams ARE the optimizer's output — the
+  // recipe amounts are not what was ordered, and no size multiplier applies
+  // (the backend stores these grams verbatim with Size = "medium"). Scaling
+  // them by a leftover sizeId was a size multiplier on a personalized line.
+  if (item.isCustom && item.customIngredients) {
+    const customGrams = item.customIngredients.reduce((sum, ing) => sum + (ing.amountG ?? 0), 0);
+    return customGrams * item.quantity;
+  }
   const size = MEAL_SIZES.find((s) => s.id === item.sizeId);
   const mult = size?.macroMultiplier ?? 1;
   const baseGrams = item.meal.ingredients.reduce((sum, ing) => sum + (ing.amountG ?? 0), 0);

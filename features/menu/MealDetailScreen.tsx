@@ -155,19 +155,28 @@ export function MealDetailScreen() {
     if (fallback) setSelectedSize(fallback.id);
   }, [availability, selectedSize, stockBySize]);
 
-  const effectiveSize = isFixed ? "medium" : selectedSize;
+  // ── The personally computed meal ─────────────────────────────────────
+  //
+  // Computed through the SAME engine the Anpassar wizard used (optimizer
+  // grams → backend /custom-meal/calculate for nutrition and öre-precise
+  // price), against the customer's OWN slot target — the size multiplier no
+  // longer touches that target (see personalizedMenu.ts), so for a
+  // personalized meal M and L resolve to the same portion and the shared
+  // equivalence rule below removes the fake L choice.
+  //
+  // `slot` is the one the customer navigated from (route param) or the
+  // meal's own slot — the same value SlotTargetBanner renders.
+  const personalMedium = usePersonalizedMeal(meal, "medium", slot);
+  const personalLarge = usePersonalizedMeal(meal, "large", slot);
+
+  // PERSONALIZED-ONLY — same rule as MealCard: a computed personal portion
+  // replaces the size choice, so no size is offered and none rides along to
+  // the cart or the order (see MealCard for the full reasoning).
+  const personalizedOnly = personalMedium.status === "ready";
+  const effectiveSize = isFixed || personalizedOnly ? "medium" : selectedSize;
   const sizeDef =
     CUSTOMER_SIZE_OPTIONS.find((s) => s.id === effectiveSize) ?? CUSTOMER_SIZE_OPTIONS[0];
 
-  // ── The personally computed meal, per size ───────────────────────────
-  //
-  // Both customer sizes are computed through the SAME engine the Anpassar
-  // wizard used (optimizer grams → backend /custom-meal/calculate for
-  // nutrition and öre-precise price), so switching M/L updates grams,
-  // macros and price consistently from the server — never a local UI
-  // multiplication of the personal numbers.
-  const personalMedium = usePersonalizedMeal(meal, "medium");
-  const personalLarge = usePersonalizedMeal(meal, "large");
   const personal = effectiveSize === "large" ? personalLarge : personalMedium;
   const personalData = personal.status === "ready" ? personal.data : null;
   const personalStateFor = (sizeId: string) =>
@@ -407,7 +416,7 @@ export function MealDetailScreen() {
             <ThemedText style={[styles.compactMacro, { color: colors.accent }]}>
               {macros?.proteinG}g protein
             </ThemedText>
-            {!isFixed && (
+            {!isFixed && !personalizedOnly && (
               <>
                 <ThemedText style={styles.compactDot}>·</ThemedText>
                 <ThemedText style={[styles.compactMacro, { opacity: 0.6, fontSize: 11 }]}>
@@ -426,7 +435,7 @@ export function MealDetailScreen() {
 
           {/* ── Full macros ── */}
           <SectionHead>
-            {isFixed
+            {isFixed || personalizedOnly
               ? t("mealDetail.nutrition")
               : `${t("mealDetail.nutrition")} · ${t(`mealDetail.sizeNames.${effectiveSize}`, { defaultValue: effectiveSize })}`}
             {personalData
@@ -468,8 +477,9 @@ export function MealDetailScreen() {
             </ThemedText>
           ) : null}
 
-          {/* ── Size selector (radio rows) — hidden for fixed-portion meals ── */}
-          {!isFixed && (
+          {/* ── Size selector (radio rows) — hidden for fixed-portion meals,
+                 and hidden entirely once a personal portion exists ── */}
+          {!isFixed && !personalizedOnly && (
             <>
               <Divider />
               <SectionHead>{t("mealDetail.chooseSize")}</SectionHead>

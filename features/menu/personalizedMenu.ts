@@ -21,7 +21,7 @@ import {
   SLOT_TO_MEAL_TIME_TAG,
 } from "@/features/anpassar/optimizer";
 import { mapGoalType } from "@/features/anpassar/nutriAnpassarTypes";
-import { MEAL_SIZES } from "@/utils/pricing";
+import { savedPlanTargets } from "@/features/dayplan/dayPlanSlots";
 
 
 /**
@@ -44,14 +44,29 @@ import { MEAL_SIZES } from "@/utils/pricing";
  *    ingredient sell prices + container cost + minimum floor). The client
  *    never invents a number — it presents the server result.
  *
- * M/L: Anpassar itself always tailored at 1.0×. The menu keeps M and L by
- * scaling the personal TARGET with the established size multipliers
- * (utils/pricing MEAL_SIZES ↔ backend SizeHelper: M=1.0, L=1.2) and
- * re-running the SAME optimize→calculate pipeline per size — so grams,
- * macros and price all come from the server for both sizes, never from a
- * local UI multiplication.
+ * NO SIZE MULTIPLIER ON THE TARGET. The slot target IS the target.
+ * An earlier release scaled it by the M/L macro multiplier (M=1.0, L=1.2)
+ * before optimizing, which meant a card showing "L" silently asked the
+ * optimizer for 120% of the customer's own planned meal — a Lunch target of
+ * 1145 kcal became a 1374 kcal recommendation while Home still promised
+ * 1145. Personalization and portion sizing are two different products; this
+ * module now does only the first, exactly as Anpassar always did (1.0×).
  *
- * CACHE KEYS carry the user id AND a stamp of the scaled target, so:
+ * `sizeId` is therefore no longer part of the computation. It is kept in the
+ * signature so both call sites (which ask for "medium" and "large" to decide
+ * whether L is a real choice) resolve to ONE shared cache row: the two
+ * results are then identical by construction, the existing
+ * arePersonalSizesEquivalent rule sees that, and the L button hides itself.
+ * That is the same mechanism this codebase already used for saturated
+ * recipes — no second, competing way to hide a size.
+ *
+ * THE TARGET IS THE ONE THE CUSTOMER WAS SHOWN. `todayMeals` comes from
+ * savedPlanTargets() — the same derivation Home's HomeDayPlan and the menu's
+ * SlotTargetBanner render from — and the slot may be passed in by the caller
+ * so a tap on "Middag" at 12:00 optimizes against Middag, not against
+ * whatever the clock would have guessed.
+ *
+ * CACHE KEYS carry the user id AND a stamp of the target, so:
  *  - two users on one device can never see each other's numbers,
  *  - any profile/goal/override change flows through the shared ["nutrition"]
  *    queries, changes the target, and thereby keys fresh computations —
@@ -117,28 +132,26 @@ function useContainerTypesQuery() {
   });
 }
 
-function scaleTarget(target: ApiMealDistribution, multiplier: number): ApiMealDistribution {
-  if (multiplier === 1) return target;
-  return {
-    ...target,
-    calories: Math.round(target.calories * multiplier),
-    proteinG: Math.round(target.proteinG * multiplier),
-    carbsG: Math.round(target.carbsG * multiplier),
-    fatG: Math.round(target.fatG * multiplier),
-  };
-}
-
 /**
- * The personally computed version of one meal at one size.
+ * The personally computed version of one meal, against the customer's own
+ * slot target — no size scaling of any kind.
  *
  * Safe to call from every card: the heavy inputs are shared React Query
  * entries, and the per-meal computation is itself cached under a key that
- * includes user, target and size.
+ * includes user and target.
+ *
+ * @param sizeId  Retained for call-site compatibility only — see the module
+ *   comment. It deliberately does NOT influence the target or the cache key.
+ * @param slotOverride  The day-plan slot the customer navigated from, when
+ *   the caller knows it. Without it the slot is inferred from the meal's
+ *   tags and the clock, which cannot tell Lunch from Middag at midday.
  */
 export function usePersonalizedMeal(
   meal: ApiMeal | null | undefined,
   sizeId: string,
+  slotOverride: WizardSlot | null = null,
 ): PersonalizedMealState {
+  void sizeId;
   const { user } = useAuth();
   const todayQuery = useTodayNutritionQuery();
   const dayPlanQuery = useTodayDayPlanQuery();
@@ -147,7 +160,10 @@ export function usePersonalizedMeal(
   const containersQuery = useContainerTypesQuery();
 
   const nowHour = new Date().getHours();
-  const slot = meal ? slotForMeal(meal, nowHour) : null;
+  // The navigated slot wins: it is what Home showed and what
+  // SlotTargetBanner is displaying. The tag/clock inference is the fallback
+  // for screens reached without slot context (deep link, back-navigation).
+  const slot = meal ? (slotOverride ?? slotForMeal(meal, nowHour)) : null;
 
   const applicable =
     !!user &&
@@ -165,30 +181,33 @@ export function usePersonalizedMeal(
 
   // The saved day plan wins over the auto-calculated day — the exact rule
   // the Anpassar wizard applies.
+  //
+  // Read through savedPlanTargets, NOT off the stored rows: in 3-meal mode
+  // the snack is dropped and its calories are scaled back into the three
+  // main meals, so the stored row and the row Home/SlotTargetBanner DISPLAY
+  // are deliberately different numbers. Optimizing against the stored row
+  // would tailor the meal to a target the customer was never shown — the
+  // same class of bug mealRecommendation.ts already fixed for size picking.
+  const savedVisible = savedPlanTargets(dayPlanQuery.data);
   const effectiveMeals: ApiMealDistribution[] =
-    today && dayPlanQuery.data?.meals?.length
-      ? dayPlanQuery.data.meals.map((m) => ({
+    today && savedVisible.length > 0
+      ? savedVisible.map((m) => ({
           ...m,
           timingPurpose: today.meals.find((t) => t.label === m.label)?.timingPurpose ?? "",
         }))
       : (today?.meals ?? []);
 
-  const sizeMultiplier = MEAL_SIZES.find((s) => s.id === sizeId)?.macroMultiplier ?? 1;
-
   const target =
     applicable && today && remaining && effectiveMeals.length > 0
-      ? scaleTarget(
-          buildNutriAdaptiveTarget({
-            selectedSlot: slot!,
-            nowHour,
-            goalType: mapGoalType(today.primaryGoal),
-            todayMeals: effectiveMeals,
-            remaining: remaining.remainingToday,
-            consumedToday: remaining.consumedToday,
-            dailyCalories: today.adjustedTarget.calories,
-          }),
-          sizeMultiplier,
-        )
+      ? buildNutriAdaptiveTarget({
+          selectedSlot: slot!,
+          nowHour,
+          goalType: mapGoalType(today.primaryGoal),
+          todayMeals: effectiveMeals,
+          remaining: remaining.remainingToday,
+          consumedToday: remaining.consumedToday,
+          dailyCalories: today.adjustedTarget.calories,
+        })
       : null;
 
   const targetStamp = target
@@ -196,10 +215,10 @@ export function usePersonalizedMeal(
     : null;
 
   const personalQuery = useQuery({
-    // User id + target stamp + meal + size: a profile change produces a new
-    // stamp (fresh computation), and another account can never hit this
-    // cache entry.
-    queryKey: ["personal-meal", user?.id ?? null, targetStamp, meal?.id ?? null, sizeId],
+    // User id + target stamp + meal. NO sizeId: the size no longer changes
+    // the computation, so both size call sites share this one row — one
+    // calculate request per card instead of two identical ones.
+    queryKey: ["personal-meal", user?.id ?? null, targetStamp, meal?.id ?? null],
     enabled:
       applicable &&
       !profileGap &&
