@@ -59,6 +59,7 @@
     "pricing:check": "node scripts/check-custom-meal-pricing.mjs",
     "sizes:check": "node scripts/check-portion-sizes.mjs",
     "limits:check": "node scripts/check-ingredient-limits.mjs",
+    "slottarget:check": "node scripts/check-slot-target-fidelity.mjs",
     "feedback:check": "node scripts/check-food-feedback.mjs",
     "snags:check": "node scripts/check-oscar-snags.mjs",
     "profile:check": "node scripts/check-profile-linking-sheets.mjs",

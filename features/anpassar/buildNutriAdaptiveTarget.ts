@@ -70,7 +70,24 @@ export function buildNutriAdaptiveTarget(input: NutriAdaptiveTargetInput): ApiMe
   // ── F. HARD CAPS ─────────────────────────────────────────────────────
   const { min: mealMin, max: mealMax } = getMealCaps(goalType, dailyCalories);
   // profileCap = dailyCalories; HARD_CAP_KCAL already baked into getMealCaps.
-  targetCalories = Math.max(mealMin, Math.min(targetCalories, mealMax));
+  //
+  // The MAX cap always applies — no single meal may be recommended above it.
+  // The MIN floor must not: it is a rescue for a baseline this function
+  // DERIVED (fallbackBaseline's share-of-remaining), never a licence to
+  // overwrite a slot the customer actually planned.
+  //
+  // What the floor did to a planned slot: on a 4917 kcal day (muscle_gain →
+  // min = 25% = 1229) a planned 824 kcal snack was lifted to 1229, and since
+  // carbs/fat are scaled by targetCalories / baseline.calories just below,
+  // 118 g carbs became 176 g. The optimizer then correctly drove the carb
+  // base to its admin max to meet that 176 g — serving ~1015 kcal for a slot
+  // Home had promised as 824. That contradicts C/D above: "Sätt upp din dag"
+  // is source of truth, used as-is, with no goal-based drift.
+  //
+  // A planned slot that genuinely is tiny is still rescued by the low-target
+  // fallback in G, which is the branch that exists for that case.
+  targetCalories = Math.min(targetCalories, mealMax);
+  if (!planned) targetCalories = Math.max(mealMin, targetCalories);
 
   // Scale carbs/fat proportionally; protein is bounded from below.
   const calorieRatio = baseline.calories > 0 ? targetCalories / baseline.calories : 1;
